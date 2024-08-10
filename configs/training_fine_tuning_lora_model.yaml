@@ -1,0 +1,15 @@
+model: "unet"
+in_channels: 3
+out_channels: 3
+image_size: 256
+num_channels: 128
+norm_grp: 16
+num_res_blocks: 1
+dropout: 0
+channel_mult: [1, 1, 2, 2, 4, 4]
+conv_resample: True
+dims: 2
+num_classes: null
+use_fp16: False
+use_scale_shift_norm: False
+resblock_updown: True

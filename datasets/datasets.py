@@ -1,0 +1,82 @@
+from PIL import Image
+import os 
+import glob
+from torch.utils.data import DataLoader
+import torchvision.transforms as transforms #type: ignore
+import torch
+from degradation_model.utils_deblurs import DeblurringModel
+
+class DatasetsImageNet(object):
+    def __init__(
+                self, 
+                dataset_dir, 
+                im_size, 
+                transform = None, 
+                clip_min = -1.0, 
+                clip_max = 1.0
+            ):
+        
+        self.dataset_dir = dataset_dir
+        self.im_size = im_size
+        self.clip_min = clip_min
+        self.clip_max = clip_max
+        
+        # deblurring model
+        self.deblurring_model = DeblurringModel(im_size)
+
+        # transformer
+        if transform is None:
+            self.transform = transforms.Compose([
+                transforms.Resize((self.im_size, self.im_size)),
+                transforms.ToTensor(), 
+                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ])
+        else:
+            self.transform = transform    
+        
+        # get all images path
+        if self.dataset_dir == "" or self.dataset_dir is None or not os.path.exists(self.dataset_dir):
+            raise ValueError(f"The dataset directory {self.dataset_dir} is empty!!")
+        else:
+            self.ref_images = glob.glob(os.path.join(self.dataset_dir , '*.JPEG'))
+        
+    def __len__(self):
+        """ get the length of the dataset
+        """
+        return len(self.ref_images)
+
+    def __getitem__(self, idx):
+        """ get an item from the dataset
+        """
+        img_path = self.ref_images[idx]
+        image = Image.open(img_path, mode='r').convert('RGB')
+        # apply transform
+        if self.transform:
+            image = self.transform(image)
+        # get noisy image
+        noisy_image, op_image = self.deblurring_model.get_noisy_image(image)
+        # rescale image btw -1 and 1
+        image_scale = 2 * image - 1
+        image_scale = torch.clamp(image_scale, self.clip_min, self.clip_max)
+        noisy_image_scale = 2 * noisy_image - 1
+        noisy_image_scale = torch.clamp(noisy_image_scale, self.clip_min, self.clip_max)
+
+        return image_scale, noisy_image_scale, op_image
+
+# get data loader   
+def get_data_loader(
+                    dataset_path, 
+                    im_size, 
+                    batch_size, 
+                    num_workers = 2, 
+                    shuffle = True
+                ):
+    dataset = DatasetsImageNet(dataset_path, im_size)
+    data_loader = DataLoader(
+                            dataset, 
+                            batch_size=batch_size, 
+                            shuffle=shuffle, 
+                            num_workers=num_workers
+                        )
+    return data_loader
+            
