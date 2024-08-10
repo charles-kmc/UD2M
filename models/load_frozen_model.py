@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 from guided_diffusion import dist_util
 from utils import utils_model
 from guided_diffusion.script_util import (
@@ -6,7 +8,7 @@ from guided_diffusion.script_util import (
     args_to_dict,
 )
 
-def load_pre_trained_model(model_name, model_checkpoint_path, device):
+def load_frozen_model(model_name, model_checkpoint_path, device):
     
     # load model
     model_config = dict(
