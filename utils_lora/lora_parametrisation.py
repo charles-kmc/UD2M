@@ -32,7 +32,7 @@ def layer_parametrisation(layer, rank = 2, device = "cpu"):
 def apply_lora_parametrization(model, rank, device):
     #   loop through all the layers of the model
     for name, layer in model.named_modules():
-    #    Check if the layer name matches "to_k", "to_q", or "to_v"
+    #    Check if the layer name ends with "qkv" or "proj_out"
         if name.endswith("qkv") or name.endswith("proj_out"):
             P.register_parametrization(layer, "weight", layer_parametrisation(layer, rank=rank,  device=device))           
 
