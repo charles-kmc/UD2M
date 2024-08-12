@@ -3,6 +3,7 @@
 import torch 
 import torch.nn as nn
 import torch.nn.functional as F #type:
+from torchvision.utils import save_image
 
 import os
 import copy
@@ -14,46 +15,55 @@ from models import dist_util, logger
 from datasets.datasets import get_data_loader
 from models.trainer import Trainer
 
+
 def main():
     # path for resuming checkpoints during training
-    resume_checkpoint_dir = "/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp"
+    save_checkpoint_dir = "/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp"
+    save_results = "/users/cmk2000/sharedscratch/Results/conditional-diffusion_model-for_ivp"
     
     # --- device
-    device = dist_util.dev()
+    dist_util.setup_dist()
+    device = dist_util.dev() #torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+   
+    
+    
     
     # --- Pre trained model 
     frozen_model_name = 'diffusion_ffhq_10m' 
-    frozen_model_dir = '/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo'  
+    frozen_model_dir = '/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo' 
     frozen_model_path = os.path.join(frozen_model_dir, f'{frozen_model_name}.pt')
     frozen_model, diffusion = load_frozen_model(frozen_model_name, frozen_model_path, device)
 
     
     # LoRa model from the pretrained model
-    lora_pre_trained_model = LoRa_model(frozen_model, rank = 2, device = device)
+    lora_pre_trained_model = LoRa_model(frozen_model, device, rank = 2)
 
     # Augmented LoRa model
     image_size = 256
     in_channels = 3
     model_channels = 128
     out_channels = 3
-    aug_LoRa_model = FineTuningDiffusionModel(image_size, in_channels, model_channels, out_channels, lora_pre_trained_model)
+    aug_LoRa_model = FineTuningDiffusionModel(image_size, in_channels, model_channels, out_channels, device, frozen_model = lora_pre_trained_model)
     
-    print(aug_LoRa_model.device)
+    print("device", aug_LoRa_model.device, device)
 
     # --- detaset 
     dataset_dir = "/users/cmk2000/sharedscratch/Datasets/ImageNet/train"
-    batch_size = 128
+    batch_size = 4
     train_dataloader = get_data_loader(dataset_dir, image_size, batch_size)
+    # data_iter = iter(train_dataloader)
+    # ref, deg, op = next(data_iter)
     
+       
     # --- trainer
     num_epochs = 100
     lr = 1e-3
-    save_model = 100
     batch_size = 32
     microbatch = 0
     ema_rate = 0.9999
     log_interval = 100
-    save_interval = 100
+    save_interval = 20
     problem_type = "deblur"
     trainer = Trainer(
                 aug_LoRa_model, 
@@ -61,8 +71,8 @@ def main():
                 train_dataloader,
                 lr=lr, 
                 batch_size=batch_size,
-                save_model=save_model,
-                resume_checkpoint = resume_checkpoint_dir,
+                save_checkpoint_dir = save_checkpoint_dir,
+                save_results = save_results,
                 log_interval=log_interval,
                 save_interval=save_interval,
                 ema_rate=ema_rate,

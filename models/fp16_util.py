@@ -148,7 +148,6 @@ def param_grad_or_zeros(param):
 class MixedPrecisionTrainer:
     def __init__(
         self,
-        *,
         model,
         use_fp16=False,
         fp16_scale_growth=1e-3,

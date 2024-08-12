@@ -15,6 +15,7 @@ from guided_diffusion.nn import (
 )
 from guided_diffusion.unet import UNetModel, AttentionBlock
 from degradation_model.utils_deblurs import blur2operator
+from utils.utils import image_transform, inverse_image_transform
 
 class SequentialBloack_con(nn.Sequential):
     """
@@ -216,8 +217,8 @@ class FineTuningDiffusionModel(nn.Module):
         in_channels,
         model_channels,
         out_channels,
-        pt_model = None,
-        device = "cpu",
+        device,
+        frozen_model = None,
         input_blocks_posi =[8],
         out_blocks_posi =[1,2],
         norm_grp = 32,
@@ -276,6 +277,7 @@ class FineTuningDiffusionModel(nn.Module):
                 self.input_blocks.append(SequentialBloack_con(*layers))
                 self._feature_size += ch
                 input_block_chans.append(ch)
+            
             if level != len(channel_mult) - 1:
                 out_ch = ch
 
@@ -300,7 +302,7 @@ class FineTuningDiffusionModel(nn.Module):
                 input_block_chans.append(ch)
                 ds *= 2
                 self._feature_size += ch
-
+        
         self.middle_block = SequentialBloack_con(
                                 ResBlock_new(
                                     ch,
@@ -313,11 +315,15 @@ class FineTuningDiffusionModel(nn.Module):
         self._feature_size += ch
 
         self.output_blocks = nn.ModuleList([])
+        count = 0
         for level, mult in list(enumerate(channel_mult))[::-1]:
-            if level > out_blocks_posi[-1]:
-                continue
-            else:
+            if count <3:
+                # if level > 10*out_blocks_posi[-1]:
+                #     continue
+                # else:
                 for i in range(num_res_blocks + 1):
+                    print(count)
+                    print("i", i, out_blocks_posi)
                     ich = input_block_chans.pop()
                     layers = [
                         ResBlock_new(
@@ -332,6 +338,7 @@ class FineTuningDiffusionModel(nn.Module):
                     
                     ch = int(model_channels * mult)
                     if level and i == num_res_blocks:
+                        print(out_ch)
                         out_ch = ch
                         layers.append(
                             ResBlock_new(
@@ -349,7 +356,9 @@ class FineTuningDiffusionModel(nn.Module):
                         ds //= 2
                     self.output_blocks.append(SequentialBloack_con(*layers))
                     self._feature_size += ch
-                    
+
+                    count += 1
+                                
         # self.out = nn.Sequential(
         #     normalization_group(norm_grp, ch),
         #     nn.SiLU(),
@@ -358,11 +367,11 @@ class FineTuningDiffusionModel(nn.Module):
         # )
         
         # Learnable parameter for the consistency loss
-        self.loass_weight = nn.Parameter(torch.tensor([1.0, 1.0, 1.0], dtype = self.dtype)).to(self.device)
-        self.loass_weight.requires_grad = True
+        self.loss_weight = nn.Parameter(torch.tensor(1.0, dtype = self.dtype)).to(self.device)
+        self.alpha = nn.Parameter(torch.tensor(1.0, dtype = self.dtype)).to(self.device)
         
-        if pt_model is not None:
-            self.model = pt_model
+        if frozen_model is not None:
+            self.model = frozen_model
         else:
             raise "You need to provide the required pretrained model"
         
@@ -406,7 +415,7 @@ class FineTuningDiffusionModel(nn.Module):
             if ii in self.input_blocks_posi:
                 con_in.append(h)
             hs.append(h)
-                
+           
         for ii, module in enumerate(self.model.input_blocks.children()):
             x = module(x, emb)
             if ii in self.input_blocks_posi:
@@ -427,30 +436,37 @@ class FineTuningDiffusionModel(nn.Module):
         for ii, module in enumerate(self.model.output_blocks.children()):
             x = torch.cat([x, xs.pop()], dim=1)
             x = module(x, emb)
-            if ii in self.out_blocks_posi:
-                x = x + con_out.pop()
+
+            if ii in self.out_blocks_posi and 1 == 3:
+                h_pop = con_out.pop()
+                x = x + h_pop
+        
         x = x.type(x.dtype)
         x = self.model.out(x)          
         return x
     
     # -- Consistency loss
     def consistency_loss(self, xpred, y, list_op_blur):
+        mse = nn.MSELoss()
+        device = xpred.device
         # Create a list of kernels and images
-        kernels = [op_i["kernel"] for op_i in list_op_blur]
-        xpred_list = [xpred[i, :, :, :] for i in range(len(list_op_blur))]
-
+        kernels = list_op_blur["blur_value"] 
+        Ax_pred = []
         # Loop over kernels and xpreds in parallel
-        for kernel, xpred_i in zip(kernels, xpred_list):
-            # Compute FFT of xpred_i
+        for i in range(kernels.shape[0]):
+            kernel = kernels[i,...]
+            xpred_i = inverse_image_transform(xpred[i,...])
             xpred_fft = torch.fft.fft2(xpred_i, dim=(-2, -1))
-            FFT_H = blur2operator(kernel, self.image_size)
+            FFT_H = blur2operator(kernel, self.image_size).to(device)
             blurred_fft = FFT_H * xpred_fft
-            ax_pred = torch.real(torch.fft.ifft2(blurred_fft, dim=(-2, -1)))
+            ax_pred = torch.real(torch.fft.ifft2(blurred_fft, dim=(-2, -1))).unsqueeze(0)
             Ax_pred.append(ax_pred)
         # Concatenate the results along the appropriate dimension
         Ax_pred = torch.cat(Ax_pred, dim=0)
+        print(Ax_pred.max(), y.max())
+        print(Ax_pred.min(), y.min())
         
-        loss = self.loass_weight * F.binary_cross_entropy(Ax_pred, y, size_average=False)
+        loss = self.loss_weight * mse(Ax_pred, y)
         return loss
 
 

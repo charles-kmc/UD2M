@@ -36,7 +36,8 @@ def apply_lora_parametrization(model, rank, device):
         if name.endswith("qkv") or name.endswith("proj_out"):
             P.register_parametrization(layer, "weight", layer_parametrisation(layer, rank=rank,  device=device))           
 
-def LoRa_model(model, rank = 2, device = "cpu"):
+def LoRa_model(model, device, rank = 2):
+    
     # Apply LoRA parametrization to input blocks
     apply_lora_parametrization(model, rank, device)
     print(f'Number of Layers frozen: {num_frozen_layers(model)}')

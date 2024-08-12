@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 90, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 87, in main
+    trainer.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 212, in run_training_loop
+    # Tikhonov data solution
+    ^^^^^^^^^^^^
+NameError: name 'qertwvrvtrcr' is not defined
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 90, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 87, in main
+[rank0]:     trainer.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 212, in run_training_loop
+[rank0]:     # Tikhonov data solution
+[rank0]: ^^^^^^^^
+[rank0]: NameError: name 'qertwvrvtrcr' is not defined
+cuda:0

@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 91, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 88, in main
+    trainer.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 215, in run_training_loop
+    batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op, alpha = self.ddp_model.alpha)
+                                                                            ^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1729, in __getattr__
+    raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+AttributeError: 'DistributedDataParallel' object has no attribute 'alpha'
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 91, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 88, in main
+[rank0]:     trainer.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 215, in run_training_loop
+[rank0]:     batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op, alpha = self.ddp_model.alpha)
+[rank0]:                                                                             ^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1729, in __getattr__
+[rank0]:     raise AttributeError(f"'{type(self).__name__}' object has no attribute '{name}'")
+[rank0]: AttributeError: 'DistributedDataParallel' object has no attribute 'alpha'

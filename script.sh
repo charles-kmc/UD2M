@@ -34,14 +34,14 @@ source "${flight_ROOT:-/opt/flight}"/etc/setup.sh
 # flight env activate conda
 
 # Activate the specific Conda environment
-# conda activate dmog_env39
+conda activate dmog_env39
 
-# if [ $? -eq 0 ]; then
-#     echo "Conda is active and functioning."
-# else
-#     echo "Conda did not initialize properly."
-#     exit 1
-# fi
+if [ $? -eq 0 ]; then
+    echo "Conda is active and functioning."
+else
+    echo "Conda did not initialize properly."
+    exit 1
+fi
 
 #===========================
 #  Create results directory

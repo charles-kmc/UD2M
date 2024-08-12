@@ -1,0 +1,432 @@
+Started ...
+tensor(0.9154, device='cuda:0', grad_fn=<MaxBackward1>) tensor(1., device='cuda:0')
+tensor(0.0092, device='cuda:0', grad_fn=<MinBackward1>) tensor(0., device='cuda:0')
+Logging to /tmp/openai-2024-08-12-21-05-53-314226
+Parameter module.model.time_embed.0.weight does not require grad
+Parameter module.model.time_embed.0.bias does not require grad
+Parameter module.model.time_embed.2.weight does not require grad
+Parameter module.model.time_embed.2.bias does not require grad
+Parameter module.model.input_blocks.0.0.weight does not require grad
+Parameter module.model.input_blocks.0.0.bias does not require grad
+Parameter module.model.input_blocks.1.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.1.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.1.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.1.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.1.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.1.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.1.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.1.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.1.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.1.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.2.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.2.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.2.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.2.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.2.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.2.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.2.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.2.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.2.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.2.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.3.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.3.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.3.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.3.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.3.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.3.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.3.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.3.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.3.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.3.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.4.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.4.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.4.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.4.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.4.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.4.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.4.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.4.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.4.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.4.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.5.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.5.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.5.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.5.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.5.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.5.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.5.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.5.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.5.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.5.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.5.0.skip_connection.weight does not require grad
+Parameter module.model.input_blocks.5.0.skip_connection.bias does not require grad
+Parameter module.model.input_blocks.6.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.6.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.6.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.6.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.6.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.6.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.6.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.6.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.6.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.6.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.7.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.7.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.7.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.7.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.7.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.7.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.7.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.7.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.7.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.7.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.8.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.8.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.8.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.8.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.8.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.8.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.8.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.8.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.8.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.8.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.9.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.9.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.9.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.9.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.9.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.9.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.9.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.9.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.9.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.9.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.9.0.skip_connection.weight does not require grad
+Parameter module.model.input_blocks.9.0.skip_connection.bias does not require grad
+Parameter module.model.input_blocks.9.1.norm.weight does not require grad
+Parameter module.model.input_blocks.9.1.norm.bias does not require grad
+Parameter module.model.input_blocks.9.1.qkv.bias does not require grad
+Parameter module.model.input_blocks.9.1.qkv.parametrizations.weight.original does not require grad
+Parameter module.model.input_blocks.9.1.proj_out.bias does not require grad
+Parameter module.model.input_blocks.9.1.proj_out.parametrizations.weight.original does not require grad
+Parameter module.model.input_blocks.10.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.10.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.10.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.10.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.10.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.10.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.10.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.10.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.10.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.10.0.out_layers.3.bias does not require grad
+Parameter module.model.input_blocks.11.0.in_layers.0.weight does not require grad
+Parameter module.model.input_blocks.11.0.in_layers.0.bias does not require grad
+Parameter module.model.input_blocks.11.0.in_layers.2.weight does not require grad
+Parameter module.model.input_blocks.11.0.in_layers.2.bias does not require grad
+Parameter module.model.input_blocks.11.0.emb_layers.1.weight does not require grad
+Parameter module.model.input_blocks.11.0.emb_layers.1.bias does not require grad
+Parameter module.model.input_blocks.11.0.out_layers.0.weight does not require grad
+Parameter module.model.input_blocks.11.0.out_layers.0.bias does not require grad
+Parameter module.model.input_blocks.11.0.out_layers.3.weight does not require grad
+Parameter module.model.input_blocks.11.0.out_layers.3.bias does not require grad
+Parameter module.model.middle_block.0.in_layers.0.weight does not require grad
+Parameter module.model.middle_block.0.in_layers.0.bias does not require grad
+Parameter module.model.middle_block.0.in_layers.2.weight does not require grad
+Parameter module.model.middle_block.0.in_layers.2.bias does not require grad
+Parameter module.model.middle_block.0.emb_layers.1.weight does not require grad
+Parameter module.model.middle_block.0.emb_layers.1.bias does not require grad
+Parameter module.model.middle_block.0.out_layers.0.weight does not require grad
+Parameter module.model.middle_block.0.out_layers.0.bias does not require grad
+Parameter module.model.middle_block.0.out_layers.3.weight does not require grad
+Parameter module.model.middle_block.0.out_layers.3.bias does not require grad
+Parameter module.model.middle_block.1.norm.weight does not require grad
+Parameter module.model.middle_block.1.norm.bias does not require grad
+Parameter module.model.middle_block.1.qkv.bias does not require grad
+Parameter module.model.middle_block.1.qkv.parametrizations.weight.original does not require grad
+Parameter module.model.middle_block.1.proj_out.bias does not require grad
+Parameter module.model.middle_block.1.proj_out.parametrizations.weight.original does not require grad
+Parameter module.model.middle_block.2.in_layers.0.weight does not require grad
+Parameter module.model.middle_block.2.in_layers.0.bias does not require grad
+Parameter module.model.middle_block.2.in_layers.2.weight does not require grad
+Parameter module.model.middle_block.2.in_layers.2.bias does not require grad
+Parameter module.model.middle_block.2.emb_layers.1.weight does not require grad
+Parameter module.model.middle_block.2.emb_layers.1.bias does not require grad
+Parameter module.model.middle_block.2.out_layers.0.weight does not require grad
+Parameter module.model.middle_block.2.out_layers.0.bias does not require grad
+Parameter module.model.middle_block.2.out_layers.3.weight does not require grad
+Parameter module.model.middle_block.2.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.0.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.0.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.0.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.0.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.0.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.0.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.0.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.0.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.0.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.0.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.0.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.0.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.1.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.1.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.1.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.1.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.1.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.1.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.1.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.1.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.1.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.1.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.1.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.1.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.1.1.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.1.1.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.1.1.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.1.1.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.1.1.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.1.1.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.1.1.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.1.1.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.1.1.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.1.1.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.2.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.2.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.2.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.2.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.2.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.2.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.2.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.2.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.2.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.2.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.2.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.2.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.2.1.norm.weight does not require grad
+Parameter module.model.output_blocks.2.1.norm.bias does not require grad
+Parameter module.model.output_blocks.2.1.qkv.bias does not require grad
+Parameter module.model.output_blocks.2.1.qkv.parametrizations.weight.original does not require grad
+Parameter module.model.output_blocks.2.1.proj_out.bias does not require grad
+Parameter module.model.output_blocks.2.1.proj_out.parametrizations.weight.original does not require grad
+Parameter module.model.output_blocks.3.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.3.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.3.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.3.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.3.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.3.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.3.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.3.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.3.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.3.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.3.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.3.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.3.1.norm.weight does not require grad
+Parameter module.model.output_blocks.3.1.norm.bias does not require grad
+Parameter module.model.output_blocks.3.1.qkv.bias does not require grad
+Parameter module.model.output_blocks.3.1.qkv.parametrizations.weight.original does not require grad
+Parameter module.model.output_blocks.3.1.proj_out.bias does not require grad
+Parameter module.model.output_blocks.3.1.proj_out.parametrizations.weight.original does not require grad
+Parameter module.model.output_blocks.3.2.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.3.2.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.3.2.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.3.2.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.3.2.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.3.2.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.3.2.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.3.2.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.3.2.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.3.2.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.4.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.4.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.4.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.4.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.4.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.4.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.4.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.4.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.4.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.4.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.4.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.4.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.5.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.5.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.5.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.5.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.5.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.5.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.5.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.5.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.5.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.5.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.5.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.5.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.5.1.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.5.1.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.5.1.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.5.1.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.5.1.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.5.1.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.5.1.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.5.1.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.5.1.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.5.1.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.6.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.6.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.6.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.6.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.6.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.6.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.6.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.6.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.6.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.6.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.6.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.6.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.7.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.7.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.7.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.7.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.7.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.7.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.7.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.7.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.7.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.7.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.7.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.7.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.7.1.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.7.1.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.7.1.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.7.1.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.7.1.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.7.1.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.7.1.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.7.1.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.7.1.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.7.1.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.8.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.8.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.8.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.8.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.8.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.8.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.8.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.8.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.8.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.8.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.8.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.8.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.9.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.9.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.9.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.9.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.9.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.9.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.9.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.9.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.9.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.9.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.9.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.9.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.9.1.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.9.1.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.9.1.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.9.1.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.9.1.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.9.1.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.9.1.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.9.1.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.9.1.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.9.1.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.10.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.10.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.10.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.10.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.10.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.10.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.10.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.10.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.10.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.10.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.10.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.10.0.skip_connection.bias does not require grad
+Parameter module.model.output_blocks.11.0.in_layers.0.weight does not require grad
+Parameter module.model.output_blocks.11.0.in_layers.0.bias does not require grad
+Parameter module.model.output_blocks.11.0.in_layers.2.weight does not require grad
+Parameter module.model.output_blocks.11.0.in_layers.2.bias does not require grad
+Parameter module.model.output_blocks.11.0.emb_layers.1.weight does not require grad
+Parameter module.model.output_blocks.11.0.emb_layers.1.bias does not require grad
+Parameter module.model.output_blocks.11.0.out_layers.0.weight does not require grad
+Parameter module.model.output_blocks.11.0.out_layers.0.bias does not require grad
+Parameter module.model.output_blocks.11.0.out_layers.3.weight does not require grad
+Parameter module.model.output_blocks.11.0.out_layers.3.bias does not require grad
+Parameter module.model.output_blocks.11.0.skip_connection.weight does not require grad
+Parameter module.model.output_blocks.11.0.skip_connection.bias does not require grad
+Parameter module.model.out.0.weight does not require grad
+Parameter module.model.out.0.bias does not require grad
+Parameter module.model.out.2.weight does not require grad
+Parameter module.model.out.2.bias does not require grad
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 90, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 87, in main
+    trainer.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 222, in run_training_loop
+    self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 254, in run_epoch
+    self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 297, in run_forward_backward
+    self.mp_trainer.backward(loss)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/fp16_util.py", line 180, in backward
+    loss.backward()
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/_tensor.py", line 521, in backward
+    torch.autograd.backward(
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/__init__.py", line 289, in backward
+    _engine_run_backward(
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/graph.py", line 768, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/function.py", line 306, in apply
+    return user_fn(self, *args)
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/guided_diffusion/nn.py", line 177, in backward
+    input_grads = torch.autograd.grad(
+                  ^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/__init__.py", line 436, in grad
+    result = _engine_run_backward(
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/graph.py", line 768, in _engine_run_backward
+    return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: One of the differentiated Tensors does not require grad
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 90, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 87, in main
+[rank0]:     trainer.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 222, in run_training_loop
+[rank0]:     self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 254, in run_epoch
+[rank0]:     self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 297, in run_forward_backward
+[rank0]:     self.mp_trainer.backward(loss)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/fp16_util.py", line 180, in backward
+[rank0]:     loss.backward()
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/_tensor.py", line 521, in backward
+[rank0]:     torch.autograd.backward(
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/__init__.py", line 289, in backward
+[rank0]:     _engine_run_backward(
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/graph.py", line 768, in _engine_run_backward
+[rank0]:     return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/function.py", line 306, in apply
+[rank0]:     return user_fn(self, *args)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/guided_diffusion/nn.py", line 177, in backward
+[rank0]:     input_grads = torch.autograd.grad(
+[rank0]:                   ^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/__init__.py", line 436, in grad
+[rank0]:     result = _engine_run_backward(
+[rank0]:              ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/autograd/graph.py", line 768, in _engine_run_backward
+[rank0]:     return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]: RuntimeError: One of the differentiated Tensors does not require grad

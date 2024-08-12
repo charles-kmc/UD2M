@@ -1,6 +1,7 @@
 import copy
 import functools
 import os
+import wandb
 
 import blobfile as bf #type:ignore
 
@@ -8,13 +9,14 @@ import torch
 import torch.distributed as dist
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 from torch.optim import AdamW
+from torchvision.utils import save_image
 
 from . import dist_util, logger
 from .fp16_util import MixedPrecisionTrainer
 from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
 from degradation_model.utils_deblurs import deb_batch_data_solution
-
+from utils.utils import Metrics
 
 INITIAL_LOG_LOSS_SCALE = 20.0
 
@@ -28,10 +30,11 @@ class Trainer:
             microbatch = 0, 
             ema_rate = 0.9999, 
             log_interval = 100,
-            save_interval = 1000, 
+            save_interval = 100, 
             lr = 1e-3,
             save_checkpoint_dir = "",
             resume_checkpoint = "",
+            save_results = "",
             learn_alpha = True,
             use_fp16 = False,
             fp16_scale_growth = 1e-3,
@@ -51,9 +54,11 @@ class Trainer:
             [ema_rate] if isinstance(ema_rate, float) else [float(x) for x in ema_rate.split(",")]
         )
         self.save_checkpoint_dir = save_checkpoint_dir
+        self.save_results = save_results
         self.log_interval = log_interval
         self.save_interval = save_interval
         self.resume_checkpoint = resume_checkpoint
+        
         self.use_fp16 = use_fp16
         self.fp16_scale_growth = fp16_scale_growth
         self.schedule_sampler = schedule_sampler or UniformSampler(diffusion)
@@ -64,7 +69,7 @@ class Trainer:
         self.learn_alpha = learn_alpha
         self.epoch = 0
         self.resume_epoch = 0
-        self.global_batch = self.batch_size * dist.get_world_size()
+        #self.global_batch = self.batch_size * dist.get_world_size()
         
         self.syn_cuda = torch.cuda.is_available()
         
@@ -96,17 +101,20 @@ class Trainer:
             self.ema_params = [
                 copy.deepcopy(self.mp_trainer.master_params) for _ in range(len(self.ema_rate))
                 ]
+            
+        self.global_batch = self.batch_size * dist.get_world_size()
         
         # Distributed data parallel if cuda exists!!
         if torch.cuda.is_available():
             self.use_ddp = True
+            self.model = self.model.to(dist_util.dev())
             self.ddp_model = DDP(
                         self.model, 
                         device_ids=[dist_util.dev()],
                         output_device=dist_util.dev(),
                         find_unused_parameters=True,
                         bucket_cap_mb=128,
-                        broadcast_buffers=False,
+                        broadcast_buffers=False
                         )
         else:
             if dist.get_world_size() > 1: 
@@ -117,8 +125,11 @@ class Trainer:
                 
             self.use_ddp = False
             self.ddp_model = self.model
-            
-            
+    
+        self.psnr_history = []
+        self.mse_history = []
+        self.metrics = Metrics(dist_util.dev())
+        
         
     def _load_and_sync_parameters(self):
         resume_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
@@ -132,7 +143,6 @@ class Trainer:
                         resume_checkpoint, map_location=dist_util.dev()
                     )
                 )
-        
         dist_util.sync_params(self.model.parameters())
         
     # load ema checkpoints
@@ -168,9 +178,9 @@ class Trainer:
             self.opt.load_state_dict(state_dict)
     
     # degradation model
-    def _degradation_model(self, batch_y, blur_kernel_op, alpha = 0.01):
+    def _degradation_model(self, batch_y, blur_kernel_op, device, alpha = 0.01):
         if self.problem_type == "deblur":
-            batch_sol_Tk = deb_batch_data_solution(batch_y, blur_kernel_op, alpha = alpha)
+            batch_sol_Tk = deb_batch_data_solution(batch_y, blur_kernel_op, device, alpha = alpha)
             return batch_sol_Tk
         elif self.problem_type == "inp":
             raise NotImplementedError 
@@ -181,19 +191,33 @@ class Trainer:
     def run_training_loop(self, epochs):
         """_summary_
         """
+        wandb.init(
+                # set the wandb project where this run will be logged
+                project="Training conditinal diffusion models",
+
+                # track hyperparameters and run metadata
+                config={
+                "learning_rate": self.lr,
+                "architecture": "Deep Cnn",
+                "dataset": "ImageNet - 256",
+                "epochs": epochs,
+                }
+            )
         for epoch in range(epochs):
             # training mode
             self.ddp_model.train()
-            
             self.epoch = epoch
             if (not self.lr_anneal_epochs or self.epoch + self.resume_epoch < self.lr_anneal_epochs):
                 for ii, (batch_data, batch_y, blur_kernel_op) in enumerate(self.dataloader):
+                    batch_data = batch_data.to(dist_util.dev())
+                    batch_y = batch_y.to(dist_util.dev())
                     # Tikhonov data solution
                     if self.learn_alpha:
-                        batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op, alpha = self.ddp_model.alpha)
+                        lr_alp = self.ddp_model.module.alpha.detach()
+                        batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op, dist_util.dev(), alpha = lr_alp)
                     else:
-                        batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op)
-                        
+                        batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op, dist_util.dev())
+                    
                     # epoch step through the model
                     self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
                     
@@ -205,10 +229,25 @@ class Trainer:
                         # Run for a finite amount of time in integration tests.
                         if os.environ.get("DIFFUSION_TRAINING_TEST", "") and self.epoch > int(epochs*0.2):
                             return
-                        
+                    
+                    # epoch evaluation
+                    mse_val = self.metrics.mse_function(batch_data.detach().cpu(), self,x_pred.detach().cpu())
+                    psnr_val = self.metrics.psnr_function(batch_data.detach().cpu(), self,x_pred.detach().cpu())
+                    self.psnr_history.append(psnr_val)     
+                    self.mse_history.append(mse_val)     
+                    wandb.log({"psnr": psnr_val.numpy(), "mse": mse_val.numpy()})
+                    
                 # Save the last checkpoint if it wasn't already saved.
                 if (self.epoch - 1) % self.save_interval != 0:
                     self.save()
+                    
+                if epoch % 20 == 0:
+                    est_path = os.path.join(self.resume_results, "est")
+                    refs_path = os.path.join(self.resume_results, "refs")
+                    os.makedirs(refs_path, exist_ok=True)
+                    os.makedirs(est_path, exist_ok=True)
+                    save_image(self.x_pred.detach().cpu().numpy(), os.path.join(est_path, "est_{self.epoch}.png"))
+                    save_image(self.batch_data.detach().cpu().numpy(), os.path.join(est_path, "ref_{self.epoch}.png"))
             
     # epoch through the model       
     def run_epoch(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):
@@ -227,18 +266,20 @@ class Trainer:
         t,weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
         
         # - compute the losses
+        batch_sol_Tk.requires_grad_(False)
+        model_y = lambda x, t: self.ddp_model(x, t, batch_sol_Tk)
         compute_losses = functools.partial(
                     self.diffusion.training_losses,   
-                    self.ddp_model,
+                    model_y,
                     batch_data,
-                    t,
-                    batch_sol_Tk,
+                    t
                 ) 
         losses_x_pred = compute_losses()
         x_pred = losses_x_pred["pred_xstart"]
         
         if self.consistency_loss:   
-            losses_x_cons = self.ddp_model.consistency_loss(x_pred, batch_y, blur_kernel_op)
+            batch_y.requires_grad_(False)
+            losses_x_cons = self.ddp_model.module.consistency_loss(x_pred, batch_y, blur_kernel_op)
         
         loss = losses_x_cons
         if isinstance(self.schedule_sampler, LossAwareSampler):
@@ -248,9 +289,16 @@ class Trainer:
             
         loss += (losses_x_pred["loss"]*weights).mean()
         log_loss_dict(
-            self.diffusion, t, {k:v*weights for k,v in losses_x_pred.items()}
+            self.diffusion, t, {"loss": losses_x_pred["loss"]*weights}
         )
+        
+        # for name, param in self.ddp_model.named_parameters():
+        #     if not param.requires_grad:
+        #         print(f"Parameter {name} does not require grad")
+    
         self.mp_trainer.backward(loss)
+        
+        self.x_pred = x_pred
     
     # - update the ema model
     def _update_ema(self):

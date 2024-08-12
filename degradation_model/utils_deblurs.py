@@ -11,8 +11,8 @@ class DeblurringModel(object):
     def __init__(
                 self, 
                 im_size, 
-                blur_sizes = [11,15,17,21], 
-                blur_type = ["gaussian", "uniform", "motion"],
+                blur_sizes = [21], 
+                blur_type = ["gaussian", "uniform"], 
                 device = "cpu", 
                 dtype = torch.float32
             ):
@@ -22,6 +22,8 @@ class DeblurringModel(object):
         self.im_size = im_size
         self.blur_types = blur_type
         self.noise_std = [0.005, 0.01, 0.05]
+        
+        self.blur = None
     
     # set seeed  
     def set_seed(self, seed):
@@ -33,10 +35,10 @@ class DeblurringModel(object):
         Ax = self.Ax(x)  
         y = Ax + noise_std * torch.randn_like(Ax)
         op = {
-            "blur_tpye": self.blur_type,
-            "blur_size": self.blur_size,
-            "im_size": self.im_size,
-            "blur_value": self.blur,  
+            f"blur_tpye": self.blur_type,
+            f"blur_size": self.blur_size,
+            f"im_size": self.im_size,
+            f"blur_value": self.blur,  
         }
         return y, op
     
@@ -55,12 +57,16 @@ class DeblurringModel(object):
         else:
             raise ValueError(f"The blur type: {self.blur_type} is not correct!!")
         
+        self.blur = blur
+        
         FFT_H = blur2operator(self.blur, self.im_size)
         return blur, FFT_H
     
     # get blurred image
     def Ax(self, x):
-        self.blur, self.FFT_H = self._get_kernel().to(self.device)
+        self.blur, self.FFT_H = self._get_kernel()
+        self.blur = self.blur.to(self.device)
+        self.FFT_H = self.FFT_H.to(self.device)
         
         if len(self.FFT_H.shape) > 2:
             raise ValueError(f"The kernel dimension {self.FFT_H.shape} is not implemented!!")
@@ -98,24 +104,23 @@ def gaussian_kernel(hsize:int, dtype = torch.float32, sigma:float = 3.0):
     c_exp_term = (xker**2 + yker**2) / sigma**2; const = 1 / (2*math.pi*sigma**2)
     kernel = const * np.exp(-c_exp_term/2)
     kernel_norm = kernel / np.sum(kernel.reshape(-1,1))
-    return torch.from_numpy(kernel_norm).dtype(dtype)
+    return torch.from_numpy(kernel_norm).to(dtype)
 
 # uniform function
 def uniform_kernel(hsize, dtype = torch.float32):
     kernel = np.ones((hsize, hsize)) / hsize**2
-    return torch.from_numpy(kernel).dtype(dtype)
+    return torch.from_numpy(kernel).to(dtype)
 
 # motion function
 def motion_kernel(hsize):
     NotImplementedError("The motion kernel is not implemented yet!!")
     
 # Tikhonov solution  
-def deb_data_solution( y, blur_kernel_op, alpha):
+def deb_data_solution(y, blur, im_size, device, alpha):
     with torch.no_grad():
-        blur = blur_kernel_op["blur_value"]
-        FFT_H = blur2operator(blur, blur_kernel_op["im_size"])
+        FFT_H = blur2operator(blur, im_size).to(device)
         FFT_HC = torch.conj(FFT_H)
-        fft_y = torch.fft.fft2(y, dim = (-2,-1))
+        fft_y = torch.fft.fft2(y, dim = (-2,-1)).to(device)
         FR = FFT_HC * fft_y
         
         div_term = FFT_HC * FFT_H + alpha
@@ -126,16 +131,19 @@ def deb_data_solution( y, blur_kernel_op, alpha):
                 dim = (-2,-1)
                 )
             )
-    return sol
+    return sol.unsqueeze(0)
 
 # batch solution    
-def deb_batch_data_solution(batch_y, batch_blur_kernel_op, alpha = 0.01):
+def deb_batch_data_solution(batch_y, batch_blur_kernel_op, device, alpha = torch.tensor(0.01)):
+    alpha = alpha.to(device)
     batch_sol = []
     # loop over the batch
     for i in range(len(batch_y)):
         y_i = batch_y[i, :,:,:]
+        im_size = batch_blur_kernel_op["im_size"][i]
+        blur_i = batch_blur_kernel_op["blur_value"][i]
         # get the Tikhonov solution
-        batch_sol.append(deb_data_solution( y_i, batch_blur_kernel_op[i], alpha))
+        batch_sol.append(deb_data_solution(y_i, blur_i , im_size, device, alpha))
     batch_sol = torch.cat(batch_sol)
     
     return batch_sol

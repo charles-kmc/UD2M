@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as transforms #type: ignore
 import torch
 from degradation_model.utils_deblurs import DeblurringModel
+from utils.utils import inverse_image_transform, image_transform
 
 class DatasetsImageNet(object):
     def __init__(
@@ -56,19 +57,18 @@ class DatasetsImageNet(object):
         # get noisy image
         noisy_image, op_image = self.deblurring_model.get_noisy_image(image)
         # rescale image btw -1 and 1
-        image_scale = 2 * image - 1
+        image_scale = image_transform(image)
         image_scale = torch.clamp(image_scale, self.clip_min, self.clip_max)
-        noisy_image_scale = 2 * noisy_image - 1
-        noisy_image_scale = torch.clamp(noisy_image_scale, self.clip_min, self.clip_max)
-
-        return image_scale, noisy_image_scale, op_image
+        noisy_image = torch.clamp(noisy_image, 0, 1)
+        
+        return (image_scale, noisy_image, op_image)
 
 # get data loader   
 def get_data_loader(
                     dataset_path, 
                     im_size, 
                     batch_size, 
-                    num_workers = 2, 
+                    num_workers = 0, 
                     shuffle = True
                 ):
     dataset = DatasetsImageNet(dataset_path, im_size)
@@ -76,7 +76,8 @@ def get_data_loader(
                             dataset, 
                             batch_size=batch_size, 
                             shuffle=shuffle, 
-                            num_workers=num_workers
+                            num_workers=num_workers,
+                            pin_memory=False
                         )
     return data_loader
             

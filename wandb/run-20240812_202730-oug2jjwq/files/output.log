@@ -1,0 +1,68 @@
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/_reduction.py:42: UserWarning: size_average and reduce args will be deprecated, please use reduction='sum' instead.
+  warnings.warn(warning.format(ret))
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 90, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 87, in main
+    trainer.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 222, in run_training_loop
+    self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 254, in run_epoch
+    self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 281, in run_forward_backward
+    losses_x_cons = self.ddp_model.module.consistency_loss(x_pred, batch_y, blur_kernel_op)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/model.py", line 479, in consistency_loss
+    loss = self.loss_weight * F.binary_cross_entropy(Ax_pred, y, size_average=False)
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/functional.py", line 3172, in binary_cross_entropy
+    return torch._C._nn.binary_cross_entropy(input, target, weight, reduction_enum)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+RuntimeError: CUDA error: device-side assert triggered
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 90, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 87, in main
+[rank0]:     trainer.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 222, in run_training_loop
+[rank0]:     self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 254, in run_epoch
+[rank0]:     self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 281, in run_forward_backward
+[rank0]:     losses_x_cons = self.ddp_model.module.consistency_loss(x_pred, batch_y, blur_kernel_op)
+[rank0]:                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/model.py", line 479, in consistency_loss
+[rank0]:     loss = self.loss_weight * F.binary_cross_entropy(Ax_pred, y, size_average=False)
+[rank0]:                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/functional.py", line 3172, in binary_cross_entropy
+[rank0]:     return torch._C._nn.binary_cross_entropy(input, target, weight, reduction_enum)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]: RuntimeError: CUDA error: device-side assert triggered
+[rank0]: CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+[rank0]: For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+[rank0]: Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+Started ...
+after jj = 0  shape h:torch.Size([4, 512, 8, 8])
+after jj = 1  shape h:torch.Size([4, 512, 16, 16])
+after jj = 2  shape h:torch.Size([4, 512, 16, 16])
+after jj = 3  shape h:torch.Size([4, 512, 32, 32])
+after ii = 0  shape x:torch.Size([4, 512, 8, 8]) --
+after ii = 1  shape x:torch.Size([4, 512, 16, 16]) --
+after ii = 2  shape x:torch.Size([4, 512, 16, 16]) --
+after ii = 3  shape x:torch.Size([4, 512, 32, 32]) --
+after ii = 4  shape x:torch.Size([4, 256, 32, 32]) --
+after ii = 5  shape x:torch.Size([4, 256, 64, 64]) --
+after ii = 6  shape x:torch.Size([4, 256, 64, 64]) --
+after ii = 7  shape x:torch.Size([4, 256, 128, 128]) --
+after ii = 8  shape x:torch.Size([4, 128, 128, 128]) --
+after ii = 9  shape x:torch.Size([4, 128, 256, 256]) --
+after ii = 10  shape x:torch.Size([4, 128, 256, 256]) --
+after ii = 11  shape x:torch.Size([4, 128, 256, 256]) --
+torch.Size([1, 3, 256, 256])
+torch.Size([1, 3, 256, 256])
+torch.Size([1, 3, 256, 256])
+torch.Size([1, 3, 256, 256])
+tensor(0.0021, device='cuda:0', grad_fn=<MinBackward1>) tensor(0.9568, device='cuda:0', grad_fn=<MaxBackward1>)

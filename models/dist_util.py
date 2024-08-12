@@ -46,9 +46,9 @@ def dev():
     """
     Get the device to use for torch.distributed.
     """
-    if torch.cuda.is_available():
-        return torch.device(f"cuda")
-    return torch.device("cpu")
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
+    return device
 
 
 def load_state_dict(path, **kwargs):
@@ -79,6 +79,8 @@ def sync_params(params):
     Synchronize a sequence of Tensors across ranks from rank 0.
     """
     for p in params:
+        if p.device != dev():
+            p = p.to(dev())  # or the appropriate device
         with torch.no_grad():
             dist.broadcast(p, 0)
 

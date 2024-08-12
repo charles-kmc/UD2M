@@ -1,0 +1,18 @@
+MPI startup(): PMI server not found. Please set I_MPI_PMI_LIBRARY variable if it is not a singleton case.
+Number of Layers frozen: 362
+Total trainable parameters of the model: 93563910 (non-LoRa) vs 24576 (LoRa) Ratio: 0.03% of the original model
+0
+i 0 [1, 2]
+1
+i 1 [1, 2]
+512
+2
+i 0 [1, 2]
+3
+i 1 [1, 2]
+512
+device cuda cuda
+Started ...
+tensor(0.8658, device='cuda:0', grad_fn=<MaxBackward1>) tensor(0.9173, device='cuda:0')
+tensor(0.0034, device='cuda:0', grad_fn=<MinBackward1>) tensor(0., device='cuda:0')
+Logging to /tmp/openai-2024-08-12-21-15-44-681723
