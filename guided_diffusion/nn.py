@@ -102,7 +102,7 @@ def normalization_group(norm_grp, channels):
         norm_grp = norm_grp[0]
     except:
         norm_grp = norm_grp
-    return GroupNorm32(norm_grp, channels)
+    return GroupNorm32(32, channels)
 
 
 def normalization(channels):
@@ -154,7 +154,6 @@ def checkpoint(func, inputs, params, flag):
         out = func(*inputs)
         return out
 
-
 class CheckpointFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, run_function, length, *args):
@@ -168,16 +167,18 @@ class CheckpointFunction(torch.autograd.Function):
     @staticmethod
     def backward(ctx, *output_grads):
         ctx.input_tensors = [x.detach().requires_grad_(True) for x in ctx.input_tensors]
+        ctx.input_params = [x.detach().requires_grad_(True) for x in ctx.input_params]
         with torch.enable_grad():
             # Fixes a bug where the first op in run_function modifies the
             # Tensor storage in place, which is not allowed for detach()'d
             # Tensors.
             shallow_copies = [x.view_as(x) for x in ctx.input_tensors]
             output_tensors = ctx.run_function(*shallow_copies)
+              
         input_grads = torch.autograd.grad(
             output_tensors,
             ctx.input_tensors + ctx.input_params,
-            output_grads,
+            *output_grads,
             allow_unused=True,
         )
         del ctx.input_tensors

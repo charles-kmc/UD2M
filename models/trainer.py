@@ -2,14 +2,13 @@ import copy
 import functools
 import os
 import wandb
-
 import blobfile as bf #type:ignore
-
-import torch 
-import torch.distributed as dist
-from torch.nn.parallel.distributed import DistributedDataParallel as DDP
-from torch.optim import AdamW
-from torchvision.utils import save_image
+import torch  #type: ignore
+import torch.distributed as dist#type: ignore
+from torch.nn.parallel.distributed import DistributedDataParallel as DDP#type: ignore
+from torch.optim import AdamW#type: ignore
+from torchvision.utils import save_image#type: ignore
+import matplotlib.pyplot as plt#type: ignore
 
 from . import dist_util, logger
 from .fp16_util import MixedPrecisionTrainer
@@ -28,7 +27,7 @@ class Trainer:
             dataloader,
             batch_size = 32, 
             microbatch = 0, 
-            ema_rate = 0.9999, 
+            ema_rate = 0.99, 
             log_interval = 100,
             save_interval = 100, 
             lr = 1e-3,
@@ -72,6 +71,7 @@ class Trainer:
         #self.global_batch = self.batch_size * dist.get_world_size()
         
         self.syn_cuda = torch.cuda.is_available()
+        self.model = self.model.to(dist_util.dev())
         
         # load parameters of the model for training
         self._load_and_sync_parameters()
@@ -82,6 +82,7 @@ class Trainer:
                                     use_fp16=self.use_fp16,
                                     fp16_scale_growth= self.fp16_scale_growth,
                                 )
+        
         
         # optimizer
         self.opt = AdamW(
@@ -107,7 +108,6 @@ class Trainer:
         # Distributed data parallel if cuda exists!!
         if torch.cuda.is_available():
             self.use_ddp = True
-            self.model = self.model.to(dist_util.dev())
             self.ddp_model = DDP(
                         self.model, 
                         device_ids=[dist_util.dev()],
@@ -128,6 +128,7 @@ class Trainer:
     
         self.psnr_history = []
         self.mse_history = []
+        self.loss_history = []
         self.metrics = Metrics(dist_util.dev())
         
         
@@ -213,7 +214,7 @@ class Trainer:
                     batch_y = batch_y.to(dist_util.dev())
                     # Tikhonov data solution
                     if self.learn_alpha:
-                        lr_alp = self.ddp_model.module.alpha.detach()
+                        lr_alp = self.ddp_model.module.alpha
                         batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op, dist_util.dev(), alpha = lr_alp)
                     else:
                         batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op, dist_util.dev())
@@ -231,8 +232,8 @@ class Trainer:
                             return
                     
                     # epoch evaluation
-                    mse_val = self.metrics.mse_function(batch_data.detach().cpu(), self,x_pred.detach().cpu())
-                    psnr_val = self.metrics.psnr_function(batch_data.detach().cpu(), self,x_pred.detach().cpu())
+                    mse_val = self.metrics.mse_function(batch_data.detach().cpu(), self.x_pred.detach().cpu())
+                    psnr_val = self.metrics.psnr_function(batch_data.detach().cpu(), self.x_pred.detach().cpu())
                     self.psnr_history.append(psnr_val)     
                     self.mse_history.append(mse_val)     
                     wandb.log({"psnr": psnr_val.numpy(), "mse": mse_val.numpy()})
@@ -248,7 +249,18 @@ class Trainer:
                     os.makedirs(est_path, exist_ok=True)
                     save_image(self.x_pred.detach().cpu().numpy(), os.path.join(est_path, "est_{self.epoch}.png"))
                     save_image(self.batch_data.detach().cpu().numpy(), os.path.join(est_path, "ref_{self.epoch}.png"))
-            
+        
+        fig1 = plt.figure()
+        plt.plot(torch.arange(len(torch.cat(self.psnr_history))), torch.cat(self.psnr_history))
+        plt.savefig("history_psnr.png") 
+        
+        fig1 = plt.figure()
+        plt.plot(torch.arange(len(torch.cat(self.mse_history))), torch.cat(self.mse_history))
+        plt.savefig("history_mse.png")
+        
+        fig1 = plt.figure()
+        plt.plot(torch.arange(len(torch.cat(self.loss_history))), torch.cat(self.loss_history))
+        plt.savefig("history_loss.png")   
     # epoch through the model       
     def run_epoch(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):
         self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
@@ -291,13 +303,8 @@ class Trainer:
         log_loss_dict(
             self.diffusion, t, {"loss": losses_x_pred["loss"]*weights}
         )
-        
-        # for name, param in self.ddp_model.named_parameters():
-        #     if not param.requires_grad:
-        #         print(f"Parameter {name} does not require grad")
-    
+        self.loss_history.append(losses_x_pred["loss"].detach().cpu()*weights.cpu())
         self.mp_trainer.backward(loss)
-        
         self.x_pred = x_pred
     
     # - update the ema model

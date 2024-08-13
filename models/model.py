@@ -322,8 +322,6 @@ class FineTuningDiffusionModel(nn.Module):
                 #     continue
                 # else:
                 for i in range(num_res_blocks + 1):
-                    print(count)
-                    print("i", i, out_blocks_posi)
                     ich = input_block_chans.pop()
                     layers = [
                         ResBlock_new(
@@ -338,7 +336,6 @@ class FineTuningDiffusionModel(nn.Module):
                     
                     ch = int(model_channels * mult)
                     if level and i == num_res_blocks:
-                        print(out_ch)
                         out_ch = ch
                         layers.append(
                             ResBlock_new(
@@ -463,8 +460,6 @@ class FineTuningDiffusionModel(nn.Module):
             Ax_pred.append(ax_pred)
         # Concatenate the results along the appropriate dimension
         Ax_pred = torch.cat(Ax_pred, dim=0)
-        print(Ax_pred.max(), y.max())
-        print(Ax_pred.min(), y.min())
         
         loss = self.loss_weight * mse(Ax_pred, y)
         return loss

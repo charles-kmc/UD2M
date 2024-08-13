@@ -135,7 +135,6 @@ def deb_data_solution(y, blur, im_size, device, alpha):
 
 # batch solution    
 def deb_batch_data_solution(batch_y, batch_blur_kernel_op, device, alpha = torch.tensor(0.01)):
-    alpha = alpha.to(device)
     batch_sol = []
     # loop over the batch
     for i in range(len(batch_y)):
