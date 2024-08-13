@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-import torch 
-import torch.nn as nn
-import torch.nn.functional as F #type:
-from torchvision.utils import save_image
+import torch #type:ignore
+import torch.nn as nn#type:ignore
+import torch.nn.functional as F #type:#type:ignore
+from torchvision.utils import save_image#type:ignore
 
 import os
 import copy
