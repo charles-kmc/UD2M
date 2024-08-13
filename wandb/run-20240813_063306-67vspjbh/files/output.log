@@ -931,3 +931,31 @@ Started ...
 | samples    | 16       |
 -------------------------
 Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00324  |
+| loss       | 0.011    |
+| loss_q0    | 0.0285   |
+| loss_q1    | 0.00599  |
+| loss_q2    | 0.0026   |
+| loss_q3    | 0.00113  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00532  |
+| loss       | 0.0283   |
+| loss_q0    | 0.102    |
+| loss_q1    | 0.00624  |
+| loss_q2    | 0.00327  |
+| loss_q3    | 0.00105  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
