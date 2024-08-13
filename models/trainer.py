@@ -303,7 +303,9 @@ class Trainer:
         log_loss_dict(
             self.diffusion, t, {"loss": losses_x_pred["loss"]*weights}
         )
-        self.loss_history.append(losses_x_pred["loss"].detach().cpu()*weights.cpu())
+        loss_val = losses_x_pred["loss"].detach().cpu()*weights.cpu()
+        self.loss_history.append(loss_val)
+        wandb.log({"loss": loss_val.numpy()})
         self.mp_trainer.backward(loss)
         self.x_pred = x_pred
     

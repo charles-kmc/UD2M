@@ -1,0 +1,933 @@
+Started ...
+Logging to /tmp/openai-2024-08-13-06-33-10-456549
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0969   |
+| loss       | 0.0806   |
+| loss_q0    | 0.105    |
+| loss_q1    | 0.0794   |
+| loss_q2    | 0.0709   |
+| loss_q3    | 0.073    |
+| param_norm | 366      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.337    |
+| loss       | 0.328    |
+| loss_q0    | 0.928    |
+| loss_q1    | 0.0569   |
+| loss_q2    | 0.0543   |
+| loss_q3    | 0.0539   |
+| param_norm | 366      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0431   |
+| loss       | 0.0704   |
+| loss_q0    | 0.123    |
+| loss_q1    | 0.0537   |
+| loss_q2    | 0.0523   |
+| loss_q3    | 0.0525   |
+| param_norm | 366      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0498   |
+| loss       | 0.124    |
+| loss_q0    | 0.352    |
+| loss_q1    | 0.0498   |
+| loss_q2    | 0.0471   |
+| loss_q3    | 0.0488   |
+| param_norm | 366      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0389   |
+| loss       | 0.0566   |
+| loss_q0    | 0.0806   |
+| loss_q1    | 0.0458   |
+| loss_q2    | 0.0453   |
+| loss_q3    | 0.0459   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0711   |
+| loss       | 0.109    |
+| loss_q0    | 0.196    |
+| loss_q1    | 0.0419   |
+| loss_q2    | 0.0393   |
+| loss_q3    | 0.0413   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0388   |
+| loss       | 0.0455   |
+| loss_q0    | 0.0645   |
+| loss_q1    | 0.0516   |
+| loss_q2    | 0.0342   |
+| loss_q3    | 0.036    |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0395   |
+| loss       | 0.0528   |
+| loss_q0    | 0.0931   |
+| loss_q1    | 0.0365   |
+| loss_q2    | 0.0288   |
+| loss_q3    | 0.0331   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0366   |
+| loss       | 0.0361   |
+| loss_q0    | 0.0641   |
+| loss_q1    | 0.0307   |
+| loss_q2    | 0.0267   |
+| loss_q3    | 0.0303   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0739   |
+| loss       | 0.0744   |
+| loss_q0    | 0.22     |
+| loss_q1    | 0.0362   |
+| loss_q2    | 0.0215   |
+| loss_q3    | 0.0247   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0385   |
+| loss       | 0.0336   |
+| loss_q0    | 0.0551   |
+| loss_q1    | 0.0297   |
+| loss_q2    | 0.0194   |
+| loss_q3    | 0.0206   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0467   |
+| loss       | 0.0233   |
+| loss_q0    | 0.0605   |
+| loss_q2    | 0.0139   |
+| loss_q3    | 0.0159   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0412   |
+| loss       | 0.0276   |
+| loss_q0    | 0.0652   |
+| loss_q1    | 0.0195   |
+| loss_q2    | 0.0106   |
+| loss_q3    | 0.0126   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0239   |
+| loss       | 0.0189   |
+| loss_q0    | 0.0643   |
+| loss_q1    | 0.0112   |
+| loss_q2    | 0.00687  |
+| loss_q3    | 0.00776  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0178   |
+| loss       | 0.0148   |
+| loss_q0    | 0.0506   |
+| loss_q1    | 0.011    |
+| loss_q2    | 0.00561  |
+| loss_q3    | 0.00656  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.017    |
+| loss       | 0.0187   |
+| loss_q0    | 0.0381   |
+| loss_q1    | 0.0184   |
+| loss_q2    | 0.00606  |
+| loss_q3    | 0.00413  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0233   |
+| loss       | 0.0125   |
+| loss_q0    | 0.0308   |
+| loss_q1    | 0.00983  |
+| loss_q2    | 0.00468  |
+| loss_q3    | 0.00266  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0642   |
+| loss       | 0.0391   |
+| loss_q0    | 0.081    |
+| loss_q1    | 0.0156   |
+| loss_q2    | 0.00532  |
+| loss_q3    | 0.00289  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00521  |
+| loss       | 0.00526  |
+| loss_q1    | 0.0148   |
+| loss_q2    | 0.00411  |
+| loss_q3    | 0.00183  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0109   |
+| loss       | 0.00946  |
+| loss_q0    | 0.0276   |
+| loss_q1    | 0.00696  |
+| loss_q2    | 0.00324  |
+| loss_q3    | 0.00171  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0607   |
+| loss       | 0.0301   |
+| loss_q0    | 0.0998   |
+| loss_q1    | 0.0129   |
+| loss_q2    | 0.00395  |
+| loss_q3    | 0.00149  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0424   |
+| loss       | 0.0248   |
+| loss_q0    | 0.0571   |
+| loss_q1    | 0.0166   |
+| loss_q2    | 0.00416  |
+| loss_q3    | 0.00187  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0252   |
+| loss       | 0.0208   |
+| loss_q0    | 0.0357   |
+| loss_q1    | 0.0178   |
+| loss_q2    | 0.00252  |
+| loss_q3    | 0.0021   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0269   |
+| loss       | 0.0194   |
+| loss_q0    | 0.0563   |
+| loss_q1    | 0.0135   |
+| loss_q2    | 0.00444  |
+| loss_q3    | 0.0028   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00997  |
+| loss       | 0.00712  |
+| loss_q0    | 0.0248   |
+| loss_q1    | 0.00407  |
+| loss_q2    | 0.00359  |
+| loss_q3    | 0.0018   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0189   |
+| loss       | 0.0298   |
+| loss_q0    | 0.0493   |
+| loss_q1    | 0.00854  |
+| loss_q2    | 0.00465  |
+| loss_q3    | 0.00204  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00778  |
+| loss       | 0.0169   |
+| loss_q0    | 0.0764   |
+| loss_q1    | 0.0049   |
+| loss_q2    | 0.00445  |
+| loss_q3    | 0.00153  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00989  |
+| loss       | 0.0121   |
+| loss_q0    | 0.0481   |
+| loss_q1    | 0.0125   |
+| loss_q2    | 0.00351  |
+| loss_q3    | 0.00142  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00599  |
+| loss       | 0.00625  |
+| loss_q0    | 0.0243   |
+| loss_q1    | 0.00738  |
+| loss_q2    | 0.00334  |
+| loss_q3    | 0.00145  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0232   |
+| loss       | 0.0171   |
+| loss_q0    | 0.0676   |
+| loss_q1    | 0.0113   |
+| loss_q2    | 0.00406  |
+| loss_q3    | 0.00145  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00887  |
+| loss       | 0.019    |
+| loss_q0    | 0.0806   |
+| loss_q1    | 0.00868  |
+| loss_q2    | 0.00419  |
+| loss_q3    | 0.00148  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00668  |
+| loss       | 0.013    |
+| loss_q0    | 0.0539   |
+| loss_q1    | 0.00784  |
+| loss_q2    | 0.00338  |
+| loss_q3    | 0.00198  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.029    |
+| loss       | 0.0356   |
+| loss_q0    | 0.0752   |
+| loss_q1    | 0.0188   |
+| loss_q3    | 0.00152  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0128   |
+| loss       | 0.0177   |
+| loss_q0    | 0.0542   |
+| loss_q1    | 0.00734  |
+| loss_q2    | 0.0049   |
+| loss_q3    | 0.00191  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00643  |
+| loss       | 0.00958  |
+| loss_q0    | 0.0391   |
+| loss_q1    | 0.00878  |
+| loss_q2    | 0.0044   |
+| loss_q3    | 0.00164  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00696  |
+| loss       | 0.0113   |
+| loss_q0    | 0.0316   |
+| loss_q1    | 0.0116   |
+| loss_q2    | 0.00297  |
+| loss_q3    | 0.00179  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0116   |
+| loss       | 0.0221   |
+| loss_q0    | 0.0438   |
+| loss_q1    | 0.00726  |
+| loss_q2    | 0.00318  |
+| loss_q3    | 0.00159  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0054   |
+| loss       | 0.0126   |
+| loss_q0    | 0.0266   |
+| loss_q1    | 0.0134   |
+| loss_q2    | 0.00292  |
+| loss_q3    | 0.00146  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00499  |
+| loss       | 0.00647  |
+| loss_q0    | 0.0185   |
+| loss_q1    | 0.0107   |
+| loss_q2    | 0.002    |
+| loss_q3    | 0.00162  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00521  |
+| loss       | 0.00799  |
+| loss_q0    | 0.034    |
+| loss_q1    | 0.0108   |
+| loss_q2    | 0.00268  |
+| loss_q3    | 0.00157  |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00658  |
+| loss       | 0.00907  |
+| loss_q0    | 0.0309   |
+| loss_q1    | 0.00696  |
+| loss_q2    | 0.00296  |
+| loss_q3    | 0.00143  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0345   |
+| loss       | 0.0215   |
+| loss_q0    | 0.0788   |
+| loss_q1    | 0.00491  |
+| loss_q2    | 0.00244  |
+| loss_q3    | 0.00143  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00583  |
+| loss       | 0.00782  |
+| loss_q0    | 0.0375   |
+| loss_q1    | 0.0102   |
+| loss_q2    | 0.00265  |
+| loss_q3    | 0.00137  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00517  |
+| loss       | 0.0224   |
+| loss_q0    | 0.144    |
+| loss_q1    | 0.008    |
+| loss_q2    | 0.00139  |
+| loss_q3    | 0.00122  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0156   |
+| loss       | 0.00618  |
+| loss_q0    | 0.0576   |
+| loss_q1    | 0.00754  |
+| loss_q2    | 0.00258  |
+| loss_q3    | 0.00121  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00614  |
+| loss       | 0.0115   |
+| loss_q0    | 0.0276   |
+| loss_q1    | 0.011    |
+| loss_q2    | 0.0026   |
+| loss_q3    | 0.00116  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00441  |
+| loss       | 0.0115   |
+| loss_q0    | 0.0373   |
+| loss_q1    | 0.00744  |
+| loss_q2    | 0.00188  |
+| loss_q3    | 0.00112  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00739  |
+| loss       | 0.0157   |
+| loss_q0    | 0.0454   |
+| loss_q1    | 0.00798  |
+| loss_q2    | 0.00402  |
+| loss_q3    | 0.00105  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00829  |
+| loss       | 0.0157   |
+| loss_q0    | 0.0287   |
+| loss_q1    | 0.00654  |
+| loss_q2    | 0.00217  |
+| loss_q3    | 0.00109  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00338  |
+| loss       | 0.00965  |
+| loss_q0    | 0.0324   |
+| loss_q1    | 0.00384  |
+| loss_q2    | 0.00167  |
+| loss_q3    | 0.00108  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00239  |
+| loss       | 0.00789  |
+| loss_q0    | 0.0175   |
+| loss_q1    | 0.00748  |
+| loss_q2    | 0.0047   |
+| loss_q3    | 0.00103  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.056    |
+| loss       | 0.0523   |
+| loss_q0    | 0.159    |
+| loss_q1    | 0.00649  |
+| loss_q2    | 0.00367  |
+| loss_q3    | 0.00113  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00651  |
+| loss       | 0.0149   |
+| loss_q0    | 0.0394   |
+| loss_q1    | 0.00766  |
+| loss_q2    | 0.00377  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00432  |
+| loss       | 0.0108   |
+| loss_q0    | 0.115    |
+| loss_q1    | 0.00825  |
+| loss_q2    | 0.00233  |
+| loss_q3    | 0.00122  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00962  |
+| loss       | 0.00981  |
+| loss_q0    | 0.0208   |
+| loss_q1    | 0.00765  |
+| loss_q2    | 0.00265  |
+| loss_q3    | 0.0013   |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00773  |
+| loss       | 0.00872  |
+| loss_q0    | 0.0169   |
+| loss_q1    | 0.0129   |
+| loss_q2    | 0.00256  |
+| loss_q3    | 0.0012   |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0197   |
+| loss       | 0.0198   |
+| loss_q0    | 0.0368   |
+| loss_q1    | 0.0133   |
+| loss_q2    | 0.00154  |
+| loss_q3    | 0.00106  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0109   |
+| loss       | 0.00967  |
+| loss_q0    | 0.025    |
+| loss_q1    | 0.00603  |
+| loss_q2    | 0.00198  |
+| loss_q3    | 0.00116  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.105    |
+| loss       | 0.101    |
+| loss_q0    | 0.256    |
+| loss_q1    | 0.0134   |
+| loss_q2    | 0.00445  |
+| loss_q3    | 0.00117  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00378  |
+| loss       | 0.00785  |
+| loss_q0    | 0.0234   |
+| loss_q1    | 0.0131   |
+| loss_q2    | 0.00184  |
+| loss_q3    | 0.00129  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0208   |
+| loss       | 0.0137   |
+| loss_q0    | 0.039    |
+| loss_q1    | 0.0048   |
+| loss_q2    | 0.0028   |
+| loss_q3    | 0.00121  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0295   |
+| loss       | 0.0446   |
+| loss_q0    | 0.0716   |
+| loss_q1    | 0.0159   |
+| loss_q2    | 0.00188  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.035    |
+| loss       | 0.0257   |
+| loss_q0    | 0.0704   |
+| loss_q1    | 0.0222   |
+| loss_q2    | 0.00235  |
+| loss_q3    | 0.00113  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00736  |
+| loss       | 0.0239   |
+| loss_q0    | 0.0591   |
+| loss_q1    | 0.00773  |
+| loss_q2    | 0.00308  |
+| loss_q3    | 0.00105  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00333  |
+| loss       | 0.0104   |
+| loss_q0    | 0.034    |
+| loss_q1    | 0.0041   |
+| loss_q2    | 0.00233  |
+| loss_q3    | 0.00104  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00303  |
+| loss       | 0.00885  |
+| loss_q0    | 0.029    |
+| loss_q1    | 0.00855  |
+| loss_q2    | 0.00205  |
+| loss_q3    | 0.00113  |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...
+Saving EMA checkpoint for rate 0.9999...
+Started ...
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.00392  |
+| loss       | 0.0159   |
+| loss_q0    | 0.0623   |
+| loss_q1    | 0.00752  |
+| loss_q2    | 0.00195  |
+| loss_q3    | 0.000982 |
+| param_norm | 368      |
+| samples    | 16       |
+-------------------------
+Saving EMA checkpoint for rate 0...

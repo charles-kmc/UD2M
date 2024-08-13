@@ -50,20 +50,19 @@ def main():
 
     # --- detaset 
     dataset_dir = "/users/cmk2000/sharedscratch/Datasets/ImageNet/train"
-    batch_size = 4
+    batch_size = 16
     train_dataloader = get_data_loader(dataset_dir, image_size, batch_size)
     # data_iter = iter(train_dataloader)
     # ref, deg, op = next(data_iter)
     
        
     # --- trainer
-    num_epochs = 100
+    num_epochs = 1000
     lr = 1e-3
-    batch_size = 32
     microbatch = 0
     ema_rate = 0.9999
     log_interval = 100
-    save_interval = 20
+    save_interval = 100
     problem_type = "deblur"
     trainer = Trainer(
                 aug_LoRa_model, 
