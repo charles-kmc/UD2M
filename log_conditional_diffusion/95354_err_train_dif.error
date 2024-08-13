@@ -7,3 +7,5 @@ wandb: Run `wandb offline` to turn off syncing.
 wandb: Syncing run absurd-pyramid-2
 wandb: ⭐️ View project at https://wandb.ai/charlesquin/Training%20conditinal%20diffusion%20models
 wandb: 🚀 View run at https://wandb.ai/charlesquin/Training%20conditinal%20diffusion%20models/runs/l95qmamy
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/PIL/TiffImagePlugin.py:870: UserWarning: Corrupt EXIF data.  Expecting to read 2 bytes but only got 0. 
+  warnings.warn(str(msg))

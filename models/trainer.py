@@ -73,14 +73,14 @@ class Trainer:
         self.syn_cuda = torch.cuda.is_available()
         self.model = self.model.to(dist_util.dev())
         
-        # load parameters of the model for training
+        # load parameters of the model for training and synchronise
         self._load_and_sync_parameters()
         
         # this allows the training to deal with different precision
         self.mp_trainer = MixedPrecisionTrainer(
                                     self.model, 
                                     use_fp16=self.use_fp16,
-                                    fp16_scale_growth= self.fp16_scale_growth,
+                                    fp16_scale_growth= self.fp16_scale_growth
                                 )
         
         
