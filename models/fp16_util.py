@@ -92,36 +92,16 @@ def get_param_groups_and_shapes(named_model_params):
     return [scalar_vector_named_params, matrix_named_params]
 
 
-def master_params_to_state_dict(
-    model, param_groups_and_shapes, master_params, use_fp16
-):
-    if use_fp16:
-        state_dict = model.state_dict()
-        for master_param, (param_group, _) in zip(
-            master_params, param_groups_and_shapes
-        ):
-            for (name, _), unflat_master_param in zip(
-                param_group, unflatten_master_params(param_group, master_param.view(-1))
-            ):
-                assert name in state_dict
-                state_dict[name] = unflat_master_param
-    else:
-        state_dict = model.state_dict()
-        for i, (name, _value) in enumerate(model.named_parameters()):
-            assert name in state_dict
-            state_dict[name] = master_params[i]
+def master_params_to_state_dict(model, master_params):
+    state_dict = model.state_dict()
+    for i, (name, _value) in enumerate(model.named_parameters()):
+        assert name in state_dict
+        state_dict[name] = master_params[i]
     return state_dict
 
 
-def state_dict_to_master_params(model, state_dict, use_fp16):
-    if use_fp16:
-        named_model_params = [
-            (name, state_dict[name]) for name, _ in model.named_parameters()
-        ]
-        param_groups_and_shapes = get_param_groups_and_shapes(named_model_params)
-        master_params = make_master_params(param_groups_and_shapes)
-    else:
-        master_params = [state_dict[name] for name, _ in model.named_parameters()]
+def state_dict_to_master_params(model, state_dict):
+    master_params = [state_dict[name] for name, _ in model.named_parameters()]
     return master_params
 
 
@@ -144,67 +124,30 @@ def param_grad_or_zeros(param):
     else:
         return torch.zeros_like(param)
 
-
 class MixedPrecisionTrainer:
     def __init__(
-        self,
-        model,
-        use_fp16=False,
-        fp16_scale_growth=1e-3,
-        initial_lg_loss_scale=INITIAL_LOG_LOSS_SCALE,
-    ):
+                self,
+                model,
+                initial_lg_loss_scale=INITIAL_LOG_LOSS_SCALE,
+            ):
         self.model = model
-        self.use_fp16 = use_fp16
-        self.fp16_scale_growth = fp16_scale_growth
 
+        self.model_params_learnable = list(filter(lambda p: p.requires_grad, self.model.parameters())) #list(self.model.parameters())
         self.model_params = list(self.model.parameters())
         self.master_params = self.model_params
+        self.master_params_learnable = self.model_params_learnable
         self.param_groups_and_shapes = None
         self.lg_loss_scale = initial_lg_loss_scale
 
-        if self.use_fp16:
-            self.param_groups_and_shapes = get_param_groups_and_shapes(
-                self.model.named_parameters()
-            )
-            self.master_params = make_master_params(self.param_groups_and_shapes)
-            self.model.convert_to_fp16()
             
     def zero_grad(self):
-        zero_grad(self.model_params)
+        zero_grad(self.master_params_learnable)
 
     def backward(self, loss: torch.Tensor):
-        if self.use_fp16:
-            loss_scale = 2 ** self.lg_loss_scale
-            (loss * loss_scale).backward()
-        else:
-            loss.backward()
+        loss.backward()
 
     def optimize(self, opt: torch.optim.Optimizer):
-        if self.use_fp16:
-            return self._optimize_fp16(opt)
-        else:
-            return self._optimize_normal(opt)
-
-    def _optimize_fp16(self, opt: torch.optim.Optimizer):
-        logger.logkv_mean("lg_loss_scale", self.lg_loss_scale)
-        model_grads_to_master_grads(self.param_groups_and_shapes, self.master_params)
-        grad_norm, param_norm = self._compute_norms(grad_scale=2 ** self.lg_loss_scale)
-        if check_overflow(grad_norm):
-            self.lg_loss_scale -= 1
-            logger.log(f"Found NaN, decreased lg_loss_scale to {self.lg_loss_scale}")
-            zero_master_grads(self.master_params)
-            return False
-
-        logger.logkv_mean("grad_norm", grad_norm)
-        logger.logkv_mean("param_norm", param_norm)
-
-        for p in self.master_params:
-            p.grad.mul_(1.0 / (2 ** self.lg_loss_scale))
-        opt.step()
-        zero_master_grads(self.master_params)
-        master_params_to_model_params(self.param_groups_and_shapes, self.master_params)
-        self.lg_loss_scale += self.fp16_scale_growth
-        return True
+        return self._optimize_normal(opt)
 
     def _optimize_normal(self, opt: torch.optim.Optimizer):
         grad_norm, param_norm = self._compute_norms()
@@ -216,7 +159,7 @@ class MixedPrecisionTrainer:
     def _compute_norms(self, grad_scale=1.0):
         grad_norm = 0.0
         param_norm = 0.0
-        for p in self.master_params:
+        for p in self.master_params_learnable:
             with torch.no_grad():
                 param_norm += torch.norm(p, p=2, dtype=torch.float32).item() ** 2
                 if p.grad is not None:
@@ -224,13 +167,10 @@ class MixedPrecisionTrainer:
         return np.sqrt(grad_norm) / grad_scale, np.sqrt(param_norm)
 
     def master_params_to_state_dict(self, master_params):
-        return master_params_to_state_dict(
-            self.model, self.param_groups_and_shapes, master_params, self.use_fp16
-        )
+        return master_params_to_state_dict(self.model, master_params)
 
     def state_dict_to_master_params(self, state_dict):
-        return state_dict_to_master_params(self.model, state_dict, self.use_fp16)
-
+        return state_dict_to_master_params(self.model, state_dict)
 
 def check_overflow(value):
     return (value == float("inf")) or (value == -float("inf")) or (value != value)

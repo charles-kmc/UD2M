@@ -35,8 +35,6 @@ class Trainer:
             resume_checkpoint = "",
             save_results = "",
             learn_alpha = True,
-            use_fp16 = False,
-            fp16_scale_growth = 1e-3,
             schedule_sampler = None,
             weight_decay = 0.0,
             lr_anneal_epochs = 0,
@@ -58,16 +56,15 @@ class Trainer:
         self.save_interval = save_interval
         self.resume_checkpoint = resume_checkpoint
         
-        self.use_fp16 = use_fp16
-        self.fp16_scale_growth = fp16_scale_growth
         self.schedule_sampler = schedule_sampler or UniformSampler(diffusion)
         self.weight_decay = weight_decay
         self.lr_anneal_epochs = lr_anneal_epochs
         self.consistency_loss = consistency_loss
-        self.problem_type = problem_type
         self.learn_alpha = learn_alpha
         self.epoch = 0
         self.resume_epoch = 0
+        
+        self.task = problem_type
         #self.global_batch = self.batch_size * dist.get_world_size()
         
         self.syn_cuda = torch.cuda.is_available()
@@ -77,16 +74,25 @@ class Trainer:
         self._load_and_sync_parameters()
         
         # this allows the training to deal with different precision
-        self.mp_trainer = MixedPrecisionTrainer(
-                                    self.model, 
-                                    use_fp16=self.use_fp16,
-                                    fp16_scale_growth= self.fp16_scale_growth
-                                )
+        self.mp_trainer = MixedPrecisionTrainer(self.model)
         
+        trained_params = 0
+        Total_params = 0
+        frozon_params = 0
+        for p in self.model.parameters():
+            Total_params += p.numel()
+            if p.requires_grad:
+                trained_params += p.numel()
+            else:
+                frozon_params += p.numel()
+                
+        print(f"Total parameters ====> {Total_params}")
+        print(f"Total frozen parameters ====> {frozon_params}")
+        print(f"Total trainable parameters ====> {trained_params}")
         
         # optimizer
         self.opt = AdamW(
-            self.mp_trainer.master_params, 
+            self.mp_trainer.master_params_learnable,
             lr=self.lr, 
             weight_decay=self.weight_decay
         )
@@ -139,11 +145,14 @@ class Trainer:
             self.resume_epoch = parse_resume_epoch_from_filename(resume_checkpoint)
             if dist.get_rank() == 0:
                 logger.info(f"Resuming from checkpoint {resume_checkpoint}")
+                
+                # Loading weights
                 self.model.load_state_dict(
                     dist_util.load_state_dict(
                         resume_checkpoint, map_location=dist_util.dev()
                     )
                 )
+        # sychronise parameters of the model
         dist_util.sync_params(self.model.parameters())
         
     # load ema checkpoints
@@ -151,7 +160,7 @@ class Trainer:
         ema_params = copy.deepcopy(self.mp_trainer.master_params)     
         
         main_checkpoint = find_resume_checkpoint() or self.resume_checkpoint       
-        ema_checkpoint = find_ema_checkpoint(main_checkpoint, self.resume_epoch, rate)
+        ema_checkpoint = find_ema_checkpoint(main_checkpoint, self.task, self.resume_epoch, rate)
         if ema_checkpoint:
             if dist.get_rank() == 0:
                 logger.info(f"Loading EMA parameters from {ema_checkpoint}")
@@ -180,12 +189,12 @@ class Trainer:
     
     # degradation model
     def _degradation_model(self, batch_y, blur_kernel_op, device, alpha = 0.01):
-        if self.problem_type == "deblur":
+        if self.task == "deblur":
             batch_sol_Tk = deb_batch_data_solution(batch_y, blur_kernel_op, device, alpha = alpha)
             return batch_sol_Tk
-        elif self.problem_type == "inp":
+        elif self.task == "inp":
             raise NotImplementedError 
-        elif self.problem_type == "sr":
+        elif self.task == "sr":
             raise NotImplementedError
            
     # Training loop
@@ -206,13 +215,16 @@ class Trainer:
             )
         for epoch in range(epochs):
             # training mode
+            print(f"Epoch ==== >> {epoch}")
             self.ddp_model.train()
-            self.epoch = epoch
-            if (not self.lr_anneal_epochs or self.epoch + self.resume_epoch < self.lr_anneal_epochs):
+            if (not self.lr_anneal_epochs or epoch + self.resume_epoch < self.lr_anneal_epochs):
                 for ii, (batch_data, batch_y, blur_kernel_op) in enumerate(self.dataloader):
+                    print(f"\nEpoch ==== >> {epoch}\t|\t batch ==== >> {ii}\n") 
+                    # get data and send then to the required device
                     batch_data = batch_data.to(dist_util.dev())
                     batch_y = batch_y.to(dist_util.dev())
-                    # Tikhonov data solution
+                    
+                    # Tikhonov data solution for consistency
                     if self.learn_alpha:
                         lr_alp = self.ddp_model.module.alpha
                         batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op, dist_util.dev(), alpha = lr_alp)
@@ -220,15 +232,17 @@ class Trainer:
                         batch_sol_Tk = self._degradation_model(batch_y, blur_kernel_op, dist_util.dev())
                     
                     # epoch step through the model
-                    self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+                    self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
                     
-                    if self.epoch % self.log_interval == 0:
+                    # gethering information through logger
+                    if epoch % self.log_interval == 0:
                         logger.dumpkvs()
-                        
-                    if self.epoch % self.save_interval == 0:
-                        self.save()
+                    
+                    # save checkpoint    
+                    if epoch % self.save_interval == 0:
+                        self.save(epoch)
                         # Run for a finite amount of time in integration tests.
-                        if os.environ.get("DIFFUSION_TRAINING_TEST", "") and self.epoch > int(epochs*0.2):
+                        if os.environ.get("DIFFUSION_TRAINING_TEST", "") and epoch > int(epochs*0.2):
                             return
                     
                     # epoch evaluation
@@ -239,17 +253,19 @@ class Trainer:
                     wandb.log({"psnr": psnr_val.numpy(), "mse": mse_val.numpy()})
                     
                 # Save the last checkpoint if it wasn't already saved.
-                if (self.epoch - 1) % self.save_interval != 0:
-                    self.save()
-                    
+                if (epoch - 1) % self.save_interval != 0:
+                    self.save(epoch)
+                
+                # reporting some images    
                 if epoch % 20 == 0:
                     est_path = os.path.join(self.resume_results, "est")
                     refs_path = os.path.join(self.resume_results, "refs")
                     os.makedirs(refs_path, exist_ok=True)
                     os.makedirs(est_path, exist_ok=True)
-                    save_image(self.x_pred.detach().cpu().numpy(), os.path.join(est_path, "est_{self.epoch}.png"))
-                    save_image(self.batch_data.detach().cpu().numpy(), os.path.join(est_path, "ref_{self.epoch}.png"))
+                    save_image(self.x_pred.detach().cpu().numpy(), os.path.join(est_path, "est_{epoch}.png"))
+                    save_image(self.batch_data.detach().cpu().numpy(), os.path.join(est_path, "ref_{epoch}.png"))
         
+        # plotting: loss, psnr and mse
         fig1 = plt.figure()
         plt.plot(torch.arange(len(torch.cat(self.psnr_history))), torch.cat(self.psnr_history))
         plt.savefig("history_psnr.png") 
@@ -261,21 +277,25 @@ class Trainer:
         fig1 = plt.figure()
         plt.plot(torch.arange(len(torch.cat(self.loss_history))), torch.cat(self.loss_history))
         plt.savefig("history_loss.png")   
+        
     # epoch through the model       
-    def run_epoch(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):
+    def run_epoch(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch):
+        # pass data through forward and backward steps
         self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+        
+        # optimisation step
         took_epoch = self.mp_trainer.optimize(self.opt)
         
         if took_epoch:
             self._update_ema()
             
-        self._anneal_lr()
-        self.log_epoch()
+        self._anneal_lr(epoch)
+        self.log_epoch(epoch)
     
     # forward and backward function
     def run_forward_backward(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):
         self.mp_trainer.zero_grad() 
-        t,weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
+        t, weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
         
         # - compute the losses
         batch_sol_Tk.requires_grad_(False)
@@ -287,8 +307,11 @@ class Trainer:
                     t
                 ) 
         losses_x_pred = compute_losses()
+        
+        # get the predicted image
         x_pred = losses_x_pred["pred_xstart"]
         
+        # consistency loss
         if self.consistency_loss:   
             batch_y.requires_grad_(False)
             losses_x_cons = self.ddp_model.module.consistency_loss(x_pred, batch_y, blur_kernel_op)
@@ -306,6 +329,8 @@ class Trainer:
         loss_val = losses_x_pred["loss"].detach().cpu()*weights.cpu()
         self.loss_history.append(loss_val)
         wandb.log({"loss": loss_val.numpy()})
+        
+        # back-propagation: here, gradients are computed
         self.mp_trainer.backward(loss)
         self.x_pred = x_pred
     
@@ -315,31 +340,31 @@ class Trainer:
             update_ema(params, self.mp_trainer.master_params, rate = rate)
     
     # - anneal the learning rate   
-    def _anneal_lr(self):
+    def _anneal_lr(self, epoch):
         if not self.lr_anneal_epochs:
             return
         else:
-            frac_done = (self.epoch + self.resume_epoch) / self.lr_anneal_epochs
+            frac_done = (epoch + self.resume_epoch) / self.lr_anneal_epochs
             lr = self.lr * max(1e-20, 1.0 - frac_done)
             
             for param_group in self.opt.param_groups:
                 param_group["lr"] = lr
 
     # - log the epoch
-    def log_epoch(self):
-        logger.logkv("epoch", self.epoch + self.resume_epoch)
-        logger.logkv("samples", (self.epoch + self.resume_epoch + 1) * self.global_batch)
+    def log_epoch(self, epoch):
+        logger.logkv("epoch", epoch + self.resume_epoch)
+        logger.logkv("samples", (epoch + self.resume_epoch + 1) * self.global_batch)
     
     # - save the checkpoint model   
-    def save(self):
+    def save(self, epoch):
         def save_checkpoint(rate, params):
             state_dict = self.mp_trainer.master_params_to_state_dict(params)
             if dist.get_rank() == 0:
                 logger.log(f"Saving EMA checkpoint for rate {rate}...")
                 if not rate:
-                    filename = f"model_{(self.epoch+self.resume_epoch):06d}.pt"
+                    filename = f"{self.task}_model_{(epoch+self.resume_epoch):06d}.pt"
                 else:
-                    filename = f"ema_{rate}_{(self.epoch+self.resume_epoch):06d}.pt"
+                    filename = f"{self.task}_ema_{rate}_{(epoch+self.resume_epoch):06d}.pt"
                 with bf.BlobFile(bf.join(self.save_checkpoint_dir, filename), "wb") as f:
                     torch.save(state_dict, f)
                     
@@ -350,7 +375,7 @@ class Trainer:
             
         if dist.get_rank() ==0:
             with bf.BlobFile(
-                bf.join(get_blob_logdir(), f"opt{(self.epoch+self.resume_epoch):06d}.pt"), "wb",
+                bf.join(get_blob_logdir(), f"{self.task}__opt{(epoch+self.resume_epoch):06d}.pt"), "wb",
                 ) as f:
                     torch.save(self.opt.state_dict(), f)
                     
@@ -398,10 +423,10 @@ def parse_resume_epoch_from_filename(filename):
         return 0
     
 # - find the ema checkpoint
-def find_ema_checkpoint(main_checkpoint, epoch, rate):
+def find_ema_checkpoint(main_checkpoint, task, epoch, rate):
     if main_checkpoint is None:
         return None
-    filename = f"ema_{rate}_{(epoch):06d}.pt"
+    filename = f"{task}_ema_{rate}_{(epoch):06d}.pt"
     path = bf.join(bf.dirname(main_checkpoint), filename)
     if bf.exists(path):
         return path

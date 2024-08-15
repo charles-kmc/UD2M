@@ -1,0 +1,30 @@
+Epoch ==== >> 0
+Started ...
+Logging to /tmp/openai-2024-08-14-21-51-07-473009
+-------------------------
+| epoch      | 0        |
+| grad_norm  | 0.0765   |
+| loss       | 0.103    |
+| loss_q0    | 0.179    |
+| loss_q1    | 0.0682   |
+| loss_q2    | 0.0691   |
+| loss_q3    | 0.0701   |
+| param_norm | 367      |
+| samples    | 16       |
+-------------------------
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 85, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 82, in main
+    trainer.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 237, in run_training_loop
+    self.save()
+TypeError: Trainer.save() missing 1 required positional argument: 'epoch'
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 85, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 82, in main
+[rank0]:     trainer.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 237, in run_training_loop
+[rank0]:     self.save()
+[rank0]: TypeError: Trainer.save() missing 1 required positional argument: 'epoch'

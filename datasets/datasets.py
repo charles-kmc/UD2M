@@ -1,7 +1,7 @@
 from PIL import Image
 import os 
 import glob
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 import torchvision.transforms as transforms #type: ignore
 import torch
 from degradation_model.utils_deblurs import DeblurringModel
@@ -68,12 +68,23 @@ def get_data_loader(
                     dataset_path, 
                     im_size, 
                     batch_size, 
+                    rate,
                     num_workers = 0, 
                     shuffle = True
                 ):
+    assert rate <= 1, "rate should between 0 and 1!!"
+    
     dataset = DatasetsImageNet(dataset_path, im_size)
+    
+    # Define the split sizes
+    train_size = int(rate * len(dataset))
+    test_size = len(dataset) - train_size
+
+    # Split the dataset
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+   
     data_loader = DataLoader(
-                            dataset, 
+                            train_dataset, 
                             batch_size=batch_size, 
                             shuffle=shuffle, 
                             num_workers=num_workers,

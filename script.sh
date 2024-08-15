@@ -12,7 +12,7 @@
 ## Job name
 #SBATCH -J conditional_diffusion
 ## Run time: "hours:minutes:seconds", "days-hours"
-#SBATCH --time=72:00:00
+#SBATCH --time=150:00:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
 #SBATCH --mem-per-cpu=370079
 ## GPU requirements
