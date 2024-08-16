@@ -246,9 +246,6 @@ class Trainer_accelerate:
             # Save the last checkpoint if it wasn't already saved.
             if epoch % self.save_interval != 0:
                 self.save(epoch)
-            
-            # free cache     
-            #torch.cuda.empty_cache()
         
         # plotting: loss, psnr and mse
         plot_metric(self.psnr_history, "history_psnr")
