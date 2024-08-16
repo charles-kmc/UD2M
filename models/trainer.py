@@ -241,9 +241,6 @@ class Trainer:
                     # save checkpoint    
                     if epoch % self.save_interval == 0:
                         self.save(epoch)
-                        # Run for a finite amount of time in integration tests.
-                        if os.environ.get("DIFFUSION_TRAINING_TEST", "") and epoch > int(epochs*0.2):
-                            return
                     
                     # epoch evaluation
                     mse_val = self.metrics.mse_function(batch_data.detach().cpu(), self.x_pred.detach().cpu())
@@ -327,8 +324,9 @@ class Trainer:
             self.diffusion, t, {"loss": losses_x_pred["loss"]*weights}
         )
         loss_val = losses_x_pred["loss"].detach().cpu()*weights.cpu()
-        self.loss_history.append(loss_val)
-        wandb.log({"loss": loss_val.numpy()})
+        self.loss_history.append(loss_val.mean())
+       
+        wandb.log({"loss": loss_val.mean().numpy()})
         
         # back-propagation: here, gradients are computed
         self.mp_trainer.backward(loss)

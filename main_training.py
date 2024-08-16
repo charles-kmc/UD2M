@@ -49,8 +49,8 @@ def main():
     # --- detaset 
     dataset_dir = "/users/cmk2000/sharedscratch/Datasets/ImageNet/train"
     batch_size = 8
-    rate = 0.3
-    train_dataloader = get_data_loader(dataset_dir, image_size, batch_size, rate)
+    prop = 0.3
+    train_dataloader = get_data_loader(dataset_dir, image_size, batch_size, prop)
     # data_iter = iter(train_dataloader)
     # ref, deg, op = next(data_iter)
     

@@ -68,16 +68,16 @@ def get_data_loader(
                     dataset_path, 
                     im_size, 
                     batch_size, 
-                    rate,
+                    prop,
                     num_workers = 0, 
                     shuffle = True
                 ):
-    assert rate <= 1, "rate should between 0 and 1!!"
+    assert prop <= 1, f"proportion {prop} should between 0 and 1!!"
     
     dataset = DatasetsImageNet(dataset_path, im_size)
     
     # Define the split sizes
-    train_size = int(rate * len(dataset))
+    train_size = int(prop * len(dataset))
     test_size = len(dataset) - train_size
 
     # Split the dataset

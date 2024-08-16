@@ -1,0 +1,29 @@
+Epoch ==== >> 0
+Epoch ==== >> 0	|	 batch ==== >> 0
+Started ...
+Logging to /tmp/openai-2024-08-16-00-41-25-197738
+tensor(0.0815)
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 87, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 84, in main
+    trainer.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 235, in run_training_loop
+    self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 281, in run_epoch
+    self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 331, in run_forward_backward
+    fdgzgetadgef
+NameError: name 'fdgzgetadgef' is not defined
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 87, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training.py", line 84, in main
+[rank0]:     trainer.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 235, in run_training_loop
+[rank0]:     self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 281, in run_epoch
+[rank0]:     self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer.py", line 331, in run_forward_backward
+[rank0]:     fdgzgetadgef
+[rank0]: NameError: name 'fdgzgetadgef' is not defined
