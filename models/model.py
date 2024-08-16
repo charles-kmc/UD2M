@@ -17,6 +17,7 @@ from guided_diffusion.unet import UNetModel, AttentionBlock
 from degradation_model.utils_deblurs import blur2operator
 from utils.utils import image_transform, inverse_image_transform
 
+import copy
 class SequentialBloack_con(nn.Sequential):
     """
     A sequential module that passes timestep embeddings to the children that
@@ -313,56 +314,11 @@ class FineTuningDiffusionModel(nn.Module):
                                 ),
                             )   
         self._feature_size += ch
-
-        self.output_blocks = nn.ModuleList([])
-        count = 0
-        for level, mult in list(enumerate(channel_mult))[::-1]:
-            if count <3:
-                # if level > 10*out_blocks_posi[-1]:
-                #     continue
-                # else:
-                for i in range(num_res_blocks + 1):
-                    ich = input_block_chans.pop()
-                    layers = [
-                        ResBlock_new(
-                            ch + ich,
-                            dropout,
-                            norm_grp = self.norm_grp,
-                            out_channels=int(model_channels * mult),
-                            dims=dims,
-                            use_scale_shift_norm=use_scale_shift_norm,
-                        )
-                    ]
-                    
-                    ch = int(model_channels * mult)
-                    if level and i == num_res_blocks:
-                        out_ch = ch
-                        layers.append(
-                            ResBlock_new(
-                                ch,
-                                dropout,
-                                norm_grp = norm_grp,
-                                out_channels=out_ch,
-                                dims=dims,
-                                use_scale_shift_norm=use_scale_shift_norm,
-                                up=True,
-                            )
-                            if resblock_updown
-                            else Upsample(ch, conv_resample, dims=dims, out_channels=out_ch)
-                        )
-                        ds //= 2
-                    self.output_blocks.append(SequentialBloack_con(*layers))
-                    self._feature_size += ch
-
-                    count += 1
-                                
-        # self.out = nn.Sequential(
-        #     normalization_group(norm_grp, ch),
-        #     nn.SiLU(),
-        #     conv_nd(dims, input_ch, out_channels, 3, padding=1),
-        #     zero_module(conv_nd(dims, input_ch, out_channels, 3, padding=1)),
-        # )
         
+        # zero convolution
+        self.zero_blocks = nn.Conv2d(512, 1024, kernel_size=1, padding = 0, stride=1, bias=False)
+        nn.init.zeros_(self.zero_blocks.weight)                     
+            
         # Learnable parameter for the consistency loss
         self.loss_weight = nn.Parameter(torch.tensor(1.0, dtype = self.dtype)).to(self.device)
         self.alpha = nn.Parameter(torch.tensor(1.0, dtype = self.dtype)).to(self.device)
@@ -378,7 +334,7 @@ class FineTuningDiffusionModel(nn.Module):
         """
         self.input_blocks.apply(convert_module_to_f16)
         self.middle_block.apply(convert_module_to_f16)
-        self.output_blocks.apply(convert_module_to_f16)
+        self.zero_blocks.apply(convert_module_to_f16)
 
     def convert_to_fp32(self):
         """
@@ -386,7 +342,7 @@ class FineTuningDiffusionModel(nn.Module):
         """
         self.input_blocks.apply(convert_module_to_f32)
         self.middle_block.apply(convert_module_to_f32)
-        self.output_blocks.apply(convert_module_to_f32)
+        self.zero_blocks.apply(convert_module_to_f32)
 
     def forward(self, x, timesteps = torch.tensor([3]), y = None):
         
@@ -405,39 +361,33 @@ class FineTuningDiffusionModel(nn.Module):
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
         hs = []
         con_in = []
+        test_v = []
         xs = []
         
         for ii, module in enumerate(self.input_blocks):
             h = module(h)
             if ii in self.input_blocks_posi:
                 con_in.append(h)
+            test_v.append(h)
             hs.append(h)
-           
+                    
         for ii, module in enumerate(self.model.input_blocks.children()):
             x = module(x, emb)
             if ii in self.input_blocks_posi:
                 x += con_in.pop(0)
             xs.append(x) 
         h = self.middle_block(h)
-        
         x+= h
         x = self.model.middle_block(x, emb)
         
-        con_out = []
-        for jj, module in enumerate(self.output_blocks):
-            h = torch.cat([h, hs.pop()], dim=1)
-            h = module(h)
-            if jj in self.out_blocks_posi:
-                con_out.append(h)
-        
         for ii, module in enumerate(self.model.output_blocks.children()):
+            h_in = test_v.pop()
             x = torch.cat([x, xs.pop()], dim=1)
+            if ii == 1 or ii == 2:
+                h_in = self.zero_blocks(h_in)
+                x += h_in
             x = module(x, emb)
-
-            if ii in self.out_blocks_posi and 1 == 3:
-                h_pop = con_out.pop()
-                x = x + h_pop
-        
+            
         x = x.type(x.dtype)
         x = self.model.out(x)          
         return x

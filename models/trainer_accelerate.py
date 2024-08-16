@@ -18,7 +18,7 @@ from . import dist_util
 from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
 from degradation_model.utils_deblurs import deb_batch_data_solution
-from utils.utils import Metrics
+from utils.utils import Metrics, inverse_image_transform, image_transform
 
 INITIAL_LOG_LOSS_SCALE = 20.0
 
@@ -223,8 +223,10 @@ class Trainer_accelerate:
                         self.save(epoch)
                 
                     # epoch evaluation
-                    mse_val = self.metrics.mse_function(batch_data.detach().cpu(), self.x_pred.detach().cpu())
-                    psnr_val = self.metrics.psnr_function(batch_data.detach().cpu(), self.x_pred.detach().cpu())
+                    xp = inverse_image_transform(self.x_pred.detach().cpu())
+                    xd = inverse_image_transform(batch_data.detach().cpu())
+                    mse_val = self.metrics.mse_function(xd, xp)
+                    psnr_val = self.metrics.psnr_function(xd, xp)
                     self.psnr_history.append(psnr_val)     
                     self.mse_history.append(mse_val)     
                     wandb.log({"psnr": psnr_val.numpy(), "mse": mse_val.numpy()})
@@ -235,13 +237,15 @@ class Trainer_accelerate:
                     refs_path = os.path.join(self.save_results, "refs")
                     os.makedirs(refs_path, exist_ok=True)
                     os.makedirs(est_path, exist_ok=True)
-                    save_image(self.x_pred.detach().cpu(), os.path.join(est_path, f"est_{epoch}.png"))
-                    save_image(batch_data.detach().cpu(), os.path.join(est_path, f"ref_{epoch}.png"))
+                    save_image(xp, os.path.join(est_path, f"est_{epoch}.png"))
+                    save_image(xd, os.path.join(refs_path, f"ref_{epoch}.png"))
+                    
+                del xp
+                del xd
+                
                 end_time = time.time()  
-                ellapsed = end_time - t_start    
-                ellapsed1 = end_time1 - t_start    
-                ellapsed0 = end_time0 - t_start    
-                self.logger.info(f"time: {ellapsed}_ {ellapsed1}_ {ellapsed0}")  
+                ellapsed = end_time - t_start       
+                self.logger.info(f"Elapsed time per epoch: {ellapsed}")  
                 
             # Save the last checkpoint if it wasn't already saved.
             if epoch % self.save_interval != 0:

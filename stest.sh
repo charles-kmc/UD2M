@@ -12,11 +12,11 @@
 ## Job name
 #SBATCH -J cond_diff
 ## Run time: "hours:minutes:seconds", "days-hours"
-#SBATCH --time=120:00:00
+#SBATCH --time=120:10:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
-#SBATCH --mem-per-cpu=370000
+#SBATCH --mem-per-cpu=500000
 ## GPU requirements
-#SBATCH --gres gpu:2
+#SBATCH --gres gpu:1
 ##SBATCH --ntasks=32
 ## Specify partition
 #SBATCH -p gpu
@@ -46,7 +46,7 @@ fi
 #===========================
 #  Create results directory
 #---------------------------
-RESULTS_DIR1="$(pwd)/log_${SLURM_JOB_NAME}"
+RESULTS_DIR1="$(pwd)/Log_${SLURM_JOB_NAME}"
 RESULTS_DIR=$RESULTS_DIR1"/${SLURM_JOB_ID}"
 echo "Your results will be stored in: $RESULTS_DIR"
 mkdir -p "$RESULTS_DIR1"

@@ -30,7 +30,7 @@ def main():
     prop = 0.2
     
     # path for resuming checkpoints during training
-    save_checkpoint_dir = os.path.join("/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp", date, "prop_data_{prop}")
+    save_checkpoint_dir = os.path.join("/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp", date, f"prop_data_{prop}")
     save_results = os.path.join("/users/cmk2000/sharedscratch/Results/conditional-diffusion_model-for_ivp", date, "prop_data_{prop}")
     
     # --- device
@@ -63,12 +63,12 @@ def main():
     loggers.info(f"datast size: {len(train_dataloader)}")
        
     # --- trainer
-    num_epochs = 1000
+    num_epochs = 100
     lr = 1e-3
     lr_anneal_epochs = 1
     ema_rate = 0.99
-    log_interval = 100
-    save_interval = 100
+    log_interval = 20
+    save_interval = 20
     resume_checkpoint = ""
     problem_type = "deblur"
     trainer_accelerate = Trainer_accelerate(
