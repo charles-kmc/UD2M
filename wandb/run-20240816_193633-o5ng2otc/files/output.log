@@ -1,0 +1,28 @@
+2024-08-16 19:36:37,412 - INFO - Epoch ==== >> 0
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/utils/data/dataloader.py:557: UserWarning: This DataLoader will create 2 worker processes in total. Our suggested max number of worker in current system is 1, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(_create_warning_msg(
+2024-08-16 19:36:38,987 - INFO -
+Epoch ==== >> 0	|	 batch ==== >> 0
+2024-08-16 19:36:39,711 - INFO - loss:  0.1583
+2024-08-16 19:36:40,251 - INFO - grad_norm: 0.0891 ----- param_norm: 185.9091
+2024-08-16 19:36:40,276 - INFO - epoch:  0 	 batch: 0	 samples: 8
+Started ...
+time: 1.488434076309204
+time: 1.3057739734649658
+time: 1.2895665168762207
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 97, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 94, in main
+    trainer_accelerate.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 247, in run_training_loop
+    dsffgedgdfgd
+NameError: name 'dsffgedgdfgd' is not defined
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 97, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 94, in main
+[rank0]:     trainer_accelerate.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 247, in run_training_loop
+[rank0]:     dsffgedgdfgd
+[rank0]: NameError: name 'dsffgedgdfgd' is not defined

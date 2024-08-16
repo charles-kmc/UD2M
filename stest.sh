@@ -10,13 +10,13 @@
 #SBATCH -o o_train_dif.output
 #SBATCH -e e_train_dif.error
 ## Job name
-#SBATCH -J conditional_diffusion
+#SBATCH -J cond_diff
 ## Run time: "hours:minutes:seconds", "days-hours"
-#SBATCH --time=00:35:00
+#SBATCH --time=120:00:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
 #SBATCH --mem-per-cpu=370000
 ## GPU requirements
-#SBATCH --gres gpu:1
+#SBATCH --gres gpu:2
 ##SBATCH --ntasks=32
 ## Specify partition
 #SBATCH -p gpu

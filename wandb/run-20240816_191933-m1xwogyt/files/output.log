@@ -1,0 +1,33 @@
+2024-08-16 19:19:37,537 - INFO - Epoch ==== >> 0
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/utils/data/dataloader.py:557: UserWarning: This DataLoader will create 8 worker processes in total. Our suggested max number of worker in current system is 1, which is smaller than what this DataLoader is going to create. Please be aware that excessive worker creation might get DataLoader running slow or even freeze, lower the worker number to avoid potential slowness/freeze if necessary.
+  warnings.warn(_create_warning_msg(
+2024-08-16 19:19:42,627 - INFO -
+Epoch ==== >> 0	|	 batch ==== >> 0
+Started ...
+2024-08-16 19:19:44,573 - INFO - loss:  0.0810
+2024-08-16 19:19:46,840 - INFO - grad_norm: 0.0834 ----- param_norm: 186.1595
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 97, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 94, in main
+    trainer_accelerate.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 219, in run_training_loop
+    self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 274, in run_epoch
+    self._anneal_lr(epoch)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 345, in _anneal_lr
+    sddsfhgghfdsjfdsg
+NameError: name 'sddsfhgghfdsjfdsg' is not defined
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 97, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 94, in main
+[rank0]:     trainer_accelerate.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 219, in run_training_loop
+[rank0]:     self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 274, in run_epoch
+[rank0]:     self._anneal_lr(epoch)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 345, in _anneal_lr
+[rank0]:     sddsfhgghfdsjfdsg
+[rank0]: NameError: name 'sddsfhgghfdsjfdsg' is not defined
+yessssssssssssssssssssssssssssssssssssssssssssssssssssssss

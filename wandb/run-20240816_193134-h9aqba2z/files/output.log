@@ -1,0 +1,26 @@
+2024-08-16 19:31:37,854 - INFO - Epoch ==== >> 0
+2024-08-16 19:31:38,022 - INFO -
+Epoch ==== >> 0	|	 batch ==== >> 0
+2024-08-16 19:31:39,431 - INFO - loss:  0.0906
+Started ...
+2024-08-16 19:31:41,688 - INFO - grad_norm: 0.0972 ----- param_norm: 186.4717
+2024-08-16 19:31:41,724 - INFO - epoch:  0 	 batch: 0	 samples: 8
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 97, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 94, in main
+    trainer_accelerate.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 247, in run_training_loop
+    dsffgedgdfgd
+NameError: name 'dsffgedgdfgd' is not defined
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 97, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 94, in main
+[rank0]:     trainer_accelerate.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 247, in run_training_loop
+[rank0]:     dsffgedgdfgd
+[rank0]: NameError: name 'dsffgedgdfgd' is not defined
+time: 3.912564992904663
+time: 3.7192647457122803
+time: 3.702130079269409

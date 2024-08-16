@@ -1,0 +1,28 @@
+2024-08-16 20:13:08,669 - INFO - Epoch ==== >> 0
+2024-08-16 20:13:08,833 - INFO -
+Epoch ==== >> 0	|	 batch ==== >> 0
+2024-08-16 20:13:09,217 - INFO - loss:  0.0807
+2024-08-16 20:13:09,834 - INFO - grad_norm: 0.0992 ----- param_norm: 185.7555
+2024-08-16 20:13:09,858 - INFO - epoch:  0 	 batch: 0	 samples: 8
+2024-08-16 20:13:09,864 - INFO - Saving EMA checkpoint for rate 0...
+Started ...
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 98, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 95, in main
+    trainer_accelerate.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 223, in run_training_loop
+    self.save(epoch)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 369, in save
+    save_checkpoint(rate, params)
+TypeError: Trainer_accelerate.save.<locals>.save_checkpoint() takes 1 positional argument but 2 were given
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 98, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 95, in main
+[rank0]:     trainer_accelerate.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 223, in run_training_loop
+[rank0]:     self.save(epoch)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 369, in save
+[rank0]:     save_checkpoint(rate, params)
+[rank0]: TypeError: Trainer_accelerate.save.<locals>.save_checkpoint() takes 1 positional argument but 2 were given

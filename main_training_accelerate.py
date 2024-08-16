@@ -18,7 +18,7 @@ from utils.get_logger import get_loggers
 import datetime 
 
 
-torch.backends.cudnn.benchmark = True
+#torch.backends.cudnn.benchmark = True
 
 
 def main():
@@ -27,9 +27,11 @@ def main():
     log_dir = os.path.join(script_dir, "Loggers", date)
     loggers = get_loggers(log_dir, f"training_log.log")
     
+    prop = 0.2
+    
     # path for resuming checkpoints during training
-    save_checkpoint_dir = os.path.join("/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp", date)
-    save_results = os.path.join("/users/cmk2000/sharedscratch/Results/conditional-diffusion_model-for_ivp", date)
+    save_checkpoint_dir = os.path.join("/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp", date, "prop_data_{prop}")
+    save_results = os.path.join("/users/cmk2000/sharedscratch/Results/conditional-diffusion_model-for_ivp", date, "prop_data_{prop}")
     
     # --- device
     dist_util.setup_dist()
@@ -57,17 +59,13 @@ def main():
     # --- detaset 
     dataset_dir = "/users/cmk2000/sharedscratch/Datasets/ImageNet/train"
     batch_size = 8
-    prop = 0.1
     train_dataloader = get_data_loader(dataset_dir, image_size, batch_size, prop)
-    # data_iter = iter(train_dataloader)
-    # ref, deg, op = next(data_iter)
-    
     loggers.info(f"datast size: {len(train_dataloader)}")
        
     # --- trainer
     num_epochs = 1000
     lr = 1e-3
-    microbatch = 0
+    lr_anneal_epochs = 1
     ema_rate = 0.99
     log_interval = 100
     save_interval = 100
@@ -85,8 +83,8 @@ def main():
                 log_interval=log_interval,
                 save_interval=save_interval,
                 ema_rate=ema_rate,
-                microbatch=microbatch,
                 problem_type = problem_type,
+                lr_anneal_epochs = lr_anneal_epochs,
             )
 
     # --- run training loop

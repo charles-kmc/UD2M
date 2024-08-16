@@ -1,8 +1,0 @@
-MPI startup(): PMI server not found. Please set I_MPI_PMI_LIBRARY variable if it is not a singleton case.
-Number of Layers frozen: 362
-Total trainable parameters of the model: 93563910 (non-LoRa) vs 24576 (LoRa) Ratio: 0.03% of the original model
-Total parameters ====> 155963398
-Total frozen parameters ====> 93563910
-Total trainable parameters ====> 62399488
-Started ...
-time: 1.2039241790771484

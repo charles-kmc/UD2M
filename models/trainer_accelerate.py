@@ -83,13 +83,13 @@ class Trainer_accelerate:
         
         # load parameters of the model for training and synchronise
         self._load_and_sync_parameters()
-        
-        
+    
+        # Accelerator: DDP
         self.accelerator = Accelerator()
         self.device =  self.accelerator.device
         
         # parameters
-        model_parameters(self.model)
+        model_parameters(self.model, self.logger)
         
         # learnable parameters
         self.model_params_learnable = list(filter(lambda p: p.requires_grad, self.model.parameters()))
@@ -219,7 +219,7 @@ class Trainer_accelerate:
                     self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
                     end_time0 = time.time()                      
                     # save checkpoint    
-                    if (self.ii+1) % self.save_interval*5 == 0:
+                    if (self.ii+1) % self.save_interval*10 == 0:
                         self.save(epoch)
                 
                     # epoch evaluation
@@ -241,29 +241,19 @@ class Trainer_accelerate:
                 ellapsed = end_time - t_start    
                 ellapsed1 = end_time1 - t_start    
                 ellapsed0 = end_time0 - t_start    
-                print(f"time: {ellapsed}")  
-                print(f"time: {ellapsed1}")  
-                print(f"time: {ellapsed0}")  
-                dsffgedgdfgd
+                self.logger.info(f"time: {ellapsed}_ {ellapsed1}_ {ellapsed0}")  
+                
             # Save the last checkpoint if it wasn't already saved.
             if epoch % self.save_interval != 0:
                 self.save(epoch)
             
             # free cache     
-            torch.cuda.empty_cache()
+            #torch.cuda.empty_cache()
         
         # plotting: loss, psnr and mse
-        fig1 = plt.figure()
-        plt.plot(torch.arange(len(torch.cat(self.psnr_history))), torch.cat(self.psnr_history))
-        plt.savefig("history_psnr.png") 
-        
-        fig1 = plt.figure()
-        plt.plot(torch.arange(len(torch.cat(self.mse_history))), torch.cat(self.mse_history))
-        plt.savefig("history_mse.png")
-        
-        fig1 = plt.figure()
-        plt.plot(torch.arange(len(torch.cat(self.loss_history))), torch.cat(self.loss_history))
-        plt.savefig("history_loss.png")   
+        plot_metric(self.psnr_history, "history_psnr")
+        plot_metric(self.mse_history, "history_mse")
+        plot_metric(self.loss_history, "history_loss")
         
     # epoch through the model       
     def run_epoch(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch):
@@ -271,12 +261,11 @@ class Trainer_accelerate:
         self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
         
         # optimisation step
-        if self.grad_acc:
-            if (self.ii + 1) % self.gradient_accumulation_steps == 0:
-                ema_update = optimizer_step(self.optimizer, self.model_params_learnable, self.logger)
-                if ema_update:
-                    self._update_ema()
-                zero_grad(self.model_params_learnable)
+        # if self.gradient_accumulation:
+        #     if (self.ii + 1) % self.gradient_accumulation_steps == 0:
+        ema_update = optimizer_step(self.optimizer, self.model_params_learnable, self.logger)
+        if ema_update:
+            self._update_ema()
         
         # scheduler    
         self._anneal_lr(epoch)
@@ -284,7 +273,10 @@ class Trainer_accelerate:
     
     # forward and backward function
     def run_forward_backward(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):
-        
+        # if self.gradient_accumulation:
+        #     if (self.ii + 1) % self.gradient_accumulation_steps == 0:
+        zero_grad(self.model_params_learnable)
+                
         t, weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
         
         # - compute the losses
@@ -356,7 +348,6 @@ class Trainer_accelerate:
     def save(self, epoch):
         def save_checkpoint(rate, params):
             unwrap_model = self.accelerator.unwrap_model(self.model)
-            
             state_dict = params_to_state_dict(unwrap_model, params)
             if self.accelerator.is_main_process:
                 self.logger.info(f"Saving EMA checkpoint for rate {rate}...")
@@ -368,11 +359,11 @@ class Trainer_accelerate:
                 filepath = bf.join(self.save_checkpoint_dir, filename)
                 with bf.BlobFile(filepath, "wb") as f:
                     torch.save(state_dict, f)
-                
             del unwrap_model
-            
-        unwrap_model = self.accelerator.unwrap_model(self.model)            
-        save_checkpoint(0, list(unwrap_model.parameters()))
+        
+        unwrap_model = self.accelerator.unwrap_model(self.model)
+        params = list(unwrap_model.parameters())   
+        save_checkpoint(0, params)
         del unwrap_model
         
         for rate, params in zip(self.ema_rate, self.ema_params):
@@ -426,7 +417,7 @@ def find_ema_checkpoint(main_checkpoint, task, epoch, rate):
         return path
     return None
 
-def model_parameters(model):
+def model_parameters(model, logger):
     trained_params = 0
     Total_params = 0
     frozon_params = 0
@@ -437,9 +428,9 @@ def model_parameters(model):
         else:
             frozon_params += p.numel()
             
-    print(f"Total parameters ====> {Total_params}")
-    print(f"Total frozen parameters ====> {frozon_params}")
-    print(f"Total trainable parameters ====> {trained_params}")
+    logger.info(f"Total parameters ====> {Total_params}")
+    logger.info(f"Total frozen parameters ====> {frozon_params}")
+    logger.info(f"Total trainable parameters ====> {trained_params}")
     
 # reset to zero
 def zero_grad(model_params):
@@ -475,3 +466,11 @@ def compute_norms(params, grad_scale=1.0):
             if p.grad is not None:
                 grad_norm += torch.norm(p.grad, p=2, dtype=torch.float32).item() ** 2
     return np.sqrt(grad_norm) / grad_scale, np.sqrt(param_norm)
+
+
+def plot_metric(value, name):
+    fig1 = plt.figure()
+    plt.plot(torch.arange(len(torch.cat(value))), torch.cat(value))
+    plt.savefig("{name}.png") 
+        
+        

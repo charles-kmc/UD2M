@@ -87,8 +87,7 @@ def get_data_loader(
                             train_dataset, 
                             batch_size=batch_size, 
                             shuffle=shuffle, 
-                            num_workers=num_workers,
-                            pin_memory=False
-                        )
+                            num_workers=num_workers
+                            )
     return data_loader
             
