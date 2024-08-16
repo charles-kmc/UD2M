@@ -1,0 +1,38 @@
+/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/guided_diffusion/dist_util.py:74: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  return th.load(io.BytesIO(data), **kwargs)
+2024-08-16 17:54:00,981 - INFO - device model: {aug_LoRa_model.device} : {device}
+2024-08-16 17:54:02,421 - INFO - datast size: 15768
+2024-08-16 17:54:02,948 - INFO - Start training ...
+wandb: Currently logged in as: charlesquin. Use `wandb login --relogin` to force relogin
+wandb: wandb version 0.17.7 is available!  To upgrade, please run:
+wandb:  $ pip install wandb --upgrade
+wandb: Tracking run with wandb version 0.17.6
+wandb: Run data is saved locally in /users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/wandb/run-20240816_175403-i5e9jv8r
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run atomic-wind-25
+wandb: ⭐️ View project at https://wandb.ai/charlesquin/Training%20conditinal%20diffusion%20models
+wandb: 🚀 View run at https://wandb.ai/charlesquin/Training%20conditinal%20diffusion%20models/runs/i5e9jv8r
+2024-08-16 17:54:07,666 - INFO - Epoch ==== >> 0
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 93, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 90, in main
+    trainer_accelerate.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 203, in run_training_loop
+    t_start = time.time()
+              ^^^^
+NameError: name 'time' is not defined. Did you forget to import 'time'
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 93, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 90, in main
+[rank0]:     trainer_accelerate.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 203, in run_training_loop
+[rank0]:     t_start = time.time()
+[rank0]:               ^^^^
+[rank0]: NameError: name 'time' is not defined. Did you forget to import 'time'?
+wandb: - 0.008 MB of 0.008 MB uploadedwandb: \ 0.008 MB of 0.008 MB uploadedwandb: | 0.011 MB of 0.019 MB uploaded (0.002 MB deduped)wandb: / 0.019 MB of 0.019 MB uploaded (0.002 MB deduped)wandb: 🚀 View run atomic-wind-25 at: https://wandb.ai/charlesquin/Training%20conditinal%20diffusion%20models/runs/i5e9jv8r
+wandb: ⭐️ View project at: https://wandb.ai/charlesquin/Training%20conditinal%20diffusion%20models
+wandb: Synced 6 W&B file(s), 0 media file(s), 2 artifact file(s) and 0 other file(s)
+wandb: Find logs at: ./wandb/run-20240816_175403-i5e9jv8r/logs
+wandb: WARNING The new W&B backend becomes opt-out in version 0.18.0; try it out with `wandb.require("core")`! See https://wandb.me/wandb-core for more information.
