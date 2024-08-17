@@ -16,7 +16,7 @@
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
 #SBATCH --mem-per-cpu=50000
 ## GPU requirements
-#SBATCH --gres gpu:1
+#SBATCH --gres gpu:2
 ##SBATCH --ntasks=32
 ## Specify partition
 #SBATCH -p gpu
