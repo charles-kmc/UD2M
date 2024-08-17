@@ -27,7 +27,7 @@ def main():
     log_dir = os.path.join(script_dir, "Loggers", date)
     loggers = get_loggers(log_dir, f"training_log.log")
     
-    prop = 0.2
+    prop = 0.1
     
     # path for resuming checkpoints during training
     save_checkpoint_dir = os.path.join("/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp", date, f"prop_data_{prop}")

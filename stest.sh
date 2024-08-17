@@ -14,7 +14,7 @@
 ## Run time: "hours:minutes:seconds", "days-hours"
 #SBATCH --time=120:10:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
-#SBATCH --mem-per-cpu=500000
+#SBATCH --mem-per-cpu=50000
 ## GPU requirements
 #SBATCH --gres gpu:1
 ##SBATCH --ntasks=32

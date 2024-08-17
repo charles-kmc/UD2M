@@ -1,0 +1,44 @@
+2024-08-17 02:25:45,981 - INFO - Epoch ==== >> 0
+2024-08-17 02:25:46,246 - INFO - Epoch ==== >> 0	|	 batch ==== >> 0
+2024-08-17 02:25:46,896 - INFO - loss:  0.0988
+2024-08-17 02:25:47,613 - INFO - grad_norm: 0.0951 ----- param_norm: 158.3165
+2024-08-17 02:25:47,638 - INFO - epoch:  0 	 batch: 0	 samples: 8
+Started ...
+2024-08-17 02:25:47,912 - INFO - Elapsed time per epoch: 1.665236473083496
+2024-08-17 02:25:47,996 - INFO - Epoch ==== >> 0	|	 batch ==== >> 1
+2024-08-17 02:25:48,221 - INFO - loss:  0.0614
+2024-08-17 02:25:48,503 - INFO - grad_norm: 0.0469 ----- param_norm: 158.3540
+2024-08-17 02:25:48,514 - INFO - epoch:  0 	 batch: 1	 samples: 8
+2024-08-17 02:25:48,529 - INFO - Elapsed time per epoch: 0.5328266620635986
+2024-08-17 02:25:48,608 - INFO - Epoch ==== >> 0	|	 batch ==== >> 2
+2024-08-17 02:25:48,832 - INFO - loss:  0.0772
+2024-08-17 02:25:49,116 - INFO - grad_norm: 0.0391 ----- param_norm: 158.4274
+2024-08-17 02:25:49,127 - INFO - epoch:  0 	 batch: 2	 samples: 8
+2024-08-17 02:25:49,136 - INFO - Elapsed time per epoch: 0.5280327796936035
+2024-08-17 02:25:49,229 - INFO - Epoch ==== >> 0	|	 batch ==== >> 3
+2024-08-17 02:25:49,454 - INFO - loss:  0.0501
+Started ...
+Started ...
+Started ...
+Started ...
+2024-08-17 02:25:49,738 - INFO - grad_norm: 0.0369 ----- param_norm: 158.5293
+2024-08-17 02:25:49,749 - INFO - epoch:  0 	 batch: 3	 samples: 8
+2024-08-17 02:25:49,763 - INFO - Elapsed time per epoch: 0.5338146686553955
+2024-08-17 02:25:49,836 - INFO - Epoch ==== >> 0	|	 batch ==== >> 4
+2024-08-17 02:25:50,059 - INFO - loss:  0.0979
+2024-08-17 02:25:50,342 - INFO - grad_norm: 0.0445 ----- param_norm: 158.6468
+2024-08-17 02:25:50,353 - INFO - epoch:  0 	 batch: 4	 samples: 8
+2024-08-17 02:25:50,363 - INFO - Elapsed time per epoch: 0.5276591777801514
+2024-08-17 02:25:50,436 - INFO - Epoch ==== >> 0	|	 batch ==== >> 5
+2024-08-17 02:25:50,659 - INFO - loss:  0.0764
+2024-08-17 02:25:50,943 - INFO - grad_norm: 0.0376 ----- param_norm: 158.7672
+2024-08-17 02:25:50,954 - INFO - epoch:  0 	 batch: 5	 samples: 8
+2024-08-17 02:25:50,965 - INFO - Elapsed time per epoch: 0.5289707183837891
+2024-08-17 02:25:51,045 - INFO - Epoch ==== >> 0	|	 batch ==== >> 6
+2024-08-17 02:25:51,269 - INFO - loss:  0.0352
+2024-08-17 02:25:51,552 - INFO - grad_norm: 0.0398 ----- param_norm: 158.8636
+2024-08-17 02:25:51,563 - INFO - epoch:  0 	 batch: 6	 samples: 8
+2024-08-17 02:25:51,576 - INFO - Elapsed time per epoch: 0.5303075313568115
+2024-08-17 02:25:51,653 - INFO - Epoch ==== >> 0	|	 batch ==== >> 7
+Started ...
+Started ...

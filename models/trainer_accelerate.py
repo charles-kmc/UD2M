@@ -19,6 +19,7 @@ from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
 from degradation_model.utils_deblurs import deb_batch_data_solution
 from utils.utils import Metrics, inverse_image_transform, image_transform
+from models.ema import EMA
 
 INITIAL_LOG_LOSS_SCALE = 20.0
 
@@ -97,25 +98,19 @@ class Trainer_accelerate:
         # optimizer
         self.optimizer = AdamW(self.model_params_learnable, lr=self.lr, weight_decay=self.weight_decay)
         
-        # pass training object into accelerator
-        self.model, self.optimizer, self.dataloader, self.anneal_lr = self.accelerator.prepare(model, self.optimizer, dataloader, self._anneal_lr)
+        # ema_model
+        self.ema = EMA(self.model)
         
         # ema model 
         if self.resume_epoch:
-            # Model was resumed, either due to a restart or a checkpoint being specified at the command line.
-            self._load_optimizer_state()
-            self.ema_params = [
-                self._load_ema_parameters(rate) for rate in self.ema_rate
-            ]
-        else:
-            unwrap_model = self.accelerator.unwrap_model(self.model)
-            self.ema_params = [
-                copy.deepcopy(list(unwrap_model.parameters())) for _ in range(len(self.ema_rate))
-                ]
-            del unwrap_model
-            
-        self.global_batch = self.batch_size * dist.get_world_size()
-                
+            self._load_ema_parameters()
+            self._load_optimizer()
+        
+        # pass training object into accelerator
+        self.model, self.optimizer, self.dataloader, self.anneal_lr = self.accelerator.prepare(model, self.optimizer, dataloader, self._anneal_lr)
+        
+        # 
+        self.global_batch = self.batch_size * dist.get_world_size()  
         self.psnr_history = []
         self.mse_history = []
         self.loss_history = []
@@ -130,48 +125,45 @@ class Trainer_accelerate:
             if self.accelerator.is_main_process:
                 self.logger.info(f"Resuming from checkpoint {resume_checkpoint}")
                 
+                # loading checkpoints
+                checkpoint = dist_util.load_state_dict(resume_checkpoint)
+                
                 # Loading weights
-                self.model.load_state_dict(
-                    dist_util.load_state_dict(
-                        resume_checkpoint, map_location=dist_util.dev()
-                    )
-                )
+                self.model.load_state_dict(checkpoint["model_state_dict"], map_location=dist_util.dev())
+                self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"], map_location=dist_util.dev())
+                
         # sychronise parameters of the model
         dist_util.sync_params(self.model.parameters())
         
     # load ema checkpoints
-    def _load_ema_parameters(self, rate):
-        unwrap_model = self.accelerator.unwrap_model(self.model)
-        ema_params = copy.deepcopy(list(unwrap_model.parameters()))   
-        
+    def _load_ema_parameters(self):
         main_checkpoint = find_resume_checkpoint() or self.resume_checkpoint       
-        ema_checkpoint = find_ema_checkpoint(main_checkpoint, self.task, self.resume_epoch, rate)
+        ema_checkpoint = find_ema_checkpoint(main_checkpoint, self.task, self.resume_epoch, self.ema_rate)
         if ema_checkpoint:
             if self.accelerator.is_main_process:
                 self.logger.info(f"Loading EMA parameters from {ema_checkpoint}")
-                state_dict = dist_util.load_state_dict(
-                                ema_checkpoint, map_location=dist_util.dev()
-                            )
-                ema_params = self.model.state_dict_to_master_params(state_dict) 
-        dist_util.sync_params(ema_params)
+                
+                # loading checkpoints
+                checkpoint = dist_util.load_state_dict(ema_checkpoint)
+                
+                # Loading weights
+                self.ema.ema_model.load_state_dict(checkpoint["ema_model_state_dict"], map_location=dist_util.dev())
         
-        del unwrap_model
-        return ema_params
+        # sychronise parameters of the model
+        dist_util.sync_params(self.ema.ema_model.parameters())
     
-    # load optimizer state
-    def _load_optimizer_state(self):
-        main_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
-        opt_checkpoint = bf.json(
-            bf.dirname(main_checkpoint), f"optimizer_{self.resume_epoch:06}.pt"
-        )
+    def _load_optimizer(self):
+        resume_checkpoint = find_resume_checkpoint() or self.resume_checkpoint
         
-        if bf.exists(opt_checkpoint):
-            self.logger.info(f"Loading optimizer state from checkpoint: {opt_checkpoint}")
-            state_dict = dist_util.load_state_dict(
-                opt_checkpoint, map_location=dist_util.dev()
-            )
-            self.optimizer.load_state_dict(state_dict)
-    
+        if resume_checkpoint:
+            self.resume_epoch = parse_resume_epoch_from_filename(resume_checkpoint)
+            if self.accelerator.is_main_process:
+                self.logger.info(f"Resuming from checkpoint {resume_checkpoint}")
+                
+                # loading checkpoints
+                checkpoint = dist_util.load_state_dict(resume_checkpoint)
+                self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"], map_location=dist_util.dev())
+        
     # degradation model
     def _degradation_model(self, batch_y, blur_kernel_op, device, alpha = 0.01):
         if self.task == "deblur":
@@ -204,7 +196,7 @@ class Trainer_accelerate:
             self.model.train()
             for ii, (batch_data, batch_y, blur_kernel_op) in enumerate(self.dataloader):
                 t_start = time.time()
-                self.logger.info(f"\nEpoch ==== >> {epoch}\t|\t batch ==== >> {ii}\n") 
+                self.logger.info(f"Epoch ==== >> {epoch}\t|\t batch ==== >> {ii}\n") 
                 self.ii = ii
                 with self.accelerator.accumulate(self.model):       
                     
@@ -217,10 +209,10 @@ class Trainer_accelerate:
                     
                     # epoch step through the model
                     self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
-                    end_time0 = time.time()                      
-                    # save checkpoint    
-                    if (self.ii+1) % self.save_interval*10 == 0:
-                        self.save(epoch)
+                    
+                    # # save checkpoint    
+                    # if (self.ii+1) % self.save_interval*500 == 0:
+                    #     self.save(epoch)
                 
                     # epoch evaluation
                     xp = inverse_image_transform(self.x_pred.detach().cpu())
@@ -230,7 +222,6 @@ class Trainer_accelerate:
                     self.psnr_history.append(psnr_val)     
                     self.mse_history.append(mse_val)     
                     wandb.log({"psnr": psnr_val.numpy(), "mse": mse_val.numpy()})
-                    end_time1 = time.time() 
                 # reporting some images    
                 if ii % 200 == 0:
                     est_path = os.path.join(self.save_results, "est")
@@ -266,7 +257,10 @@ class Trainer_accelerate:
         #     if (self.ii + 1) % self.gradient_accumulation_steps == 0:
         ema_update = optimizer_step(self.optimizer, self.model_params_learnable, self.logger)
         if ema_update:
-            self._update_ema()
+            self.ema.update(
+                        self.accelarator.unwrap_model(self.model), 
+                        self.ema_rate
+                        )
         
         # scheduler    
         self._anneal_lr(epoch)
@@ -274,10 +268,10 @@ class Trainer_accelerate:
     
     # forward and backward function
     def run_forward_backward(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):
-        # if self.gradient_accumulation:
-        #     if (self.ii + 1) % self.gradient_accumulation_steps == 0:
+        # if self.gradient_accumulation and (self.ii + 1) % self.gradient_accumulation_steps == 0:
         zero_grad(self.model_params_learnable)
-                
+        
+        # weight from diffusion sampler    
         t, weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
         
         # - compute the losses
@@ -289,6 +283,8 @@ class Trainer_accelerate:
                     batch_data,
                     t
                 ) 
+        
+        # computing losses
         losses_x_pred = compute_losses()
         
         # get the predicted image
@@ -310,8 +306,9 @@ class Trainer_accelerate:
             self.diffusion, t, {"loss": losses_x_pred["loss"]*weights}, self.logger
         )
         loss_val = losses_x_pred["loss"].detach().cpu()*weights.cpu()
-        
         self.loss_history.append(loss_val.mean())
+        
+        # monitor loss with wandb
         wandb.log({"loss": loss_val.mean().numpy()})
         
         # back-propagation: here, gradients are computed
@@ -321,14 +318,6 @@ class Trainer_accelerate:
             self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
         
         self.x_pred = x_pred
-    
-    # - update the ema model
-    def _update_ema(self):
-        for rate, params in zip(self.ema_rate, self.ema_params):
-            unwrap_model = self.accelerator.unwrap_model(self.model)
-            update_ema(params, unwrap_model.parameters(), rate = rate)
-            
-            del unwrap_model
     
     # - anneal the learning rate   
     def _anneal_lr(self, epoch):
@@ -347,34 +336,33 @@ class Trainer_accelerate:
     
     # - save the checkpoint model   
     def save(self, epoch):
-        def save_checkpoint(rate, params):
-            unwrap_model = self.accelerator.unwrap_model(self.model)
-            state_dict = params_to_state_dict(unwrap_model, params)
+        def save_checkpoint(rate, model):
+            try:
+                unwrap_model = self.accelerator.unwrap_model(model)
+            except:
+                unwrap_model = model
+                
             if self.accelerator.is_main_process:
                 self.logger.info(f"Saving EMA checkpoint for rate {rate}...")
                 if not rate:
-                    filename = f"{self.task}_model_{(epoch+self.resume_epoch):06d}.pt"
+                    filename = f"{self.task}_model_{(epoch+self.resume_epoch):03d}.pt"
                 else:
-                    filename = f"{self.task}_ema_{rate}_{(epoch+self.resume_epoch):06d}.pt"
+                    filename = f"{self.task}_ema_model_rate_{rate}_{(epoch+self.resume_epoch):03d}.pt"
                     
                 filepath = bf.join(self.save_checkpoint_dir, filename)
                 with bf.BlobFile(filepath, "wb") as f:
-                    torch.save(state_dict, f)
+                    torch.save({
+                            'model_state_dict': unwrap_model.state_dict(),
+                            'optimizer_state_dict': self.optimizer.state_dict(),
+                            'epoch': epoch,
+                        }, f)
+
             del unwrap_model
-        
-        unwrap_model = self.accelerator.unwrap_model(self.model)
-        params = list(unwrap_model.parameters())   
-        save_checkpoint(0, params)
-        del unwrap_model
-        
-        for rate, params in zip(self.ema_rate, self.ema_params):
-            save_checkpoint(rate, params)
+            del filename
+            del model
             
-        if self.accelerator.is_main_process:
-            with bf.BlobFile(
-                bf.join(self.save_checkpoint_dir, f"{self.task}__opt__{(epoch+self.resume_epoch):06d}.pt"), "wb",
-                ) as f:
-                    torch.save(self.optimizer.state_dict(), f)   
+        save_checkpoint(0, self.model)
+        save_checkpoint(self.ema_rate, self.ema.ema_model)
         
         dist.barrier()
             
@@ -443,7 +431,7 @@ def zero_grad(model_params):
 
 def params_to_state_dict(model, params):
     state_dict = model.state_dict()
-    for i, (name, _value) in enumerate(model.named_parameters()):
+    for i, (name, _) in enumerate(model.named_parameters()):
         assert name in state_dict
         state_dict[name] = params[i]
     return state_dict

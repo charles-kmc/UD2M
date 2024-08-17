@@ -61,7 +61,7 @@ class DatasetsImageNet(object):
         image_scale = torch.clamp(image_scale, self.clip_min, self.clip_max)
         noisy_image = torch.clamp(noisy_image, 0, 1)
         
-        return (image_scale, noisy_image, op_image)
+        return image_scale, noisy_image
 
 # get data loader   
 def get_data_loader(
@@ -70,7 +70,7 @@ def get_data_loader(
                     batch_size, 
                     prop,
                     num_workers = 0, 
-                    shuffle = True
+                    shuffle = False
                 ):
     assert prop <= 1, f"proportion {prop} should between 0 and 1!!"
     
@@ -89,5 +89,7 @@ def get_data_loader(
                             shuffle=shuffle, 
                             num_workers=num_workers
                             )
+    print(len(dataset), len(data_loader), len(train_dataset))
+    sfgdssghb
     return data_loader
             
