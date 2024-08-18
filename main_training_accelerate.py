@@ -17,6 +17,8 @@ from models.trainer_accelerate import Trainer_accelerate
 from utils.get_logger import get_loggers
 import datetime 
 
+from memory_profiler import profile#type:ignore
+
 
 #torch.backends.cudnn.benchmark = True
 
@@ -61,7 +63,7 @@ def main():
     dataset_dir = "/users/cmk2000/sharedscratch/Datasets/ImageNet/train"
     batch_size = 8
     train_dataloader = get_data_loader(dataset_dir, image_size, batch_size, prop)
-    loggers.info(f"datast size: {len(train_dataloader)}")
+    loggers.info(f"number of batch in dataset: {len(train_dataloader)}")
        
     # --- trainer
     num_epochs = 100
@@ -69,9 +71,10 @@ def main():
     lr_anneal_epochs = 1
     ema_rate = 0.99
     log_interval = 20
-    save_interval = 20
+    save_interval = 5
     resume_checkpoint = ""
     problem_type = "deblur"
+    
     trainer_accelerate = Trainer_accelerate(
                 aug_LoRa_model, 
                 ema_LoRa_model,
@@ -94,4 +97,8 @@ def main():
     trainer_accelerate.run_training_loop(num_epochs)
     loggers.info("Training finish !!")
 if __name__ == "__main__":
-    main()
+    # Specify the output file for memory profiler
+    profiler_output_file = 'memory_profiler_output.log'
+    with open(profiler_output_file, 'w+') as prof_out:
+        profile(stream=prof_out)
+        main()

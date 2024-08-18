@@ -21,6 +21,10 @@ from degradation_model.utils_deblurs import deb_batch_data_solution
 from utils.utils import Metrics, inverse_image_transform, image_transform
 from models.ema import EMA
 
+from memory_profiler import profile #type:ignore
+import psutil
+
+
 INITIAL_LOG_LOSS_SCALE = 20.0
 
 class Trainer_accelerate:
@@ -110,9 +114,6 @@ class Trainer_accelerate:
         
         # 
         self.global_batch = self.batch_size * dist.get_world_size()  
-        self.psnr_history = []
-        self.mse_history = []
-        self.loss_history = []
         self.metrics = Metrics(dist_util.dev())
         
         
@@ -174,6 +175,7 @@ class Trainer_accelerate:
             raise NotImplementedError
            
     # Training loop
+    @profile(stream=open('memory_profiler_output.log', 'w+'))
     def run_training_loop(self, epochs):
         """_summary_
         """
@@ -200,11 +202,24 @@ class Trainer_accelerate:
             self.logger.info(f"Epoch ==== >> {epoch}")
             self.model.train()
             for ii, (batch_data, batch_y, blur_kernel_op) in enumerate(self.dataloader):
-                t_start = time.time()
-                self.logger.info(f"Epoch ==== >> {epoch}\t|\t batch ==== >> {ii}\n") 
-                self.ii = ii
+                
+                with torch.no_grad():
+                    # tracking monitor memory
+                    process = psutil.Process(os.getpid())
+                    self.logger.info(f"\n")
+                    self.logger.info(f"-----------------------------------------------------------")
+                    self.logger.info(f"-----------------------------------------------------------")
+                    self.logger.info(f"Memory usage: {process.memory_info().rss / 1024 ** 2} MB")
+                    self.logger.info(f"-----------------------------------------------------------")
+                    self.logger.info(f"-----------------------------------------------------------")
+                    self.logger.info(f"\n")
+                    
+
+                    # start epoch run
+                    t_start = time.time()
+                    self.logger.info(f"Epoch ==== >> {epoch}\t|\t batch ==== >> {ii}\n") 
+                    self.ii = ii
                 with self.accelerator.accumulate(self.model):       
-                    end0 = time.time()
                     # Tikhonov data solution for consistency
                     if self.learn_alpha:
                         lr_alp = self.model.alpha
@@ -214,33 +229,43 @@ class Trainer_accelerate:
                     # epoch step through the model
                     self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
                     # epoch evaluation
-                    xp = inverse_image_transform(self.x_pred.detach().cpu())
-                    xd = inverse_image_transform(batch_data.detach().cpu())
-                    mse_val = self.metrics.mse_function(xd, xp)
-                    psnr_val = self.metrics.psnr_function(xd, xp)
-                    self.psnr_history.append(psnr_val)     
-                    self.mse_history.append(mse_val)     
-                    wandb.log({"psnr": psnr_val.numpy(), "mse": mse_val.numpy()})
-                # reporting some images    
-                if ii % 200 == 0:
-                    save_image(xp, os.path.join(est_path, f"est_{epoch}.png"))
-                    save_image(xd, os.path.join(refs_path, f"ref_{epoch}.png"))
-                del xp
-                del xd
-                end_time = time.time()  
-                ellapsed = end_time - t_start       
-                self.logger.info(f"Elapsed time per epoch: {ellapsed}")  
+                    
+                with torch.no_grad():   
+                    if 1 == 1:
+                        wandb.log(
+                            {
+                            "psnr": self.metrics.mse_function(
+                                        inverse_image_transform(self.x_pred.cpu()), 
+                                        inverse_image_transform(batch_data.detach().cpu())
+                                    ).item(), 
+                            "mse": self.metrics.psnr_function(
+                                        inverse_image_transform(self.x_pred.cpu()), 
+                                        inverse_image_transform(batch_data.detach().cpu())
+                                    ).item()
+                            }
+                            )
+                        # reporting some images 
+                        
+                    if ii % 200 == 0:
+                        save_image(inverse_image_transform(self.x_pred.cpu()), os.path.join(est_path, f"est_{epoch}.png"))
+                        save_image(inverse_image_transform(batch_data.detach().cpu()), os.path.join(refs_path, f"ref_{epoch}.png"))
+                        
+                
+                    end_time = time.time()  
+                    ellapsed = end_time - t_start       
+                    self.logger.info(f"Elapsed time per epoch: {ellapsed}")  
+                
+                del batch_sol_Tk
+                torch.cuda.empty_cache()
+                
             # Save the last checkpoint if it wasn't already saved.
-            if epoch % self.save_interval != 0:
-                self.accelerator.wait_for_everyone()
-                self.save(epoch)
+            with torch.no_grad():
+                if epoch % self.save_interval != 0:
+                    self.accelerator.wait_for_everyone()
+                    self.save(epoch)
         
-        # plotting: loss, psnr and mse
-        plot_metric(self.psnr_history, "history_psnr")
-        plot_metric(self.mse_history, "history_mse")
-        plot_metric(self.loss_history, "history_loss")
-        
-    # epoch through the model       
+    # epoch through the model      
+    @profile(stream=open('memory_profiler_output.log', 'w+')) 
     def run_epoch(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch):
         # pass data through forward and backward steps
         self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
@@ -248,21 +273,25 @@ class Trainer_accelerate:
         # optimisation step
         # if self.gradient_accumulation:
         #     if (self.ii + 1) % self.gradient_accumulation_steps == 0:
-        ema_update = optimizer_step(self.optimizer, self.model_params_learnable, self.logger)
+        ema_update = True#optimizer_step(self.optimizer, self.model_params_learnable, self.logger)
+        self.optimizer.step()
         if ema_update:
             self.ema.update(
                         self.accelerator.unwrap_model(self.model), 
                         self.ema_rate
                         )
-                    
+        
+        # set grad to zero
+        zero_grad(self.model_params_learnable)
+        
         # scheduler    
         self._anneal_lr(epoch)
         self.log_epoch(epoch)
     
     # forward and backward function
+    @profile(stream=open('memory_profiler_output.log', 'w+'))
     def run_forward_backward(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):
         # if self.gradient_accumulation and (self.ii + 1) % self.gradient_accumulation_steps == 0:
-        zero_grad(self.model_params_learnable)
         
         # weight from diffusion sampler    
         t, weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
@@ -286,7 +315,9 @@ class Trainer_accelerate:
         if self.consistency_loss:   
             batch_y.requires_grad_(False)
             losses_x_cons = self.model.consistency_loss(x_pred, batch_y, blur_kernel_op)
-        
+        else:
+            losses_x_cons = 0.0
+            
         loss = losses_x_cons
         if isinstance(self.schedule_sampler, LossAwareSampler):
             self.schedule_sampler.update_with_local_losses(
@@ -294,22 +325,22 @@ class Trainer_accelerate:
             )
             
         loss += (losses_x_pred["loss"]*weights).mean()
-        log_loss_dict(
-            self.diffusion, t, {"loss": losses_x_pred["loss"]*weights}, self.logger
-        )
-        loss_val = losses_x_pred["loss"].detach().cpu()*weights.cpu()
-        self.loss_history.append(loss_val.mean())
-        
-        # monitor loss with wandb
-        wandb.log({"loss": loss_val.mean().numpy()})
+        # log_loss_dict(
+        #     self.diffusion, t, {"loss": losses_x_pred["loss"]*weights}, self.logger
+        # )
+        with torch.no_grad():
+            loss_val = losses_x_pred["loss"].detach().cpu()*weights.cpu()
+            self.logger.info(f"Loss: {loss_val.mean().item()}")            
+            # monitor loss with wandb
+            wandb.log({"loss": loss_val.mean().numpy()})
         
         # back-propagation: here, gradients are computed
         self.accelerator.backward(loss)
         if self.accelerator.sync_gradients:
             self.accelerator.clip_grad_value_(self.model_params_learnable,  self.clip_value)
-            self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
+            # self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
         
-        self.x_pred = x_pred
+        self.x_pred = x_pred.detach()
     
     # - anneal the learning rate   
     def _anneal_lr(self, epoch):
@@ -433,8 +464,8 @@ def optimizer_step(optimizer: torch.optim.Optimizer, params, logger):
         return optimize_normal(optimizer, params, logger)
 
 def optimize_normal(optimizer, params, logger):
-    grad_norm, param_norm = compute_norms(params)
-    logger.info(f"grad_norm: {grad_norm:.4f} ----- param_norm: {param_norm:.4f}")
+    # grad_norm, param_norm = compute_norms(params)
+    # logger.info(f"grad_norm: {grad_norm:.4f} ----- param_norm: {param_norm:.4f}")
     optimizer.step()
     return True
 

@@ -12,9 +12,9 @@
 ## Job name
 #SBATCH -J cond_diff
 ## Run time: "hours:minutes:seconds", "days-hours"
-#SBATCH --time=120:10:00
+#SBATCH --time=130:00:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
-#SBATCH --mem-per-cpu=50000
+#SBATCH --mem-per-cpu=10000
 ## GPU requirements
 #SBATCH --gres gpu:2
 ##SBATCH --ntasks=32
