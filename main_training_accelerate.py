@@ -53,6 +53,7 @@ def main():
     model_channels = 128
     out_channels = 3
     aug_LoRa_model = FineTuningDiffusionModel(image_size, in_channels, model_channels, out_channels, device, frozen_model = lora_pre_trained_model)
+    ema_LoRa_model = FineTuningDiffusionModel(image_size, in_channels, model_channels, out_channels, device, frozen_model = lora_pre_trained_model)
     
     loggers.info(f"device model: {aug_LoRa_model.device} : {device}")
 
@@ -73,6 +74,7 @@ def main():
     problem_type = "deblur"
     trainer_accelerate = Trainer_accelerate(
                 aug_LoRa_model, 
+                ema_LoRa_model,
                 diffusion,
                 train_dataloader,
                 loggers,

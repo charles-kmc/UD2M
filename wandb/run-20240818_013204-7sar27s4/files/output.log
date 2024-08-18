@@ -1,0 +1,38 @@
+2024-08-18 01:32:07,945 - INFO - Epoch ==== >> 0
+2024-08-18 01:32:08,131 - INFO - Epoch ==== >> 0	|	 batch ==== >> 0
+2024-08-18 01:32:08,519 - INFO - loss:  0.4203
+2024-08-18 01:32:09,159 - INFO - grad_norm: 0.1132 ----- param_norm: 158.2897
+2024-08-18 01:32:09,480 - INFO - Time update ema model 0.3070862293243408
+2024-08-18 01:32:09,481 - INFO - epoch:  0 	 batch: 0	 samples: 8
+Started ...
+2024-08-18 01:32:09,721 - INFO - Elapsed time per epoch: 1.5898373126983643
+2024-08-18 01:32:09,790 - INFO - Epoch ==== >> 0	|	 batch ==== >> 1
+2024-08-18 01:32:10,013 - INFO - loss:  0.1055
+2024-08-18 01:32:10,294 - INFO - grad_norm: 0.0909 ----- param_norm: 158.3160
+2024-08-18 01:32:10,308 - INFO - Time update ema model 0.012170553207397461
+2024-08-18 01:32:10,309 - INFO - epoch:  0 	 batch: 1	 samples: 8
+2024-08-18 01:32:10,316 - INFO - Elapsed time per epoch: 0.525444507598877
+2024-08-18 01:32:10,392 - INFO - Epoch ==== >> 0	|	 batch ==== >> 2
+2024-08-18 01:32:10,616 - INFO - loss:  0.0625
+2024-08-18 01:32:10,898 - INFO - grad_norm: 0.2516 ----- param_norm: 158.3686
+2024-08-18 01:32:10,913 - INFO - Time update ema model 0.01373291015625
+2024-08-18 01:32:10,913 - INFO - epoch:  0 	 batch: 2	 samples: 8
+2024-08-18 01:32:10,921 - INFO - Elapsed time per epoch: 0.5290617942810059
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 97, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 94, in main
+    trainer_accelerate.run_training_loop(num_epochs)
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 240, in run_training_loop
+    eqrw42rw24e242e
+NameError: name 'eqrw42rw24e242e' is not defined
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 97, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/main_training_accelerate.py", line 94, in main
+[rank0]:     trainer_accelerate.run_training_loop(num_epochs)
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/models/trainer_accelerate.py", line 240, in run_training_loop
+[rank0]:     eqrw42rw24e242e
+[rank0]: NameError: name 'eqrw42rw24e242e' is not defined
+Started ...
+Started ...

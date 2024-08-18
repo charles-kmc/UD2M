@@ -61,7 +61,7 @@ class DatasetsImageNet(object):
         image_scale = torch.clamp(image_scale, self.clip_min, self.clip_max)
         noisy_image = torch.clamp(noisy_image, 0, 1)
         
-        return image_scale, noisy_image
+        return image_scale, noisy_image, op_image
 
 # get data loader   
 def get_data_loader(

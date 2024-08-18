@@ -27,6 +27,7 @@ class Trainer_accelerate:
     def __init__(
             self,
             model,
+            ema_model,
             diffusion,
             dataloader,
             logger,
@@ -59,9 +60,7 @@ class Trainer_accelerate:
         self.lr= lr
         self.clip_value = clip_value
         self.max_grad_norm = max_grad_norm
-        self.ema_rate = (
-            [ema_rate] if isinstance(ema_rate, float) else [float(x) for x in ema_rate.split(",")]
-        )
+        self.ema_rate = ema_rate
         self.save_checkpoint_dir = save_checkpoint_dir
         self.save_results = save_results
         self.log_interval = log_interval
@@ -99,7 +98,7 @@ class Trainer_accelerate:
         self.optimizer = AdamW(self.model_params_learnable, lr=self.lr, weight_decay=self.weight_decay)
         
         # ema_model
-        self.ema = EMA(self.model)
+        self.ema = EMA(self.model, ema_model)
         
         # ema model 
         if self.resume_epoch:
@@ -190,6 +189,12 @@ class Trainer_accelerate:
                 "epochs": epochs,
                 }
             )
+        # path
+        est_path = os.path.join(self.save_results, "est")
+        refs_path = os.path.join(self.save_results, "refs")
+        os.makedirs(refs_path, exist_ok=True)
+        os.makedirs(est_path, exist_ok=True)
+        
         for epoch in range(epochs):
             # training mode
             self.logger.info(f"Epoch ==== >> {epoch}")
@@ -199,21 +204,15 @@ class Trainer_accelerate:
                 self.logger.info(f"Epoch ==== >> {epoch}\t|\t batch ==== >> {ii}\n") 
                 self.ii = ii
                 with self.accelerator.accumulate(self.model):       
-                    
+                    end0 = time.time()
                     # Tikhonov data solution for consistency
                     if self.learn_alpha:
                         lr_alp = self.model.alpha
                         batch_sol_Tk =   self._degradation_model(batch_y, blur_kernel_op, dist_util.dev(), alpha = lr_alp)
                     else:
                         batch_sol_Tk =   self._degradation_model(batch_y, blur_kernel_op, dist_util.dev())
-                    
                     # epoch step through the model
                     self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
-                    
-                    # # save checkpoint    
-                    # if (self.ii+1) % self.save_interval*500 == 0:
-                    #     self.save(epoch)
-                
                     # epoch evaluation
                     xp = inverse_image_transform(self.x_pred.detach().cpu())
                     xd = inverse_image_transform(batch_data.detach().cpu())
@@ -224,22 +223,16 @@ class Trainer_accelerate:
                     wandb.log({"psnr": psnr_val.numpy(), "mse": mse_val.numpy()})
                 # reporting some images    
                 if ii % 200 == 0:
-                    est_path = os.path.join(self.save_results, "est")
-                    refs_path = os.path.join(self.save_results, "refs")
-                    os.makedirs(refs_path, exist_ok=True)
-                    os.makedirs(est_path, exist_ok=True)
                     save_image(xp, os.path.join(est_path, f"est_{epoch}.png"))
                     save_image(xd, os.path.join(refs_path, f"ref_{epoch}.png"))
-                    
                 del xp
                 del xd
-                
                 end_time = time.time()  
                 ellapsed = end_time - t_start       
                 self.logger.info(f"Elapsed time per epoch: {ellapsed}")  
-                
             # Save the last checkpoint if it wasn't already saved.
             if epoch % self.save_interval != 0:
+                self.accelerator.wait_for_everyone()
                 self.save(epoch)
         
         # plotting: loss, psnr and mse
@@ -258,10 +251,10 @@ class Trainer_accelerate:
         ema_update = optimizer_step(self.optimizer, self.model_params_learnable, self.logger)
         if ema_update:
             self.ema.update(
-                        self.accelarator.unwrap_model(self.model), 
+                        self.accelerator.unwrap_model(self.model), 
                         self.ema_rate
                         )
-        
+                    
         # scheduler    
         self._anneal_lr(epoch)
         self.log_epoch(epoch)
@@ -289,7 +282,6 @@ class Trainer_accelerate:
         
         # get the predicted image
         x_pred = losses_x_pred["pred_xstart"]
-        
         # consistency loss
         if self.consistency_loss:   
             batch_y.requires_grad_(False)
