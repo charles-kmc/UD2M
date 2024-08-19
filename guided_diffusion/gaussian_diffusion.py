@@ -741,6 +741,37 @@ class GaussianDiffusion:
         output = th.where((t == 0), decoder_nll, kl)
         return {"output": output, "pred_xstart": out["pred_xstart"]}
 
+
+    def losses(self, model, x_start, t, cond = None, noise = None):
+        if noise is None:
+            noise = th.randn_like(x_start)
+        B, C = x_start.shape[:2]
+        # sample noisy image
+        x_t = self.q_sample(x_start, t, noise=noise)
+        
+        # predict noise 
+        if cond is not None:
+            model_output = model(x_t, self._scale_timesteps(t), cond)
+        else:
+            model_output = model(x_t, self._scale_timesteps(t))
+            
+        if  model_output.shape == (B, C * 2, *x_t.shape[2:]):
+            model_output, _ = th.split(model_output, C, dim=1)
+        else:
+            pass
+        
+        terms = {}
+        
+        # predict x_start from eps
+        terms["pred_xstart"] = self._predict_xstart_from_eps(x_t=x_t, t=t, eps=model_output)
+        
+        # evaluate mse between the predicted noise and the true noise
+        mse_loss = (noise - model_output) ** 2
+        terms["mse"] = mse_loss.mean(dim=list(range(1, len(mse_loss.shape))))
+        
+        return terms
+    
+    
     def training_losses(self, model, x_start, t, model_kwargs=None, noise=None):
         """
         Compute training losses for a single timestep.
@@ -813,7 +844,7 @@ class GaussianDiffusion:
             assert model_output.shape == target.shape == x_start.shape
             terms["mse"] = mean_flat((target - model_output) ** 2)
             if "vb" in terms:
-                terms["loss"] = terms["mse"] + terms["vb"]
+                terms["loss"] = terms["mse"] + 0 * terms["vb"]
             else:
                 terms["loss"] = terms["mse"]
         else:

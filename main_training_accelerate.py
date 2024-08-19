@@ -33,7 +33,7 @@ def main():
     
     # path for resuming checkpoints during training
     save_checkpoint_dir = os.path.join("/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp", date, f"prop_data_{prop}")
-    save_results = os.path.join("/users/cmk2000/sharedscratch/Results/conditional-diffusion_model-for_ivp", date, "prop_data_{prop}")
+    save_results = os.path.join("/users/cmk2000/sharedscratch/Results/conditional-diffusion_model-for_ivp", date, f"prop_data_{prop}")
     
     # --- device
     dist_util.setup_dist()
@@ -98,7 +98,7 @@ def main():
     loggers.info("Training finish !!")
 if __name__ == "__main__":
     # Specify the output file for memory profiler
-    profiler_output_file = 'memory_profiler_output.log'
-    with open(profiler_output_file, 'w+') as prof_out:
-        profile(stream=prof_out)
-        main()
+    # profiler_output_file = 'memory_profiler_output.log'
+    # with open(profiler_output_file, 'w+') as prof_out:
+    #     profile(stream=prof_out)
+    main()

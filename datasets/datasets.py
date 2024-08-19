@@ -70,7 +70,7 @@ def get_data_loader(
                     batch_size, 
                     prop,
                     num_workers = 0, 
-                    shuffle = False
+                    shuffle = True
                 ):
     assert prop <= 1, f"proportion {prop} should between 0 and 1!!"
     

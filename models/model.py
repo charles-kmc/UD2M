@@ -320,7 +320,7 @@ class FineTuningDiffusionModel(nn.Module):
         nn.init.zeros_(self.zero_blocks.weight)                     
             
         # Learnable parameter for the consistency loss
-        self.loss_weight = nn.Parameter(torch.tensor(1.0, dtype = self.dtype)).to(self.device)
+        #self.loss_weight = nn.Parameter(torch.tensor(1.0, dtype = self.dtype)).to(self.device)
         self.alpha = nn.Parameter(torch.tensor(1.0, dtype = self.dtype)).to(self.device)
         
         if frozen_model is not None:
@@ -394,11 +394,15 @@ class FineTuningDiffusionModel(nn.Module):
     
     # -- Consistency loss
     def consistency_loss(self, xpred, y, list_op_blur):
-        mse = nn.MSELoss()
+        
+        mse_function = nn.MSELoss()
         device = xpred.device
+        
         # Create a list of kernels and images
         kernels = list_op_blur["blur_value"] 
-        Ax_pred = []
+        sigmas = list_op_blur["sigma"].to(device)
+        mse_per_sample = []
+        
         # Loop over kernels and xpreds in parallel
         for i in range(kernels.shape[0]):
             kernel = kernels[i,...]
@@ -406,13 +410,13 @@ class FineTuningDiffusionModel(nn.Module):
             xpred_fft = torch.fft.fft2(xpred_i, dim=(-2, -1))
             FFT_H = blur2operator(kernel, self.image_size).to(device)
             blurred_fft = FFT_H * xpred_fft
-            ax_pred = torch.real(torch.fft.ifft2(blurred_fft, dim=(-2, -1))).unsqueeze(0)
-            Ax_pred.append(ax_pred)
-        # Concatenate the results along the appropriate dimension
-        Ax_pred = torch.cat(Ax_pred, dim=0)
+            ax_pred = torch.real(torch.fft.ifft2(blurred_fft, dim=(-2, -1)))
+            mse_per_sample.append(mse_function(ax_pred, y[i]).item())
         
-        loss = self.loss_weight * mse(Ax_pred, y)
-        return loss
+        mse_val = torch.tensor(mse_per_sample).to(device)
+        loss =  mse_val / (2*sigmas**2)
+        
+        return loss.mean()
 
 
                 

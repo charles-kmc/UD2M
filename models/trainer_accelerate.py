@@ -286,50 +286,49 @@ class Trainer_accelerate:
         
         # scheduler    
         self._anneal_lr(epoch)
-        self.log_epoch(epoch)
+        self.log_epoch(epoch, len(batch_data))
     
     # forward and backward function
     @profile(stream=open('memory_profiler_output.log', 'w+'))
-    def run_forward_backward(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):
-        # if self.gradient_accumulation and (self.ii + 1) % self.gradient_accumulation_steps == 0:
-        
+    def run_forward_backward(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):        
         # weight from diffusion sampler    
         t, weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
         
         # - compute the losses
         batch_sol_Tk.requires_grad_(False)
-        model_y = lambda x, t: self.model(x, t, batch_sol_Tk)
-        compute_losses = functools.partial(
-                    self.diffusion.training_losses,   
-                    model_y,
+        # model_y = lambda x, t: self.model(x, t, batch_sol_Tk)
+        compute_losses_diff = functools.partial(
+                    self.diffusion.losses,   
+                    self.model,
                     batch_data,
-                    t
+                    t,
+                    batch_sol_Tk
                 ) 
         
         # computing losses
-        losses_x_pred = compute_losses()
+        losses_x_pred = compute_losses_diff()
         
         # get the predicted image
         x_pred = losses_x_pred["pred_xstart"]
         # consistency loss
         if self.consistency_loss:   
             batch_y.requires_grad_(False)
-            losses_x_cons = self.model.consistency_loss(x_pred, batch_y, blur_kernel_op)
+            compute_losses_consis = functools.partial(
+                self.model.consistency_loss,
+                    x_pred, 
+                    batch_y, 
+                    blur_kernel_op
+                ) 
+            loss = compute_losses_consis()
         else:
-            losses_x_cons = 0.0
+            loss = 0.0
             
-        loss = losses_x_cons
-        if isinstance(self.schedule_sampler, LossAwareSampler):
-            self.schedule_sampler.update_with_local_losses(
-                t, losses_x_pred["loss"].detach()
-            )
-            
-        loss += (losses_x_pred["loss"]*weights).mean()
+        loss += (losses_x_pred["mse"]*weights).mean()
         # log_loss_dict(
         #     self.diffusion, t, {"loss": losses_x_pred["loss"]*weights}, self.logger
         # )
         with torch.no_grad():
-            loss_val = losses_x_pred["loss"].detach().cpu()*weights.cpu()
+            loss_val = losses_x_pred["mse"].detach().cpu()*weights.cpu()
             self.logger.info(f"Loss: {loss_val.mean().item()}")            
             # monitor loss with wandb
             wandb.log({"loss": loss_val.mean().numpy()})
@@ -354,8 +353,8 @@ class Trainer_accelerate:
                 param_group["lr"] = lr
 
     # - log the epoch
-    def log_epoch(self, epoch):
-        self.logger.info(f"epoch:  {epoch + self.resume_epoch} \t batch: {self.ii}\t samples: {(epoch + self.resume_epoch + 1) * self.global_batch}")
+    def log_epoch(self, epoch, samples_size):
+        self.logger.info(f"epoch:  {epoch + self.resume_epoch} \t batch: {self.ii}\t samples: {samples_size}")
     
     # - save the checkpoint model   
     def save(self, epoch):

@@ -38,7 +38,8 @@ class DeblurringModel(object):
             f"blur_tpye": self.blur_type,
             f"blur_size": self.blur_size,
             f"im_size": self.im_size,
-            f"blur_value": self.blur,  
+            f"blur_value": self.blur, 
+            f"sigma": noise_std, 
         }
         return y, op
     

@@ -1,2 +1,0 @@
-/usr/bin/which: no fi_info in (/users/cmk2000/.conda/envs/dmog_env39/bin:/users/cmk2000/.vscode-server/cli/servers/Stable-f1e16e1e6214d7c44d078b1f0607b2388f29d729/server/bin/remote-cli:/opt/gridware/depots/761a7df9/el7/pkg/apps/anaconda3/2023.03/bin/condabin:/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin:/users/cmk2000/.local/bin:/users/cmk2000/bin)
-slurmstepd: error: *** JOB 96817 ON gpu11 CANCELLED AT 2024-08-18T23:33:50 ***
