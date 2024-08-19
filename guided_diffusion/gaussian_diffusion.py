@@ -761,6 +761,7 @@ class GaussianDiffusion:
             pass
         
         terms = {}
+        terms["x_t"] = x_t
         
         # predict x_start from eps
         terms["pred_xstart"] = self._predict_xstart_from_eps(x_t=x_t, t=t, eps=model_output)

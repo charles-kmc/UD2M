@@ -50,12 +50,21 @@ def main():
     lora_pre_trained_model = LoRa_model(frozen_model, device, rank = 2)
 
     # Augmented LoRa model
+    epochs = 100
+    lr = 1e-4
+    lr_anneal_epochs = 0
+    ema_rate = 0.99
+    log_interval = 20
+    save_interval = 5
+    resume_checkpoint = ""
+    problem_type = "deblur"
+    consistency_loss = False
     image_size = 256
     in_channels = 3
     model_channels = 128
     out_channels = 3
     aug_LoRa_model = FineTuningDiffusionModel(image_size, in_channels, model_channels, out_channels, device, frozen_model = lora_pre_trained_model)
-    ema_LoRa_model = FineTuningDiffusionModel(image_size, in_channels, model_channels, out_channels, device, frozen_model = lora_pre_trained_model)
+    ema_LoRa_model = copy.deepcopy(aug_LoRa_model)
     
     loggers.info(f"device model: {aug_LoRa_model.device} : {device}")
 
@@ -64,16 +73,6 @@ def main():
     batch_size = 8
     train_dataloader = get_data_loader(dataset_dir, image_size, batch_size, prop)
     loggers.info(f"number of batch in dataset: {len(train_dataloader)}")
-       
-    # --- trainer
-    num_epochs = 100
-    lr = 1e-3
-    lr_anneal_epochs = 1
-    ema_rate = 0.99
-    log_interval = 20
-    save_interval = 5
-    resume_checkpoint = ""
-    problem_type = "deblur"
     
     trainer_accelerate = Trainer_accelerate(
                 aug_LoRa_model, 
@@ -90,6 +89,7 @@ def main():
                 ema_rate=ema_rate,
                 problem_type = problem_type,
                 lr_anneal_epochs = lr_anneal_epochs,
+                consistency_loss = consistency_loss,
             )
 
     # --- run training loop

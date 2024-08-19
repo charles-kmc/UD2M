@@ -100,6 +100,7 @@ class Trainer_accelerate:
         
         # optimizer
         self.optimizer = AdamW(self.model_params_learnable, lr=self.lr, weight_decay=self.weight_decay)
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(100 * 0.8))
         
         # ema_model
         self.ema = EMA(self.model, ema_model)
@@ -110,7 +111,13 @@ class Trainer_accelerate:
             self._load_optimizer()
         
         # pass training object into accelerator
-        self.model, self.optimizer, self.dataloader, self.anneal_lr = self.accelerator.prepare(model, self.optimizer, dataloader, self._anneal_lr)
+        self.model, self.optimizer, self.dataloader, self.scheduler, self.anneal_lr = self.accelerator.prepare(
+                                                                                                self.model, 
+                                                                                                self.optimizer, 
+                                                                                                self.dataloader, 
+                                                                                                self.scheduler, 
+                                                                                                self._anneal_lr
+                                                                                                )
         
         # 
         self.global_batch = self.batch_size * dist.get_world_size()  
@@ -194,8 +201,12 @@ class Trainer_accelerate:
         # path
         est_path = os.path.join(self.save_results, "est")
         refs_path = os.path.join(self.save_results, "refs")
+        degrads_path = os.path.join(self.save_results, "degrads")
+        sample_path = os.path.join(self.save_results, "samples")
         os.makedirs(refs_path, exist_ok=True)
         os.makedirs(est_path, exist_ok=True)
+        os.makedirs(degrads_path, exist_ok=True)
+        os.makedirs(sample_path, exist_ok=True)
         
         for epoch in range(epochs):
             # training mode
@@ -246,9 +257,11 @@ class Trainer_accelerate:
                             )
                         # reporting some images 
                         
-                    if ii % 200 == 0:
+                    if ii % 100 == 0:
                         save_image(inverse_image_transform(self.x_pred.cpu()), os.path.join(est_path, f"est_{epoch}.png"))
                         save_image(inverse_image_transform(batch_data.detach().cpu()), os.path.join(refs_path, f"ref_{epoch}.png"))
+                        save_image(batch_y.detach().cpu(), os.path.join(degrads_path, f"degrad_{epoch}.png"))
+                        save_image(self.x_t.cpu(), os.path.join(sample_path, f"sample_{epoch}.png"))
                         
                 
                     end_time = time.time()  
@@ -265,15 +278,10 @@ class Trainer_accelerate:
                     self.save(epoch)
         
     # epoch through the model      
-    @profile(stream=open('memory_profiler_output.log', 'w+')) 
+    #@profile(stream=open('memory_profiler_output.log', 'w+')) 
     def run_epoch(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch):
-        # pass data through forward and backward steps
         self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
-        
-        # optimisation step
-        # if self.gradient_accumulation:
-        #     if (self.ii + 1) % self.gradient_accumulation_steps == 0:
-        ema_update = True#optimizer_step(self.optimizer, self.model_params_learnable, self.logger)
+        ema_update = True
         self.optimizer.step()
         if ema_update:
             self.ema.update(
@@ -285,11 +293,11 @@ class Trainer_accelerate:
         zero_grad(self.model_params_learnable)
         
         # scheduler    
-        self._anneal_lr(epoch)
+        self.scheduler.step() #_anneal_lr(epoch)
         self.log_epoch(epoch, len(batch_data))
     
     # forward and backward function
-    @profile(stream=open('memory_profiler_output.log', 'w+'))
+    #@profile(stream=open('memory_profiler_output.log', 'w+'))
     def run_forward_backward(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):        
         # weight from diffusion sampler    
         t, weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
@@ -297,7 +305,7 @@ class Trainer_accelerate:
         # - compute the losses
         batch_sol_Tk.requires_grad_(False)
         # model_y = lambda x, t: self.model(x, t, batch_sol_Tk)
-        compute_losses_diff = functools.partial(
+        compute_losses = functools.partial(
                     self.diffusion.losses,   
                     self.model,
                     batch_data,
@@ -306,7 +314,7 @@ class Trainer_accelerate:
                 ) 
         
         # computing losses
-        losses_x_pred = compute_losses_diff()
+        losses_x_pred = compute_losses()
         
         # get the predicted image
         x_pred = losses_x_pred["pred_xstart"]
@@ -340,6 +348,7 @@ class Trainer_accelerate:
             # self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
         
         self.x_pred = x_pred.detach()
+        self.x_t = x_t.detach()
     
     # - anneal the learning rate   
     def _anneal_lr(self, epoch):
