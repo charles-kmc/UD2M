@@ -1,7 +1,7 @@
-import torch 
-import torch.nn as nn 
-import torch.nn.utils.parametrize as P
-import torch.nn.functional as F
+import torch #type:ignore
+import torch.nn as nn #type:ignore
+import torch.nn.utils.parametrize as P#type:ignore
+import torch.nn.functional as F#type:ignore
 from guided_diffusion.fp16_util import convert_module_to_f16, convert_module_to_f32
 from guided_diffusion.nn import (
     checkpoint,
@@ -170,6 +170,7 @@ class ResBlock_new(nn.Module):
         :param x: an [N x C x ...] Tensor of features.
         :return: an [N x C x ...] Tensor of outputs.
         """
+        
         return checkpoint(
             self._forward, (x,), self.parameters(), False
         )
@@ -220,8 +221,8 @@ class FineTuningDiffusionModel(nn.Module):
         out_channels,
         device,
         frozen_model = None,
-        input_blocks_posi =[8],
-        out_blocks_posi =[1,2],
+        input_block_connection =[8],
+        output_block_connection =[1,2],
         norm_grp = 32,
         num_res_blocks = 1,
         dropout=0,
@@ -234,8 +235,8 @@ class FineTuningDiffusionModel(nn.Module):
         resblock_updown=True,
     ):
         super().__init__()
-        self.out_blocks_posi = out_blocks_posi
-        self.input_blocks_posi = input_blocks_posi
+        self.output_block_connection = output_block_connection
+        self.input_block_connection = input_block_connection
         self.image_size = image_size
         self.in_channels = in_channels
         self.model_channels = model_channels
@@ -250,14 +251,14 @@ class FineTuningDiffusionModel(nn.Module):
         self.device = device
 
         time_embed_dim = model_channels * 4
-        self.time_embed = nn.Sequential(
+        self.time_emb = nn.Sequential(
             linear(model_channels, time_embed_dim),
             nn.SiLU(),
             linear(time_embed_dim, time_embed_dim),
         )
         ch = input_ch = int(channel_mult[0] * model_channels)
         
-        self.input_blocks = nn.ModuleList(SequentialBloack_con(conv_nd(dims, in_channels, ch, 3, padding=1)))
+        self.input_blocks_new = nn.ModuleList(SequentialBloack_con(conv_nd(dims, in_channels, ch, 3, padding=1)))
         self._feature_size = ch
         input_block_chans = [ch]
         ds = 1
@@ -275,14 +276,14 @@ class FineTuningDiffusionModel(nn.Module):
                     )
                 ]
                 ch = int(mult * model_channels)
-                self.input_blocks.append(SequentialBloack_con(*layers))
+                self.input_blocks_new.append(SequentialBloack_con(*layers))
                 self._feature_size += ch
                 input_block_chans.append(ch)
             
             if level != len(channel_mult) - 1:
                 out_ch = ch
 
-                self.input_blocks.append(SequentialBloack_con(
+                self.input_blocks_new.append(SequentialBloack_con(
                         ResBlock_new(
                             ch,
                             dropout,
@@ -304,7 +305,7 @@ class FineTuningDiffusionModel(nn.Module):
                 ds *= 2
                 self._feature_size += ch
         
-        self.middle_block = SequentialBloack_con(
+        self.middle_block_new = SequentialBloack_con(
                                 ResBlock_new(
                                     ch,
                                     dropout,
@@ -316,37 +317,63 @@ class FineTuningDiffusionModel(nn.Module):
         self._feature_size += ch
         
         # zero convolution
-        self.zero_blocks = nn.Conv2d(512, 1024, kernel_size=1, padding = 0, stride=1, bias=False)
-        nn.init.zeros_(self.zero_blocks.weight)                     
+        self.zero_convolution = nn.Conv2d(512, 1024, kernel_size=1, padding = 0, stride=1)
+        nn.init.zeros_(self.zero_convolution.weight)                     
             
-        # Learnable parameter for the consistency loss
-        #self.loss_weight = nn.Parameter(torch.tensor(1.0, dtype = self.dtype)).to(self.device)
-        self.alpha = nn.Parameter(torch.tensor(1.0, dtype = self.dtype)).to(self.device)
-        
         if frozen_model is not None:
             self.model = frozen_model
         else:
             raise "You need to provide the required pretrained model"
         
+        # Frozen time embedding
+        # self.frozen_time_emb = nn.ModuleList(self.model.time_embed)
+        
+        # Frozen input blocks
+        self.frozen_input_blocks  = nn.ModuleList()
+        for in_block in self.model.input_blocks.children():
+            self.frozen_input_blocks.append(in_block)
+        
+        # Frozen middle block
+        self.frozen_middle_block = self.model.middle_block
+        
+        # Frozen output blocks
+        self.frozen_output_blocks = nn.ModuleList()
+        for out_block in self.model.output_blocks.children():
+            self.frozen_output_blocks.append(out_block)
+        
+        # Frozen output layer
+        self.frozen_out = self.model.out
+        
     def convert_to_fp16(self):
         """
         Convert the torso of the model to float16.
         """
-        self.input_blocks.apply(convert_module_to_f16)
-        self.middle_block.apply(convert_module_to_f16)
-        self.zero_blocks.apply(convert_module_to_f16)
-
+        self.input_blocks_new.apply(convert_module_to_f16)
+        self.middle_block_new.apply(convert_module_to_f16)
+        self.zero_convolution.apply(convert_module_to_f16)
+        self.frozen_input_blocks.apply(convert_module_to_f16)
+        self.frozen_middle_block.apply(convert_module_to_f16)
+        self.frozen_output_blocks.apply(convert_module_to_f16)
+        self.frozen_out.apply(convert_module_to_f16)
+        self.time_emb.apply(convert_module_to_f16)
+        # self.frozen_time_emb.apply(convert_module_to_f16)
+    
     def convert_to_fp32(self):
         """
         Convert the torso of the model to float32.
         """
-        self.input_blocks.apply(convert_module_to_f32)
-        self.middle_block.apply(convert_module_to_f32)
-        self.zero_blocks.apply(convert_module_to_f32)
+        self.input_blocks_new.apply(convert_module_to_f32)
+        self.middle_block_new.apply(convert_module_to_f32)
+        self.zero_convolution.apply(convert_module_to_f32)
+        self.frozen_input_blocks.apply(convert_module_to_f32)
+        self.frozen_middle_block.apply(convert_module_to_f32)
+        self.frozen_output_blocks.apply(convert_module_to_f32)
+        self.frozen_out.apply(convert_module_to_f32)
+        self.time_emb.apply(convert_module_to_f32)
+        # self.frozen_time_emb.apply(convert_module_to_f32)
 
     def forward(self, x, timesteps = torch.tensor([3]), y = None):
         
-        print("Started ...")
         """
         Apply the model to an input batch.
         :param x: an [N x C x ...] Tensor of inputs.
@@ -357,39 +384,43 @@ class FineTuningDiffusionModel(nn.Module):
         else:
             h = x.type(self.dtype)
         x = x.type(self.dtype)
+        h4concatenation = []
+        h4zero_convolution = []
+        xs4skip_connection = []
         
-        emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
-        hs = []
-        con_in = []
-        test_v = []
-        xs = []
+        # time embedding
+        emb = timestep_embedding(timesteps, self.model_channels)
+        emb = self.time_emb(emb)
         
-        for ii, module in enumerate(self.input_blocks):
+        # Input blocks
+        for ii, module in enumerate(self.input_blocks_new):
             h = module(h)
-            if ii in self.input_blocks_posi:
-                con_in.append(h)
-            test_v.append(h)
-            hs.append(h)
-                    
-        for ii, module in enumerate(self.model.input_blocks.children()):
-            x = module(x, emb)
-            if ii in self.input_blocks_posi:
-                x += con_in.pop(0)
-            xs.append(x) 
-        h = self.middle_block(h)
-        x+= h
-        x = self.model.middle_block(x, emb)
+            if ii in self.input_block_connection:
+                h4concatenation.append(h)
+            h4zero_convolution.append(h)
+        for ii, frozen_module in enumerate(self.frozen_input_blocks):
+            x = frozen_module(x, emb)
+            if ii in self.input_block_connection:
+                x = x + h4concatenation.pop(0)
+            xs4skip_connection.append(x) 
+
+        # Middle block with conditioning
+        h = self.middle_block_new(h)
+        x = x + h 
+        x = self.frozen_middle_block(x, emb)
         
-        for ii, module in enumerate(self.model.output_blocks.children()):
-            h_in = test_v.pop()
-            x = torch.cat([x, xs.pop()], dim=1)
-            if ii == 1 or ii == 2:
-                h_in = self.zero_blocks(h_in)
-                x += h_in
-            x = module(x, emb)
-            
+        # output blocks
+        for ii, frozen_module in enumerate(self.frozen_output_blocks):
+            h = h4zero_convolution.pop() 
+            x = torch.cat([x, xs4skip_connection.pop()], dim=1)
+            if ii == 1: # or ii == 2:
+                h = self.zero_convolution(h)
+                x = x + h 
+            x = frozen_module(x, emb)
+        
+        # output layer    
         x = x.type(x.dtype)
-        x = self.model.out(x)          
+        x = self.frozen_out(x)          
         return x
     
     # -- Consistency loss

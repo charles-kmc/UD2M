@@ -6,11 +6,13 @@ import os
 import wandb
 import blobfile as bf #type:ignore
 import torch  #type: ignore
+import torch.nn as nn #type:ignore
 import torch.distributed as dist#type: ignore
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP#type: ignore
 from torch.optim import AdamW#type: ignore
 from torchvision.utils import save_image#type: ignore
 import matplotlib.pyplot as plt#type: ignore
+import torch.nn.functional as F#type:ignore
 
 from accelerate import Accelerator#type:ignore
 
@@ -20,9 +22,12 @@ from .resample import LossAwareSampler, UniformSampler
 from degradation_model.utils_deblurs import deb_batch_data_solution
 from utils.utils import Metrics, inverse_image_transform, image_transform
 from models.ema import EMA
+from utils_lora.lora_parametrisation import LoRaParametrisation
+from guided_diffusion.unet import TimestepEmbedSequential
 
 from memory_profiler import profile #type:ignore
 import psutil
+from torchviz import make_dot #type:ignore
 
 
 INITIAL_LOG_LOSS_SCALE = 20.0
@@ -47,13 +52,14 @@ class Trainer_accelerate:
             save_checkpoint_dir = "",
             resume_checkpoint = "",
             save_results = "",
-            learn_alpha = True,
+            learn_alpha = False,
             schedule_sampler = None,
             weight_decay = 0.0,
             lr_anneal_epochs = 0,
             consistency_loss = True,
             problem_type = "deblur",
         ):
+        
         self.logger = logger
         self.model = model
         self.diffusion = diffusion
@@ -87,7 +93,7 @@ class Trainer_accelerate:
         
         # load parameters of the model for training and synchronise
         self._load_and_sync_parameters()
-    
+        
         # Accelerator: DDP
         self.accelerator = Accelerator()
         self.device =  self.accelerator.device
@@ -100,12 +106,10 @@ class Trainer_accelerate:
         
         # optimizer
         self.optimizer = AdamW(self.model_params_learnable, lr=self.lr, weight_decay=self.weight_decay)
-        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(100 * 0.8))
+        self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(100 * 0.2), gamma=0.1)
         
         # ema_model
-        self.ema = EMA(self.model, ema_model)
-        
-        # ema model 
+        self.ema = EMA(ema_model)
         if self.resume_epoch:
             self._load_ema_parameters()
             self._load_optimizer()
@@ -118,6 +122,7 @@ class Trainer_accelerate:
                                                                                                 self.scheduler, 
                                                                                                 self._anneal_lr
                                                                                                 )
+        
         
         # 
         self.global_batch = self.batch_size * dist.get_world_size()  
@@ -182,7 +187,7 @@ class Trainer_accelerate:
             raise NotImplementedError
            
     # Training loop
-    @profile(stream=open('memory_profiler_output.log', 'w+'))
+    #@profile(stream=open('memory_profiler_output.log', 'w+'))
     def run_training_loop(self, epochs):
         """_summary_
         """
@@ -217,13 +222,11 @@ class Trainer_accelerate:
                 with torch.no_grad():
                     # tracking monitor memory
                     process = psutil.Process(os.getpid())
-                    self.logger.info(f"\n")
                     self.logger.info(f"-----------------------------------------------------------")
                     self.logger.info(f"-----------------------------------------------------------")
                     self.logger.info(f"Memory usage: {process.memory_info().rss / 1024 ** 2} MB")
                     self.logger.info(f"-----------------------------------------------------------")
-                    self.logger.info(f"-----------------------------------------------------------")
-                    self.logger.info(f"\n")
+                    self.logger.info(f"-----------------------------------------------------------\n")
                     
 
                     # start epoch run
@@ -232,33 +235,29 @@ class Trainer_accelerate:
                     self.ii = ii
                 with self.accelerator.accumulate(self.model):       
                     # Tikhonov data solution for consistency
-                    if self.learn_alpha:
-                        lr_alp = self.model.alpha
-                        batch_sol_Tk =   self._degradation_model(batch_y, blur_kernel_op, dist_util.dev(), alpha = lr_alp)
-                    else:
-                        batch_sol_Tk =   self._degradation_model(batch_y, blur_kernel_op, dist_util.dev())
+                    batch_sol_Tk =   self._degradation_model(batch_y, blur_kernel_op, dist_util.dev())
                     # epoch step through the model
-                    self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
+                    # self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
+                    self.run_epoch(batch_data, batch_y, epoch)
                     # epoch evaluation
                     
                 with torch.no_grad():   
                     if 1 == 1:
                         wandb.log(
                             {
-                            "psnr": self.metrics.mse_function(
-                                        inverse_image_transform(self.x_pred.cpu()), 
+                            "mse": self.metrics.mse_function(
+                                        inverse_image_transform(self.pred_xstart.cpu()), 
                                         inverse_image_transform(batch_data.detach().cpu())
                                     ).item(), 
-                            "mse": self.metrics.psnr_function(
-                                        inverse_image_transform(self.x_pred.cpu()), 
+                            "psnr": self.metrics.psnr_function(
+                                        inverse_image_transform(self.pred_xstart.cpu()), 
                                         inverse_image_transform(batch_data.detach().cpu())
                                     ).item()
-                            }
-                            )
+                            })
                         # reporting some images 
                         
                     if ii % 100 == 0:
-                        save_image(inverse_image_transform(self.x_pred.cpu()), os.path.join(est_path, f"est_{epoch}.png"))
+                        save_image(inverse_image_transform(self.pred_xstart.cpu()), os.path.join(est_path, f"est_{epoch}.png"))
                         save_image(inverse_image_transform(batch_data.detach().cpu()), os.path.join(refs_path, f"ref_{epoch}.png"))
                         save_image(batch_y.detach().cpu(), os.path.join(degrads_path, f"degrad_{epoch}.png"))
                         save_image(self.x_t.cpu(), os.path.join(sample_path, f"sample_{epoch}.png"))
@@ -267,7 +266,6 @@ class Trainer_accelerate:
                     end_time = time.time()  
                     ellapsed = end_time - t_start       
                     self.logger.info(f"Elapsed time per epoch: {ellapsed}")  
-                
                 del batch_sol_Tk
                 torch.cuda.empty_cache()
                 
@@ -279,77 +277,57 @@ class Trainer_accelerate:
         
     # epoch through the model      
     #@profile(stream=open('memory_profiler_output.log', 'w+')) 
-    def run_epoch(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch):
-        self.run_forward_backward(batch_data, batch_sol_Tk, batch_y, blur_kernel_op)
-        ema_update = True
+    def run_epoch(self, batch_data, batch_sol_Tk, epoch):
+        self.run_forward_backward(batch_data, batch_sol_Tk)
         self.optimizer.step()
+        ema_update = True
         if ema_update:
-            self.ema.update(
-                        self.accelerator.unwrap_model(self.model), 
-                        self.ema_rate
-                        )
-        
-        # set grad to zero
-        zero_grad(self.model_params_learnable)
-        
-        # scheduler    
+            self.ema.update(self.accelerator.unwrap_model(self.model), self.ema_rate)
         self.scheduler.step() #_anneal_lr(epoch)
+        self.model.zero_grad()
+        with torch.no_grad():
+            for _, module in self.model.named_modules():
+                if isinstance(module, LoRaParametrisation):
+                    module.lora_A.zero_()
+                    module.lora_B.zero_()
         self.log_epoch(epoch, len(batch_data))
     
-    # forward and backward function
-    #@profile(stream=open('memory_profiler_output.log', 'w+'))
-    def run_forward_backward(self, batch_data, batch_sol_Tk, batch_y, blur_kernel_op):        
+    def run_forward_backward(self, batch_data, batch_sol_Tk):    
+        #zero_grad(self.model_params_learnable)     
         # weight from diffusion sampler    
         t, weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
+        B,C = batch_data.shape[:2]
         
-        # - compute the losses
-        batch_sol_Tk.requires_grad_(False)
-        # model_y = lambda x, t: self.model(x, t, batch_sol_Tk)
-        compute_losses = functools.partial(
-                    self.diffusion.losses,   
-                    self.model,
-                    batch_data,
-                    t,
-                    batch_sol_Tk
-                ) 
-        
-        # computing losses
-        losses_x_pred = compute_losses()
-        
-        # get the predicted image
-        x_pred = losses_x_pred["pred_xstart"]
-        # consistency loss
-        if self.consistency_loss:   
-            batch_y.requires_grad_(False)
-            compute_losses_consis = functools.partial(
-                self.model.consistency_loss,
-                    x_pred, 
-                    batch_y, 
-                    blur_kernel_op
-                ) 
-            loss = compute_losses_consis()
+        # get noise
+        noise_target = torch.randn_like(batch_data)
+        # sample noisy x_t
+        self.x_t = self.diffusion.q_sample(batch_data, t, noise=noise_target)
+    
+        noise_pred  = self.model(self.x_t, t, batch_sol_Tk)
+        if noise_pred.shape == (B, C * 2, *self.x_t.shape[2:]):
+            noise_pred, _ = torch.split(noise_pred, C, dim=1)
         else:
-            loss = 0.0
-            
-        loss += (losses_x_pred["mse"]*weights).mean()
-        # log_loss_dict(
-        #     self.diffusion, t, {"loss": losses_x_pred["loss"]*weights}, self.logger
-        # )
-        with torch.no_grad():
-            loss_val = losses_x_pred["mse"].detach().cpu()*weights.cpu()
-            self.logger.info(f"Loss: {loss_val.mean().item()}")            
-            # monitor loss with wandb
-            wandb.log({"loss": loss_val.mean().numpy()})
+            pass
         
+        # Loss
+        loss = nn.MSELoss()(noise_pred, noise_target)
+        
+        # get x_0 from noise_pred
+        self.pred_xstart = self.diffusion._predict_xstart_from_eps(self.x_t, t, noise_pred)
+          
+        with torch.no_grad():
+            loss_val = loss*weights 
+            self.logger.info(f"Loss: {loss_val.detach().cpu().mean().item()}")            
+            # monitor loss with wandb
+            wandb.log({"loss": loss_val.detach().cpu().mean().item()})
+            
         # back-propagation: here, gradients are computed
         self.accelerator.backward(loss)
         if self.accelerator.sync_gradients:
             self.accelerator.clip_grad_value_(self.model_params_learnable,  self.clip_value)
-            # self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
+            self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
         
-        self.x_pred = x_pred.detach()
-        self.x_t = x_t.detach()
-    
+        
     # - anneal the learning rate   
     def _anneal_lr(self, epoch):
         if not self.lr_anneal_epochs:
@@ -391,13 +369,11 @@ class Trainer_accelerate:
             del unwrap_model
             del filename
             del model
-            
         save_checkpoint(0, self.model)
         save_checkpoint(self.ema_rate, self.ema.ema_model)
-        
         dist.barrier()
-            
-            
+
+     
 # - log the loss            
 def log_loss_dict(diffusion, ts, losses, logger):
     for key, values in losses.items():
@@ -407,11 +383,13 @@ def log_loss_dict(diffusion, ts, losses, logger):
             quartile = int(4 * sub_t / diffusion.num_timesteps)
             #logger.info(f"{key}_q{quartile}: {sub_loss:.4f}")   
 
+
 # - find the resume checkpoint      
 def find_resume_checkpoint():
     # On your infrastructure, you may want to override this to automatically
     # discover the latest checkpoint on your blob storage, etc.
     return None
+
 
 # - parse the resume epoch from the filename
 def parse_resume_epoch_from_filename(filename):
@@ -427,6 +405,7 @@ def parse_resume_epoch_from_filename(filename):
     except ValueError:
         return 0
     
+    
 # - find the ema checkpoint
 def find_ema_checkpoint(main_checkpoint, task, epoch, rate):
     if main_checkpoint is None:
@@ -436,6 +415,7 @@ def find_ema_checkpoint(main_checkpoint, task, epoch, rate):
     if bf.exists(path):
         return path
     return None
+
 
 def model_parameters(model, logger):
     trained_params = 0
@@ -451,6 +431,7 @@ def model_parameters(model, logger):
     logger.info(f"Total parameters ====> {Total_params}")
     logger.info(f"Total frozen parameters ====> {frozon_params}")
     logger.info(f"Total trainable parameters ====> {trained_params}")
+   
     
 # reset to zero
 def zero_grad(model_params):
@@ -471,11 +452,13 @@ def params_to_state_dict(model, params):
 def optimizer_step(optimizer: torch.optim.Optimizer, params, logger):
         return optimize_normal(optimizer, params, logger)
 
+
 def optimize_normal(optimizer, params, logger):
     # grad_norm, param_norm = compute_norms(params)
     # logger.info(f"grad_norm: {grad_norm:.4f} ----- param_norm: {param_norm:.4f}")
     optimizer.step()
     return True
+
 
 def compute_norms(params, grad_scale=1.0):
     grad_norm = 0.0

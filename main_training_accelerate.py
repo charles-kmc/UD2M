@@ -19,14 +19,14 @@ import datetime
 
 from memory_profiler import profile#type:ignore
 
-
-#torch.backends.cudnn.benchmark = True
-
+PROFILER = False
 
 def main():
     date = datetime.datetime.now().strftime("%d-%m-%Y")
     script_dir = os.path.dirname(__file__)
-    log_dir = os.path.join(script_dir, "Loggers", date)
+    script_path = script_dir.rsplit("/", 1)[0]
+    log_dir = os.path.join(script_path, "logs", "Conditional-Diffusion-Models-for-IVP", "Loggers", date)
+    os.makedirs(log_dir, exist_ok=True)
     loggers = get_loggers(log_dir, f"training_log.log")
     
     prop = 0.1
@@ -45,9 +45,19 @@ def main():
     frozen_model_path = os.path.join(frozen_model_dir, f'{frozen_model_name}.pt')
     frozen_model, diffusion = load_frozen_model(frozen_model_name, frozen_model_path, device)
 
-    
     # LoRa model from the pretrained model
-    lora_pre_trained_model = LoRa_model(frozen_model, device, rank = 2)
+    frozen_model.requires_grad_(False)
+
+    # LoRA models
+    lora_pre_trained_model = copy.deepcopy(frozen_model)
+    LoRa_model(lora_pre_trained_model, device, rank = 2)
+    
+    # Layer =s to fine tuning
+    for param in lora_pre_trained_model.out.parameters():
+        param.requires_grad_(True)
+    for name, param in lora_pre_trained_model.named_parameters():
+        if "output_blocks.2.0.out_layers.3" in name:
+            param.requires_grad_(True)
 
     # Augmented LoRa model
     epochs = 100
@@ -63,8 +73,10 @@ def main():
     in_channels = 3
     model_channels = 128
     out_channels = 3
-    aug_LoRa_model = FineTuningDiffusionModel(image_size, in_channels, model_channels, out_channels, device, frozen_model = lora_pre_trained_model)
+    aug_LoRa_model = FineTuningDiffusionModel(image_size, in_channels, model_channels, out_channels, device, frozen_model = lora_pre_trained_model)     
     ema_LoRa_model = copy.deepcopy(aug_LoRa_model)
+    for param in ema_LoRa_model.parameters():
+        param.requires_grad = False
     
     loggers.info(f"device model: {aug_LoRa_model.device} : {device}")
 
@@ -94,11 +106,13 @@ def main():
 
     # --- run training loop
     loggers.info("Start training ...")
-    trainer_accelerate.run_training_loop(num_epochs)
+    trainer_accelerate.run_training_loop(epochs)
     loggers.info("Training finish !!")
 if __name__ == "__main__":
-    # Specify the output file for memory profiler
-    # profiler_output_file = 'memory_profiler_output.log'
-    # with open(profiler_output_file, 'w+') as prof_out:
-    #     profile(stream=prof_out)
-    main()
+    if PROFILER:
+        profiler_output_file = 'memory_profiler_output.log'
+        with open(profiler_output_file, 'w+') as prof_out:
+            profile(stream=prof_out)
+            main()
+    else:
+        main()
