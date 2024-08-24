@@ -7,6 +7,7 @@ from guided_diffusion.script_util import (
     create_model_and_diffusion,
     args_to_dict,
 )
+from models.model import FineTuningDiffusionModel
 
 def load_frozen_model(model_name, model_checkpoint_path, device):
     
@@ -39,5 +40,24 @@ def load_frozen_model(model_name, model_checkpoint_path, device):
     for _k, v in model.named_parameters():
         v.requires_grad = False
     model = model.to(device)
-
     return model, diffusion
+
+def create_FineTuning_model(
+                lora_model,
+                image_size,
+                in_channels, 
+                model_channels, 
+                out_channels,
+                device
+                ):
+  
+    model = FineTuningDiffusionModel(
+                                image_size, 
+                                in_channels, 
+                                model_channels, 
+                                out_channels, 
+                                device, 
+                                frozen_model = lora_model
+                            )     
+    
+    return model

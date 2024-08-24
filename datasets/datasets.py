@@ -1,9 +1,9 @@
-from PIL import Image #type: ignore
+from PIL import Image 
 import os 
 import glob
-from torch.utils.data import DataLoader, random_split#type: ignore
-import torchvision.transforms as transforms #type: ignore
-import torch#type: ignore
+from torch.utils.data import DataLoader, random_split
+import torchvision.transforms as transforms 
+import torch
 from degradation_model.utils_deblurs import DeblurringModel
 from utils.utils import inverse_image_transform, image_transform
 
@@ -78,10 +78,13 @@ def get_data_loader(
     
     # Define the split sizes
     train_size = int(prop * len(dataset))
-    test_size = len(dataset) - train_size
+    val_size = len(dataset) - train_size
+    val_size = val_size - 16
+    
+    
 
     # Split the dataset
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    train_dataset, test_dataset, val_dataset = random_split(dataset, [train_size, 16, val_size])
    
     data_loader = DataLoader(
                             train_dataset, 
@@ -89,7 +92,12 @@ def get_data_loader(
                             shuffle=shuffle, 
                             num_workers=num_workers
                             )
-    print(len(dataset), len(data_loader), len(train_dataset))
     
-    return data_loader
+    testloader = DataLoader(
+                            test_dataset, 
+                            batch_size=8, 
+                            shuffle=shuffle, 
+                            num_workers=num_workers
+                            )
+    return data_loader, testloader
             

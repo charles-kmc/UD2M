@@ -1,9 +1,10 @@
-from torchmetrics.image import StructuralSimilarityIndexMeasure # type: ignore
-import torch #type:ignore
+from torchmetrics.image import StructuralSimilarityIndexMeasure 
+import torch 
 import math
 import os 
 import logging
-from torchviz import make_dot #type:ignore
+from torchviz import make_dot 
+import lpips
 
 
 # --- noise level evaluation function
@@ -43,6 +44,7 @@ class Metrics():
     def __init__(self, device):
         self.device = device
         self.mse = torch.nn.MSELoss()
+        self.loss_fn_vgg = lpips.LPIPS(net='vgg').to(device)
     # --- mse
     def mse_function(self,x,y):
         return self.mse(x,y)
@@ -62,6 +64,10 @@ class Metrics():
     def L1loss(self, x, y):
         L1loss = torch.nn.L1Loss()
         return L1loss(x,y)
+    
+    def lpips_function(self, x, y):
+        return self.loss_fn_vgg(x,y)
+        
 
 # --- noise level evaluation function
 def sigma_eval(x, A, snr):
@@ -111,3 +117,20 @@ def modelGaph(model, pred, save_path = "."):
     graph = make_dot(pred, params=dict(model.named_parameters()))
     graph.render("simple_model_graph", format="png")  
     graph.view()  
+
+# Define the DotDict class
+class DotDict(dict):
+    """A dictionary that allows dot notation access to keys."""
+    def __getattr__(self, item):
+        if item in self:
+            return self[item]
+        raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
+
+    def __setattr__(self, key, value):
+        self[key] = value
+
+    def __delattr__(self, item):
+        if item in self:
+            del self[item]
+        else:
+            raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")

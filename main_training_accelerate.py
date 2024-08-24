@@ -83,7 +83,7 @@ def main():
     # --- detaset 
     dataset_dir = "/users/cmk2000/sharedscratch/Datasets/ImageNet/train"
     batch_size = 8
-    train_dataloader = get_data_loader(dataset_dir, image_size, batch_size, prop)
+    train_dataloader, testloader = get_data_loader(dataset_dir, image_size, batch_size, prop)
     loggers.info(f"number of batch in dataset: {len(train_dataloader)}")
     
     trainer_accelerate = Trainer_accelerate(

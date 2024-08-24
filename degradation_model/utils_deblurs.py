@@ -21,7 +21,7 @@ class DeblurringModel(object):
         self.dtype = dtype
         self.im_size = im_size
         self.blur_types = blur_type
-        self.noise_std = [0.005, 0.01, 0.05]
+        self.noise_std = [0.05]
         
         self.blur = None
     

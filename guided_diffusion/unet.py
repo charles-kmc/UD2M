@@ -647,7 +647,6 @@ class UNetModel(nn.Module):
         ), "must specify y if and only if the model is class-conditional"
 
         hs = []
-        index_in = []
         emb = self.time_embed(timestep_embedding(timesteps, self.model_channels))
       
         if self.num_classes is not None:
@@ -658,15 +657,11 @@ class UNetModel(nn.Module):
         for ii,module in enumerate(self.input_blocks):
             h = module(h, emb)
             hs.append(h)
-            index_in.append(ii)
         h = self.middle_block(h, emb)
-        index_ou = []
         for jj,module in enumerate(self.output_blocks):
             h = th.cat([h, hs.pop()], dim=1)
             h = module(h, emb)
-            index_ou.append(jj)
         h = h.type(x.dtype)
-        print(index_ou, index_in)
         return self.out(h)
 
 

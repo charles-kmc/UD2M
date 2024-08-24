@@ -1,23 +1,18 @@
-import numpy as np#type:ignore
+import numpy as np
 import time
-import copy
-import functools
 import os
 import wandb
-import blobfile as bf #type:ignore
-import torch  #type: ignore
-import torch.nn as nn #type:ignore
-import torch.distributed as dist#type: ignore
-from torch.nn.parallel.distributed import DistributedDataParallel as DDP#type: ignore
-from torch.optim import AdamW#type: ignore
-from torchvision.utils import save_image#type: ignore
-import matplotlib.pyplot as plt#type: ignore
-import torch.nn.functional as F#type:ignore
+import blobfile as bf 
+import torch  
+import torch.nn as nn 
+import torch.distributed as dist
+from torch.optim import AdamW
+from torchvision.utils import save_image
+import matplotlib.pyplot as plt
 
-from accelerate import Accelerator#type:ignore
+from accelerate import Accelerator
 
 from . import dist_util
-from .nn import update_ema
 from .resample import LossAwareSampler, UniformSampler
 from degradation_model.utils_deblurs import deb_batch_data_solution
 from utils.utils import Metrics, inverse_image_transform, image_transform
@@ -25,9 +20,11 @@ from models.ema import EMA
 from utils_lora.lora_parametrisation import LoRaParametrisation
 from guided_diffusion.unet import TimestepEmbedSequential
 
-from memory_profiler import profile #type:ignore
+from DPIR.dpir_models import DPIR_deb, dpir_module, dpir_solver
+
+from memory_profiler import profile 
 import psutil
-from torchviz import make_dot #type:ignore
+from torchviz import make_dot 
 
 
 INITIAL_LOG_LOSS_SCALE = 20.0
@@ -56,8 +53,9 @@ class Trainer_accelerate:
             schedule_sampler = None,
             weight_decay = 0.0,
             lr_anneal_epochs = 0,
-            consistency_loss = True,
+            cons_loss = True,
             problem_type = "deblur",
+            solver = "dpir",
         ):
         
         self.logger = logger
@@ -80,15 +78,22 @@ class Trainer_accelerate:
         self.schedule_sampler = schedule_sampler or UniformSampler(diffusion)
         self.weight_decay = weight_decay
         self.lr_anneal_epochs = lr_anneal_epochs
-        self.consistency_loss = consistency_loss
+        self.cons_loss = cons_loss
         self.learn_alpha = learn_alpha
         self.epoch = 0
         self.resume_epoch = 0
         
         self.task = problem_type
-        #self.global_batch = self.batch_size * dist.get_world_size()
         
-        self.syn_cuda = torch.cuda.is_available()
+        # DPIR
+        self.solver = solver
+        drunet = 0
+        self.model_name = "drunet_color" if drunet else "ircnn_color"  
+        net_path = "/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo"
+        self.dpir = DPIR_deb(model_name = self.model_name,pretrained_pth = net_path)
+        self.iter_num = 1
+        self.alpha = 0.01
+        
         self.model = self.model.to(dist_util.dev())
         
         # load parameters of the model for training and synchronise
@@ -115,17 +120,14 @@ class Trainer_accelerate:
             self._load_optimizer()
         
         # pass training object into accelerator
-        self.model, self.optimizer, self.dataloader, self.scheduler, self.anneal_lr = self.accelerator.prepare(
+        self.model, self.optimizer, self.dataloader, self.scheduler = self.accelerator.prepare(
                                                                                                 self.model, 
                                                                                                 self.optimizer, 
                                                                                                 self.dataloader, 
-                                                                                                self.scheduler, 
-                                                                                                self._anneal_lr
-                                                                                                )
+                                                                                                self.scheduler,                                                                                                 )
         
         
         # 
-        self.global_batch = self.batch_size * dist.get_world_size()  
         self.metrics = Metrics(dist_util.dev())
         
         
@@ -159,7 +161,7 @@ class Trainer_accelerate:
                 checkpoint = dist_util.load_state_dict(ema_checkpoint)
                 
                 # Loading weights
-                self.ema.ema_model.load_state_dict(checkpoint["ema_model_state_dict"], map_location=dist_util.dev())
+                self.ema.ema_model.load_state_dict(checkpoint["model_state_dict"], map_location=dist_util.dev())
         
         # sychronise parameters of the model
         dist_util.sync_params(self.ema.ema_model.parameters())
@@ -177,23 +179,37 @@ class Trainer_accelerate:
                 self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"], map_location=dist_util.dev())
         
     # degradation model
-    def _degradation_model(self, batch_y, blur_kernel_op, device, alpha = 0.01):
-        if self.task == "deblur":
-            batch_sol_Tk = deb_batch_data_solution(batch_y, blur_kernel_op, device, alpha = alpha)
-            return batch_sol_Tk
-        elif self.task == "inp":
-            raise NotImplementedError 
-        elif self.task == "sr":
-            raise NotImplementedError
-           
+    def _degradation_model(self, batch_y, blur_kernel_op):
+        if self.solver == "tikhonov":
+            self.ad_name = self.solver + "_gauss"
+            if self.task == "deblur":
+                batch_cond = deb_batch_data_solution(batch_y, blur_kernel_op, self.device, alpha = self.alpha)
+                return batch_cond
+            elif self.task == "inp":
+                raise NotImplementedError 
+            elif self.task == "sr":
+                raise NotImplementedError
+        elif self.solver == "dpir":
+            self.ad_name = self.solver+"_"+self.model_name
+            if self.task == "deblur": 
+                batch_cond = dpir_module(batch_y, blur_kernel_op, self.dpir, self.device, iter_num=self.iter_num)
+                return batch_cond
+            elif self.task == "inp":
+                raise NotImplementedError 
+            elif self.task == "sr":
+                raise NotImplementedError
+        
     # Training loop
     #@profile(stream=open('memory_profiler_output.log', 'w+'))
     def run_training_loop(self, epochs):
         """_summary_
         """
+        wdir = "/users/cmk2000/cmk2000/Deep learning models/LLMs/logs/Conditional-Diffusion-Models-for-IVP/wandb"
+        os.makedirs(wdir, exist_ok=True)
         wandb.init(
                 # set the wandb project where this run will be logged
                 project="Training conditinal diffusion models",
+                dir="/users/cmk2000/cmk2000/Deep learning models/LLMs/logs/Conditional-Diffusion-Models-for-IVP/wandb",
 
                 # track hyperparameters and run metadata
                 config={
@@ -208,10 +224,12 @@ class Trainer_accelerate:
         refs_path = os.path.join(self.save_results, "refs")
         degrads_path = os.path.join(self.save_results, "degrads")
         sample_path = os.path.join(self.save_results, "samples")
+        est_solver_path = os.path.join(self.save_results, "est_solvers")
         os.makedirs(refs_path, exist_ok=True)
         os.makedirs(est_path, exist_ok=True)
         os.makedirs(degrads_path, exist_ok=True)
         os.makedirs(sample_path, exist_ok=True)
+        os.makedirs(est_solver_path, exist_ok=True)
         
         for epoch in range(epochs):
             # training mode
@@ -234,12 +252,13 @@ class Trainer_accelerate:
                     self.logger.info(f"Epoch ==== >> {epoch}\t|\t batch ==== >> {ii}\n") 
                     self.ii = ii
                 with self.accelerator.accumulate(self.model):       
-                    # Tikhonov data solution for consistency
-                    batch_sol_Tk =   self._degradation_model(batch_y, blur_kernel_op, dist_util.dev())
+                    
+                    # conditioning
+                    batch_cond =   self._degradation_model(batch_y, blur_kernel_op)
+                    
                     # epoch step through the model
-                    # self.run_epoch(batch_data, batch_sol_Tk, batch_y, blur_kernel_op, epoch)
-                    self.run_epoch(batch_data, batch_y, epoch)
-                    # epoch evaluation
+                    self.run_epoch(batch_data, batch_cond, epoch)
+                    
                     
                 with torch.no_grad():   
                     if 1 == 1:
@@ -260,25 +279,30 @@ class Trainer_accelerate:
                         save_image(inverse_image_transform(self.pred_xstart.cpu()), os.path.join(est_path, f"est_{epoch}.png"))
                         save_image(inverse_image_transform(batch_data.detach().cpu()), os.path.join(refs_path, f"ref_{epoch}.png"))
                         save_image(batch_y.detach().cpu(), os.path.join(degrads_path, f"degrad_{epoch}.png"))
-                        save_image(self.x_t.cpu(), os.path.join(sample_path, f"sample_{epoch}.png"))
+                        save_image(batch_cond.detach().cpu(), os.path.join(est_solver_path, f"est_{self.ad_name}_{epoch}.png"))
+                        save_image(inverse_image_transform(self.x_t.cpu()), os.path.join(sample_path, f"sample_{epoch}.png"))
                         
                 
                     end_time = time.time()  
                     ellapsed = end_time - t_start       
                     self.logger.info(f"Elapsed time per epoch: {ellapsed}")  
-                del batch_sol_Tk
+                
+                del batch_cond
                 torch.cuda.empty_cache()
                 
             # Save the last checkpoint if it wasn't already saved.
             with torch.no_grad():
-                if epoch % self.save_interval != 0:
+                if epoch % self.save_interval == 0:
                     self.accelerator.wait_for_everyone()
                     self.save(epoch)
+                else:
+                    self.accelerator.wait_for_everyone()
+                    self.save(0)
         
     # epoch through the model      
     #@profile(stream=open('memory_profiler_output.log', 'w+')) 
-    def run_epoch(self, batch_data, batch_sol_Tk, epoch):
-        self.run_forward_backward(batch_data, batch_sol_Tk)
+    def run_epoch(self, batch_data, batch_cond, epoch):
+        self.run_forward_backward(batch_data, batch_cond)
         self.optimizer.step()
         ema_update = True
         if ema_update:
@@ -292,7 +316,7 @@ class Trainer_accelerate:
                     module.lora_B.zero_()
         self.log_epoch(epoch, len(batch_data))
     
-    def run_forward_backward(self, batch_data, batch_sol_Tk):    
+    def run_forward_backward(self, batch_data, batch_cond):    
         #zero_grad(self.model_params_learnable)     
         # weight from diffusion sampler    
         t, weights = self.schedule_sampler.sample(batch_data.shape[0], dist_util.dev())
@@ -303,18 +327,22 @@ class Trainer_accelerate:
         # sample noisy x_t
         self.x_t = self.diffusion.q_sample(batch_data, t, noise=noise_target)
     
-        noise_pred  = self.model(self.x_t, t, batch_sol_Tk)
+        noise_pred  = self.model(self.x_t, t, batch_cond)
         if noise_pred.shape == (B, C * 2, *self.x_t.shape[2:]):
             noise_pred, _ = torch.split(noise_pred, C, dim=1)
         else:
             pass
         
-        # Loss
-        loss = nn.MSELoss()(noise_pred, noise_target)
-        
         # get x_0 from noise_pred
         self.pred_xstart = self.diffusion._predict_xstart_from_eps(self.x_t, t, noise_pred)
-          
+        
+        # loss
+        if self.cons_loss:   
+            loss = self.model.consistency_loss(self.pred_xstart, self.batch_y, self.blur_kernel_op)         
+        else:
+            loss = 0.0
+        loss += nn.MSELoss()(noise_pred, noise_target)
+         
         with torch.no_grad():
             loss_val = loss*weights 
             self.logger.info(f"Loss: {loss_val.detach().cpu().mean().item()}")            
@@ -327,18 +355,6 @@ class Trainer_accelerate:
             self.accelerator.clip_grad_value_(self.model_params_learnable,  self.clip_value)
             self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
         
-        
-    # - anneal the learning rate   
-    def _anneal_lr(self, epoch):
-        if not self.lr_anneal_epochs:
-            return
-        else:
-            frac_done = (epoch + self.resume_epoch) / self.lr_anneal_epochs
-            lr = self.lr * max(1e-20, 1.0 - frac_done)
-            
-            for param_group in self.optimizer.param_groups:
-                param_group["lr"] = lr
-
     # - log the epoch
     def log_epoch(self, epoch, samples_size):
         self.logger.info(f"epoch:  {epoch + self.resume_epoch} \t batch: {self.ii}\t samples: {samples_size}")
@@ -474,6 +490,6 @@ def compute_norms(params, grad_scale=1.0):
 def plot_metric(value, name):
     fig1 = plt.figure()
     plt.plot(torch.arange(len(torch.cat(value))), torch.cat(value))
-    plt.savefig("{name}.png") 
+    plt.savefig(f"{name}.png") 
         
         
