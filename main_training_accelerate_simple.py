@@ -72,6 +72,7 @@ def main():
     log_interval = 20
     save_interval = 5
     problem_type = "deblur"
+    resume_checkpoint = ""#"/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp/24-08-2024/prop_data_0.1/simple"
     
     trainer_accelerate_simple = Trainer_accelerate_simple(
                 lora_model, 
@@ -87,7 +88,8 @@ def main():
                 log_interval=log_interval,
                 save_interval=save_interval,
                 ema_rate=ema_rate,
-                problem_type = problem_type
+                problem_type = problem_type,
+                resume_checkpoint = resume_checkpoint
             )
 
     # --- run training loop

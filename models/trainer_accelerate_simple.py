@@ -275,7 +275,7 @@ class Trainer_accelerate_simple:
                         save_image(inverse_image_transform(self.x_t.cpu()), os.path.join(self.sample_path, f"sample_{epoch}.png"))
 
                     # backward diffusion model
-                    if ii == 1000:
+                    if ii == -1000:
                         self.reverse_diffusion_process(batch_cond[0], f"progressive_test_{epoch}.png", iter_num = 1000)                    
 
                     end_time = time.time()  
@@ -295,13 +295,14 @@ class Trainer_accelerate_simple:
                     self.save(0)
 
             # --- test 
-            self.model.eval()
-            for ii , (batch_test, batch_y_test, blur_kernel_op_test) in enumerate(self.testloader):
-                with torch.no_grad():                    
-                    batch_cond = self._degradation_model(batch_y_test, blur_kernel_op_test)
-                    iter_num = 100
-                    self.reverse_diffusion_process(batch_cond, f"progressive_test_{iter_num}_{epoch}.png", iter_num = iter_num)                    
-                break
+            if 1==3:
+                self.model.eval()
+                for ii , (batch_test, batch_y_test, blur_kernel_op_test) in enumerate(self.testloader):
+                    with torch.no_grad():                    
+                        batch_cond = self._degradation_model(batch_y_test, blur_kernel_op_test)
+                        iter_num = 100
+                        self.reverse_diffusion_process(batch_cond, f"progressive_test_{iter_num}_{epoch}.png", iter_num = iter_num)                    
+                    break
 
     # epoch through the model      
     #@profile(stream=open('memory_profiler_output.log', 'w+')) 
