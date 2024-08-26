@@ -23,7 +23,7 @@ from utils_lora.lora_parametrisation import LoRaParametrisation
 from DPIR.dpir_models import DPIR_deb, dpir_module, dpir_solver
 
 import psutil
-
+import math
 
 INITIAL_LOG_LOSS_SCALE = 20.0
 
@@ -380,16 +380,31 @@ class Trainer_accelerate_simple:
         for ii in range(len(seq)):
             t = torch.tensor([seq[ii]], device = self.device)
             
-            model = lambda x,t: self.model(x, t, cond)
-            out = self.diffusion.p_sample(model, x, t)
-            x = out["sample"]
+            # predict noise             
+            pred_eps = self.model(x,t,cond)
+            if pred_eps.shape[1] == 6:
+                pred_eps, _ = torch.split(pred_eps, 3, dim = 1)
+            
+            # get x_0 from the predicted noise
+            sqrt_1m_alphas_cumprod = self.diffusion.sqrt_one_minus_alphas_cumprod
+            alphas_cumprod = self.diffusion.alphas_cumprod
+            x0 = 1 / (alphas_cumprod[seq[ii]].sqrt()) * (x - sqrt_1m_alphas_cumprod.sqrt() * pred_eps)
+            
+            # sample from the predicted noise
+            if seq[ii] != seq[-1]: 
+                eta0 = 2
+                beta_t = self.diffusion.betas[seq[ii]]    
+                eta_sigma = sqrt_1m_alphas_cumprod[seq[ii+1]] / sqrt_1m_alphas_cumprod[seq[ii]] * torch.sqrt(beta_t)       
+                x = (1 / math.sqrt(1 - beta_t)) * ( x - (eta0*beta_t).sqrt() * pred_eps ) + (eta0*eta_sigma**2 ).sqrt() * torch.randn_like(x)
+            else:
+                x = x0
             
             # transforming pixels from [-1,1] ---> [0,1]    
             x_0 = inverse_image_transform(x)
         
             # save the process
             if save_progressive and (seq[ii] in progress_seq):
-                x_show = x_0[0].clone().detach().cpu().numpy()       #[0,1]
+                x_show = x0[0].clone().detach().cpu().numpy()       #[0,1]
                 x_show = np.squeeze(x_show)
                 if x_show.ndim == 3:
                     x_show = np.transpose(x_show, (1, 2, 0))
@@ -400,7 +415,7 @@ class Trainer_accelerate_simple:
             imsave(img_total*255., os.path.join(self.save_progressive_dir, img_name))
          
         name = "sample_" + img_name.split("_",1)[-1]    
-        save_image(out["pred_xstart"].detach().cpu(), os.path.join(self.save_progressive_dir, name))
+        save_image(x_0.detach().cpu(), os.path.join(self.save_progressive_dir, name))
 
     
     # - log the epoch
