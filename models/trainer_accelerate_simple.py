@@ -392,7 +392,7 @@ class Trainer_accelerate_simple:
             
             # sample from the predicted noise
             if seq[ii] != seq[-1]: 
-                eta0 = 2
+                eta0 = 1
                 beta_t = self.diffusion.betas[seq[ii]]    
                 eta_sigma = sqrt_1m_alphas_cumprod[seq[ii+1]] / sqrt_1m_alphas_cumprod[seq[ii]] * torch.sqrt(beta_t)       
                 x = (1 / math.sqrt(1 - beta_t)) * ( x - (eta0*beta_t).sqrt() * pred_eps ) + (eta0*eta_sigma**2 ).sqrt() * torch.randn_like(x)
