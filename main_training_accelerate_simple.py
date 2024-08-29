@@ -40,7 +40,7 @@ def main():
 
     # LoRa model from the pretrained model
     lora_model = copy.deepcopy(frozen_model)
-    LoRa_model(frozen_model, device, rank = 5)
+    LoRa_model(lora_model, device, rank = 5)
     lora_model = Pipeline(lora_model, device)
     
     # Frozen ema model

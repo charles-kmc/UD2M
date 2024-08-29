@@ -12,7 +12,7 @@
 ## Job name
 #SBATCH -J cond_diff
 ## Run time: "hours:minutes:seconds", "days-hours"
-#SBATCH --time=150:00:00
+#SBATCH --time=15:00:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
 #SBATCH --mem-per-cpu=20000
 ## GPU requirements

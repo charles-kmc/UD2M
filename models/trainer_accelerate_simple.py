@@ -316,11 +316,7 @@ class Trainer_accelerate_simple:
 
         self.scheduler.step() 
         self.model.zero_grad()
-        with torch.no_grad():
-            for _, module in self.model.named_modules():
-                if isinstance(module, LoRaParametrisation):
-                    module.lora_A.zero_()
-                    module.lora_B.zero_()
+
         self.log_epoch(epoch, len(batch_data))
 
     def run_forward_backward(self, batch_data, batch_cond):        
@@ -341,23 +337,21 @@ class Trainer_accelerate_simple:
         self.pred_xstart = self.diffusion._predict_xstart_from_eps(self.x_t, t, noise_pred)
         
         # loss
-        if self.cons_loss:   
+        if self.cons_loss and 1 == 3:   
             loss = self.model.consistency_loss(self.pred_xstart, self.batch_y, self.blur_kernel_op)         
         else:
             loss = 0.0
         loss += nn.MSELoss()(noise_pred, noise_target)
-              
+        # back-propagation: here, gradients are computed
+        self.accelerator.backward(loss)        
         with torch.no_grad():
             loss_val = loss*weights
             self.logger.info(f"Loss: {loss_val.detach().cpu().mean().item()}")            
             # monitor loss with wandb
             wandb.log({"loss": loss_val.detach().cpu().mean().item()})
-        
-        # back-propagation: here, gradients are computed
-        self.accelerator.backward(loss)
-        if self.accelerator.sync_gradients:
-            self.accelerator.clip_grad_value_(self.model_params_learnable,  self.clip_value)
-            self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
+        # if self.accelerator.sync_gradients:
+        #     self.accelerator.clip_grad_value_(self.model_params_learnable,  self.clip_value)
+        #     self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
     
     # Reverse diffusion process
     def reverse_diffusion_process(self, cond:torch.tensor, img_name:str, iter_num:int = 100, save_progressive = True):
