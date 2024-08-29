@@ -359,7 +359,7 @@ class Trainer_accelerate_simple:
             self.accelerator.clip_grad_value_(self.model_params_learnable,  self.clip_value)
             self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
     
-    
+    # Reverse diffusion process
     def reverse_diffusion_process(self, cond:torch.tensor, img_name:str, iter_num:int = 100, save_progressive = True):
         # timesteps
         seq = np.sqrt(np.linspace(0, self.diffusion.num_timesteps**2, iter_num))
@@ -378,10 +378,11 @@ class Trainer_accelerate_simple:
         
         # reverse process
         for ii in range(len(seq)):
+            # timestep
             t = torch.tensor([seq[ii]], device = self.device)
             
             # predict noise             
-            pred_eps = self.model(x,t,cond)
+            pred_eps = self.model(x, t, cond)
             if pred_eps.shape[1] == 6:
                 pred_eps, _ = torch.split(pred_eps, 3, dim = 1)
             
