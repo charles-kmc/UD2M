@@ -337,7 +337,7 @@ class Trainer_accelerate_simple:
         self.pred_xstart = self.diffusion._predict_xstart_from_eps(self.x_t, t, noise_pred)
         
         # loss
-        if self.cons_loss and 1 == 3:   
+        if self.cons_loss:   
             loss = self.model.consistency_loss(self.pred_xstart, self.batch_y, self.blur_kernel_op)         
         else:
             loss = 0.0
