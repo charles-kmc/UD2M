@@ -6,7 +6,7 @@ import copy
 from models.load_frozen_model import load_frozen_model
 from models.pipeline import Pipeline
 from utils_lora.lora_parametrisation import LoRa_model
-from models import dist_util 
+from guided_diffusion import dist_util 
 from datasets.datasets import get_data_loader
 from models.trainer_accelerate_simple import Trainer_accelerate_simple
 from utils.get_logger import get_loggers
@@ -40,7 +40,7 @@ def main():
 
     # LoRa model from the pretrained model
     lora_model = copy.deepcopy(frozen_model)
-    LoRa_model(lora_model, device, rank = 5)
+    LoRa_model(lora_model, device, rank = 2)
     lora_model = Pipeline(lora_model, device)
     
     # Frozen ema model
@@ -72,7 +72,7 @@ def main():
     log_interval = 20
     save_interval = 5
     problem_type = "deblur"
-    resume_checkpoint = ""#"/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp/24-08-2024/prop_data_0.1/simple"
+    resume_checkpoint = ""
     
     trainer_accelerate_simple = Trainer_accelerate_simple(
                 lora_model, 
