@@ -414,7 +414,7 @@ class TrainerPlt(Trainer):
                 self.eval_dataloader[self.G - 1].drop_last
             )
 
-            self.model.eval()
+            # self.model.eval()
             for i in (
                 progress_bar := tqdm(
                     range(batches),
@@ -544,7 +544,7 @@ class UnfoldedTrainer(TrainerPlt):
 
         return self.model
 
-class DiffusionTrainer(UnfoldedTrainer):
+class DiffusionTrainer(TrainerPlt):
     def prepare_images(self, physics_cur, x, y, x_net):
         r"""
         Prepare the images for plotting.

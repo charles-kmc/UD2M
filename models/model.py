@@ -171,9 +171,7 @@ class ResBlock_new(nn.Module):
         :return: an [N x C x ...] Tensor of outputs.
         """
         
-        return checkpoint(
-            self._forward, (x,), self.parameters(), False
-        )
+        return self._forward(x)
 
     def _forward(self, x):
         if self.updown:

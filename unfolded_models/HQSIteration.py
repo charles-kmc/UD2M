@@ -3,7 +3,8 @@ import torch
 # Function to initialize hqs given the observation 
 # obs = (y, x_t)
 def init_hqs_diff(obs, physics):
-    return {"est":(obs[-1], obs[-1])}
+    init = physics.prox_l2(torch.zeros_like(obs[0]), obs, gamma=1000)
+    return {"est":(init, init)}
 
 class HQSDiff(torch.nn.Module):
     """
@@ -15,6 +16,7 @@ class HQSDiff(torch.nn.Module):
         self.F_fn = None ## ""
 
     def forward(self, x, cur_data_fidelity, cur_prior, cur_params, y, physics): 
+
         ## Proximal data fidelity step
         z = cur_data_fidelity.prox(
             x["est"][0],

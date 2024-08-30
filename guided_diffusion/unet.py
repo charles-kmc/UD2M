@@ -652,7 +652,7 @@ class UNetModel(nn.Module):
         if self.num_classes is not None:
             assert y.shape == (x.shape[0],)
             emb = emb + self.label_emb(y)
-
+        
         h = x.type(self.dtype)
         for ii,module in enumerate(self.input_blocks):
             h = module(h, emb)

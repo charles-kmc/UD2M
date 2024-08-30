@@ -3,14 +3,9 @@ import datetime
 import os 
 from utils import utils_model
 import numpy as np
-from guided_diffusion import dist_util
-from guided_diffusion.script_util import(
-    NUM_CLASSES,
-    model_and_diffusion_defaults,
-    create_model_and_diffusion,
-    args_to_dict
-)
+from models.load_frozen_model import load_frozen_model
 from utils_lora.lora_parametrisation import LoRa_model, make_copy_model
+import copy 
 
 def load_model(
         device, 
@@ -37,27 +32,25 @@ def load_model(
         )
         
     args = utils_model.create_argparser(model_config).parse_args([])
-    model, diffusion = create_model_and_diffusion(
-        **args_to_dict(args, model_and_diffusion_defaults().keys()))
-    model.load_state_dict(
-        dist_util.load_state_dict(args.model_path, map_location="cpu")
-    )
-    model.eval()
-    for _k, v in model.named_parameters():
-        v.requires_grad = False
-    model = model.to(device)
+    frozen_model, diffusion = load_frozen_model(model_name, model_path, device)
 
     if use_lora:
-        model_copy = make_copy_model(model)
-        LoRa_model(model_copy, device)
-        return model_copy
+        lora_model = copy.deepcopy(frozen_model)
+        LoRa_model(lora_model, device)
+        for param in lora_model.out.parameters():
+            param.requires_grad_(True)
+        for name, param in lora_model.named_parameters():
+            if "output_blocks.2.0.out_layers.3" in name:
+                param.requires_grad_(True)
+        return lora_model
     else: 
-        return model
+        return frozen_model
 
 class DiffUNet(torch.nn.Module):
     def __init__(self, device, use_lora = False, model_path =  './model_zoo/', beta_start = 0.1/1000, beta_end = 20/1000, T=1000):
         super(DiffUNet, self).__init__()
         self.device = device 
+        self.explicit_prior = False
         self.T = T
         self.model = load_model(self.device, use_lora=use_lora, model_path=model_path)
         self.betas = np.linspace(beta_start, beta_end, self.T, dtype=np.float32)
@@ -72,10 +65,13 @@ class DiffUNet(torch.nn.Module):
     def forward(self, x, t):
         x = 2.0 * x - 1.0  ## Denoiser operates on images in [-1,1]
         if not isinstance(t, torch.Tensor):
-            t = torch.tensor(list(t))
+            t = torch.tensor(list([t]))
         noise_map = self.model(x, t.clone().flatten())
-        noise_map = x[:, :3, ...]
+        noise_map = noise_map[:, :3, ...]
         noise_map = (noise_map + 1.0) / 2.0  ## Rescale back to [0,1]
         x = (x + 1.0)/2.0
         x_denoised = x/self.sqrt_alphas_cumprod[t] - self.sigmas[t]*noise_map
         return x_denoised
+    
+    def prox(self, x, ts, *args, **kwargs):
+        return self.forward(x, ts)

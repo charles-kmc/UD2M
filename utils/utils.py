@@ -1,9 +1,9 @@
-from torchmetrics.image import StructuralSimilarityIndexMeasure 
+# from torchmetrics.image import StructuralSimilarityIndexMeasure 
 import torch 
 import math
 import os 
 import logging
-from torchviz import make_dot 
+# from torchviz import make_dot 
 import lpips
 
 
@@ -55,10 +55,10 @@ class Metrics():
         return -10*torch.log10(mse_xy)
     
     # --- ssim
-    def ssim_function(self,x,y):
-        ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(self.device)
-        ss  = ssim(x, y)
-        return ss
+    # def ssim_function(self,x,y):
+    #     ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(self.device)
+    #     ss  = ssim(x, y)
+    #     return ss
     
     # --- L1 loss
     def L1loss(self, x, y):
@@ -67,7 +67,6 @@ class Metrics():
     
     def lpips_function(self, x, y):
         return self.loss_fn_vgg(x,y)
-        
 
 # --- noise level evaluation function
 def sigma_eval(x, A, snr):
@@ -84,7 +83,6 @@ def image_transform(x, x_min = -1.0, x_max = 1.0):
 
 def inverse_image_transform(x, x_min = -1.0, x_max = 1.0):
     return torch.clamp(0.5*x + 0.5, x_min, x_max)
-
 
 # register Hook for debugging
 class RegisterHook:
@@ -106,17 +104,17 @@ class RegisterHook:
                 module.register_backward_hook(self.backward_hook)
                 
 # get the graph and achitecture
-def modelGaph(model, pred, save_path = "."):
-    dot = make_dot(pred, params=dict(model.named_parameters()))
+# def modelGaph(model, pred, save_path = "."):
+#     dot = make_dot(pred, params=dict(model.named_parameters()))
 
-    # Save the visualized achitecture as a PNG file
-    dot.format = 'png'
-    dot.render('model_architecture')
+#     # Save the visualized achitecture as a PNG file
+#     dot.format = 'png'
+#     dot.render('model_architecture')
     
-    # Visualize the computational graph
-    graph = make_dot(pred, params=dict(model.named_parameters()))
-    graph.render("simple_model_graph", format="png")  
-    graph.view()  
+#     # Visualize the computational graph
+#     graph = make_dot(pred, params=dict(model.named_parameters()))
+#     graph.render("simple_model_graph", format="png")  
+#     graph.view()  
 
 # Define the DotDict class
 class DotDict(dict):

@@ -125,9 +125,9 @@ class DiffJointPhysics(dinv.physics.DecomposablePhysics):
         if isinstance(self.y_physics.mask, float):
             scaling = self.y_physics.mask**2/ self.y_physics.noise_model.sigma**2 + 1 / gamma + 1 / self.diff_physics.sigma + 1 / self.diff_physics.sigma**2 * xt
         else:
-            scaling = torch.conj(self.y_physics.mask) * self.y_physics.mask/ self.y_physics.noise_model.sigma**2 + 1 / gamma 
+            scaling = torch.conj(self.y_physics.mask) * self.y_physics.mask/ self.y_physics.noise_model.sigma**2 
             scaling = scaling.expand(self.diff_physics.sigma.shape[0],*scaling.shape[1:])
-            scaling = scaling + 1 / self.diff_physics.sigma.clone().unsqueeze(-1)**2
+            scaling = scaling + 1 / self.diff_physics.sigma.clone().unsqueeze(-1)**2 + 1 / gamma
 
         x = self.y_physics.V(self.y_physics.V_adjoint(b) / scaling)
         return x
