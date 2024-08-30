@@ -13,8 +13,8 @@ import matplotlib.pyplot as plt
 
 from accelerate import Accelerator
 
-from . import dist_util
-from .resample import LossAwareSampler, UniformSampler
+from guided_diffusion import dist_util
+from guided_diffusion.resample import LossAwareSampler, UniformSampler
 from degradation_model.utils_deblurs import deb_batch_data_solution
 from utils.utils import Metrics, inverse_image_transform, image_transform
 from models.ema import EMA
@@ -316,11 +316,7 @@ class Trainer_accelerate_simple:
 
         self.scheduler.step() 
         self.model.zero_grad()
-        with torch.no_grad():
-            for _, module in self.model.named_modules():
-                if isinstance(module, LoRaParametrisation):
-                    module.lora_A.zero_()
-                    module.lora_B.zero_()
+
         self.log_epoch(epoch, len(batch_data))
 
     def run_forward_backward(self, batch_data, batch_cond):        
@@ -329,38 +325,57 @@ class Trainer_accelerate_simple:
         B, C = batch_data.shape[:2]
         # get noise
         noise_target = torch.randn_like(batch_data)
+        
         # sample noisy x_t
-        self.x_t = self.diffusion.q_sample(batch_data, t, noise=noise_target)
+        self.x_t = self.diffusion.q_sample(
+            batch_data, 
+            t, 
+            noise=noise_target
+        )
+        
         # predict noise: eps
         noise_pred  = self.model(self.x_t, t, batch_cond)
         if noise_pred.shape == (B, C * 2, *self.x_t.shape[2:]):
             noise_pred, _ = torch.split(noise_pred, C, dim=1)
         else:
             pass
+        
         # get x_0 from noise_pred
-        self.pred_xstart = self.diffusion._predict_xstart_from_eps(self.x_t, t, noise_pred)
+        self.pred_xstart = self.diffusion._predict_xstart_from_eps(
+            self.x_t, 
+            t, 
+            noise_pred
+        )
         
         # loss
         if self.cons_loss:   
-            loss = self.model.consistency_loss(self.pred_xstart, self.batch_y, self.blur_kernel_op)         
+            loss = self.model.consistency_loss(
+                self.pred_xstart, 
+                self.batch_y, 
+                self.blur_kernel_op
+            )         
         else:
             loss = 0.0
         loss += nn.MSELoss()(noise_pred, noise_target)
-              
+        # back-propagation: here, gradients are computed
+        self.accelerator.backward(loss)        
         with torch.no_grad():
             loss_val = loss*weights
             self.logger.info(f"Loss: {loss_val.detach().cpu().mean().item()}")            
             # monitor loss with wandb
             wandb.log({"loss": loss_val.detach().cpu().mean().item()})
-        
-        # back-propagation: here, gradients are computed
-        self.accelerator.backward(loss)
-        if self.accelerator.sync_gradients:
-            self.accelerator.clip_grad_value_(self.model_params_learnable,  self.clip_value)
-            self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
+        # if self.accelerator.sync_gradients:
+        #     self.accelerator.clip_grad_value_(self.model_params_learnable,  self.clip_value)
+        #     self.accelerator.clip_grad_norm_(self.model_params_learnable,   self.max_grad_norm)
     
     # Reverse diffusion process
-    def reverse_diffusion_process(self, cond:torch.tensor, img_name:str, iter_num:int = 100, save_progressive = True):
+    def reverse_diffusion_process(
+        self, 
+        cond:torch.tensor, 
+        img_name:str, 
+        iter_num:int = 100, 
+        save_progressive = True
+    ):
         # timesteps
         seq = np.sqrt(np.linspace(0, self.diffusion.num_timesteps**2, iter_num))
         seq = [int(s) for s in list(seq)]
@@ -500,7 +515,12 @@ def parse_resume_epoch_from_filename(filename):
         return 0
     
 # - find the ema checkpoint
-def find_ema_checkpoint(main_checkpoint, task, epoch, rate):
+def find_ema_checkpoint(
+    main_checkpoint, 
+    task, 
+    epoch, 
+    rate
+):
     if main_checkpoint is None:
         return None
     filename = f"{task}_ema_{rate}_{(epoch):06d}.pt"

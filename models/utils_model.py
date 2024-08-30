@@ -1,8 +1,8 @@
 import argparse
 import inspect
 
-from . import gaussian_diffusion as gd
-from .respace import SpacedDiffusion, space_timesteps
+from guided_diffusion import gaussian_diffusion as gd
+from guided_diffusion.respace import SpacedDiffusion, space_timesteps
 from .model import FineTuningDiffusionModel
 
 NUM_CLASSES = 1000
