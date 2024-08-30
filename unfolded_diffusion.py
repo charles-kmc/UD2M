@@ -42,8 +42,7 @@ denoiser = DiffUNet(
                 use_lora=LORA,  ## Switch on/off LORA
                 model_path='../sharedscratch/modelzoo/diffusion_ffhq_10m.pt'
             )
-denoiser = ckpt_denoiser(denoiser)
-prior = dinv.optim.PnP(denoiser = denoiser)
+# denoiser = ckpt_denoiser(denoiser)  ## Checkpointing currently does not work with LORA
 data_fidelity = dinv.optim.data_fidelity.L2()
 
 ## Get Measurement and diffusion noise operators
@@ -75,6 +74,7 @@ optim_params = {
      "stepsize":[noise_level**2]*num_optim_iterations  # Data fidelity proximal scaling parameter for each step
 }
 
+
 ## Unfolded Optimization scheme with UNet prior
 unfolded_model = unfolded_builderLP(
      iteration=HQSDiff(),
@@ -83,14 +83,14 @@ unfolded_model = unfolded_builderLP(
      trainable_params=optim_params.copy(),
      log_trainable_params=optim_params.copy(),  # Learn log of optim params
      data_fidelity=data_fidelity,
-     prior=prior,
+     prior=denoiser,
      device=device,
      max_iter=num_optim_iterations
 )
 
 def train():
     wandb_config = {
-    "project":"Conditional_Diffusion_for_IV",
+    "project":"Conditional_Diffusion_for_IVP",
     "name":"Unrolled_HQS_UNet",
     "config":{
             "LORA":LORA
@@ -117,6 +117,7 @@ def train():
          ],
          weight_decay=0
     )
+
     trainer = DiffusionTrainer(
         unfolded_model,
         save_every_n_iter=50,
@@ -140,7 +141,7 @@ def train():
     )
 
 
-    model = trainer.train(epochs=EPOCHS, no_expand_levels=0)
+    model = trainer.train(epochs=EPOCHS)
     return model
 
 
