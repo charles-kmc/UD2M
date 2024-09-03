@@ -12,16 +12,16 @@ device = dinv.utils.get_freer_gpu() if torch.cuda.is_available() else "cpu"
 
 ## Training Params 
 BATCH_SIZE      =       8
-LR_optim        =       1e-3
-LR_UNet         =       1e-4
-EPOCHS          =       2
+LR_optim        =       1e-2
+LR_UNet         =       1e-5
+EPOCHS          =       10
 
 
 ## Get datasets
 train_set, test_set, img_shape = get_dataset(
     datasetname="FFHQ",
     img_width=256
-)
+)  
 train_loader = torch.utils.data.DataLoader(
     train_set,
     batch_size = BATCH_SIZE,
@@ -36,7 +36,7 @@ test_loader = torch.utils.data.DataLoader(
     shuffle = False
 )
 
-LORA = True
+LORA = True ## Switch on/off LORA
 denoiser = DiffUNet(
                 device=device,
                 use_lora=LORA,  ## Switch on/off LORA
@@ -47,8 +47,14 @@ data_fidelity = dinv.optim.data_fidelity.L2()
 
 ## Get Measurement and diffusion noise operators
 noise_level = 0.05
-kernel = dinv.physics.blur.gaussian_blur(sigma=(3,3))
-y_noise = dinv.physics.GaussianNoise(sigma=noise_level)
+
+## Load Forward Operator on y
+# Currently using Gaussian deblurring,
+# however the code should run for any instance
+# of deepinv.physics.DecomposablePhysics for which one can easily compute 
+# the prox operator of the data fidelity
+kernel = dinv.physics.blur.gaussian_blur(sigma=(3,3))  ## Use gaussian blur kernel
+y_noise = dinv.physics.GaussianNoise(sigma=noise_level)  ## Noise model for y
 y_operator = dinv.physics.BlurFFT(
     img_size=img_shape,
     filter=kernel,
@@ -79,7 +85,7 @@ optim_params = {
 unfolded_model = unfolded_builderLP(
      iteration=HQSDiff(),
      params_algo=optim_params,
-     custom_init=init_hqs_diff,
+     custom_init=init_hqs_diff,  # Function to initialize HQS given (y, xt and the forward operator)
      trainable_params=optim_params.copy(),
      log_trainable_params=optim_params.copy(),  # Learn log of optim params
      data_fidelity=data_fidelity,
@@ -120,9 +126,9 @@ def train():
 
     trainer = DiffusionTrainer(
         unfolded_model,
-        save_every_n_iter=50,
+        save_every_n_iter=50,  # Upload rsults to wandb every 50 training iter
         training_metrics=[dinv.loss.PSNR()],
-        physics = Joint_operator,
+        physics = Joint_operator,  # Joint forward operators 
         train_dataloader=train_loader,
         eval_dataloader = test_loader,
         epochs = EPOCHS,

@@ -67,11 +67,11 @@ class DiffUNet(torch.nn.Module):
         if not isinstance(t, torch.Tensor):
             t = torch.tensor(list([t]))
         noise_map = self.model(x, t.clone().flatten())
-        noise_map = noise_map[:, :3, ...]
+        noise_map = noise_map[:, :3, ...]   # Take noise map
         noise_map = (noise_map + 1.0) / 2.0  ## Rescale back to [0,1]
         x = (x + 1.0)/2.0
         x_denoised = x/self.sqrt_alphas_cumprod[t] - self.sigmas[t]*noise_map
         return x_denoised
     
-    def prox(self, x, ts, *args, **kwargs):
+    def prox(self, x, ts, *args, **kwargs):  # Return prox operator
         return self.forward(x, ts)

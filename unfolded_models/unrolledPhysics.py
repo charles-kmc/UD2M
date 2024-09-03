@@ -89,6 +89,7 @@ class DiffusionNoise(torch.nn.Module):
 
     def forward(self, x0, **kwargs):
         self.ts = torch.randint(
+            1,
             self.T,
             (x0.shape[0], 1) + (1,) * (x0.dim() - 2),
             device=x0.device
@@ -120,15 +121,15 @@ class DiffJointPhysics(dinv.physics.DecomposablePhysics):
 
         """
         y, xt = y_xt
-        xt = xt / self.diff_physics.sqrt_alphas_cumprod[self.diff_physics.ts]
+        xt = xt / self.diff_physics.sqrt_alphas_cumprod[self.diff_physics.ts]  # Normalise x_t by \bar\alpha_t^0.5
         b = self.y_physics.A_adjoint(y) / self.y_physics.noise_model.sigma**2 + 1 / gamma * z + 1 / self.diff_physics.sigma**2 * xt
         if isinstance(self.y_physics.mask, float):
-            scaling = self.y_physics.mask**2/ self.y_physics.noise_model.sigma**2 + 1 / gamma + 1 / self.diff_physics.sigma + 1 / self.diff_physics.sigma**2 * xt
-        else:
+            scaling = self.y_physics.mask**2/ self.y_physics.noise_model.sigma**2 + 1 / gamma  + 1 / self.diff_physics.sigma**2 * xt
+        else:  # Dinv uses rfft for singular value decomposition of circular blur
             scaling = torch.conj(self.y_physics.mask) * self.y_physics.mask/ self.y_physics.noise_model.sigma**2 
             scaling = scaling.expand(self.diff_physics.sigma.shape[0],*scaling.shape[1:])
             scaling = scaling + 1 / self.diff_physics.sigma.clone().unsqueeze(-1)**2 + 1 / gamma
-
+        # Solve {scaling * x = b}
         x = self.y_physics.V(self.y_physics.V_adjoint(b) / scaling)
         return x
 
