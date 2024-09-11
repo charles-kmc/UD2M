@@ -12,8 +12,8 @@ device = dinv.utils.get_freer_gpu() if torch.cuda.is_available() else "cpu"
 
 ## Training Params 
 BATCH_SIZE      =       8
-LR_optim        =       1e-2
-LR_UNet         =       1e-5
+LR_optim        =       1e-3
+LR_UNet         =       1e-4
 EPOCHS          =       10
 
 
@@ -75,9 +75,10 @@ Joint_operator = DiffJointPhysics(
 
 ## Optimization Params
 iterator = HQSDiff()
-num_optim_iterations = 3
+num_optim_iterations = 1
 optim_params = {
-     "stepsize":[noise_level**2]*num_optim_iterations  # Data fidelity proximal scaling parameter for each step
+     "stepsize":[noise_level**2]*num_optim_iterations,  # Data fidelity proximal scaling parameter for each step
+     "eta":[1.]
 }
 
 
@@ -104,25 +105,32 @@ def train():
     }
     optimizer_params = []  # Parameters for the optimization algorithm
     UNet_params = []  # Parameters in the UNet
+    time_embed_params = []
     print("Trainable Parameters")
     for k, p in unfolded_model.named_parameters():
         if p.requires_grad:
             if "prior." in k:
                 print(f"prior: {k}")
-                UNet_params.append(p)
+                if "time_embed" in k:
+                    time_embed_params.append(p)
+                else:
+                    UNet_params.append(p)
+
             else:
                 print(f"Optim: {k}")
                 optimizer_params.append(p)
 
     losses = [dinv.loss.SupLoss()]
     metrics = [dinv.loss.PSNR(), LPIPS_seed(device=device), SSIM_seed(device=device)]
+    unrol_param_group = {"params":optimizer_params, "lr":LR_optim, "tag":"Optimparams"}
+    UNET_param_group = {"params":UNet_params, "lr":LR_UNet, "tag":"UNetparams"}
+    embedding_param_group = {"params":time_embed_params, "lr":LR_UNet, "tag":"Embeddingparams"}
     optimizer = torch.optim.Adam(
          [
-            {"params":optimizer_params, "lr":LR_optim, "tag":"Optimparams"},
-            {"params":UNet_params, "lr":LR_UNet, "tag":"UNetparams"}
+            embedding_param_group
          ],
          weight_decay=0
-    )
+    )  # Initialize optimizer with only parameters to be pretrained
 
     trainer = DiffusionTrainer(
         unfolded_model,
@@ -146,7 +154,12 @@ def train():
         wandb_setup=wandb_config,
     )
 
-
+    # Pretrain time embedding
+    if len(time_embed_params)>0:
+        model = trainer.train(epochs=1)
+    ## Add remaining param groups and train remaining epochs
+    trainer.optimizer.add_param_group(unrol_param_group)
+    trainer.optimizer.add_param_group(UNET_param_group)
     model = trainer.train(epochs=EPOCHS)
     return model
 

@@ -87,16 +87,21 @@ class DiffusionNoise(torch.nn.Module):
         self.sqrt_1m_alphas_cumprod  = torch.sqrt(1. - self.alphas_cumprod).to(device)
         self.sigmas   = torch.div(self.sqrt_1m_alphas_cumprod, self.sqrt_alphas_cumprod)
 
-    def forward(self, x0, **kwargs):
-        self.ts = torch.randint(
-            1,
-            self.T,
-            (x0.shape[0], 1) + (1,) * (x0.dim() - 2),
-            device=x0.device
-        )
+    def forward(self, x0, t = None, **kwargs):
+        x0 = 2. * x0 - 1
+        if t is None:
+            self.ts = torch.randint(
+                1,
+                self.T,
+                (x0.shape[0], 1) + (1,) * (x0.dim() - 2),
+                device=x0.device
+            )
+        else: 
+            self.ts = torch.tensor(t)
         xt = self.sqrt_alphas_cumprod[self.ts] * x0 + self.sqrt_1m_alphas_cumprod[self.ts] * torch.randn_like(x0)
-        self.sigma = self.sigmas[self.ts]
-        return xt
+        # Return output in [0,1]
+        self.sigma = 0.5*self.sigmas[self.ts]
+        return 0.5*(xt + 1.)
 
 class DiffJointPhysics(dinv.physics.DecomposablePhysics):
     def __init__(self, y_physics:dinv.physics.Physics, diff_physics:DiffusionNoise):
@@ -104,32 +109,33 @@ class DiffJointPhysics(dinv.physics.DecomposablePhysics):
         self.y_physics = y_physics
         self.diff_physics = diff_physics
     
-    def forward(self, x, **kwargs):
+    def forward(self, x, t=None, **kwargs):
         y = self.y_physics(x, **kwargs)
-        xt = self.diff_physics(x)
+        self.sigma_y = self.y_physics.noise_model.sigma
+        xt = self.diff_physics(x, t=t)
+        self.sigma_xt = self.diff_physics.sigma
         return torch.stack([y, xt], dim=0)
 
     def prox_l2(self, z, y_xt, gamma):
         r"""
-        Computes proximal operator of :math:`f(x)=\frac{\gamma}{2}\|Ax-y\|^2`
-        in an efficient manner leveraging the singular vector decomposition.
-
-        :param torch.Tensor y: measurements tensor
-        :param torch.Tensor, float z: signal tensor
-        :param float gamma: hyperparameter :math:`\gamma` of the proximal operator
-        :return: (torch.Tensor) estimated signal tensor
-
+        Implements prox operator in [0,1] domain
         """
         y, xt = y_xt
-        xt = xt / self.diff_physics.sqrt_alphas_cumprod[self.diff_physics.ts]  # Normalise x_t by \bar\alpha_t^0.5
-        b = self.y_physics.A_adjoint(y) / self.y_physics.noise_model.sigma**2 + 1 / gamma * z + 1 / self.diff_physics.sigma**2 * xt
+        xt = xt  # Normalise x_t by \bar\alpha_t^0.5
+        rt_alpha_bar_t =  self.diff_physics.sqrt_alphas_cumprod[self.diff_physics.ts]
+        alpha_bar_t = rt_alpha_bar_t.square()
+        
+        b = self.y_physics.A_adjoint(y) / self.sigma_y**2 \
+            + 1 / gamma * z \
+            + 4 * rt_alpha_bar_t*xt/(1-alpha_bar_t)\
+            - 2 *rt_alpha_bar_t*(1-rt_alpha_bar_t)/(1-alpha_bar_t)  # Bias from moving xt back to [0,1]
+
         if isinstance(self.y_physics.mask, float):
-            scaling = self.y_physics.mask**2/ self.y_physics.noise_model.sigma**2 + 1 / gamma  + 1 / self.diff_physics.sigma**2 * xt
+            scaling = self.y_physics.mask**2/ self.sigma_y**2 + 1 / gamma  + 1 / self.sigma_xt**2 * xt
         else:  # Dinv uses rfft for singular value decomposition of circular blur
-            scaling = torch.conj(self.y_physics.mask) * self.y_physics.mask/ self.y_physics.noise_model.sigma**2 
-            scaling = scaling.expand(self.diff_physics.sigma.shape[0],*scaling.shape[1:])
-            scaling = scaling + 1 / self.diff_physics.sigma.clone().unsqueeze(-1)**2 + 1 / gamma
+            scaling = torch.conj(self.y_physics.mask) * self.y_physics.mask/ self.sigma_y**2 
+            scaling = scaling.expand(self.sigma_xt.shape[0],*scaling.shape[1:])
+            scaling = scaling + 1 / self.sigma_xt.clone().unsqueeze(-1)**2 + 1 / gamma
         # Solve {scaling * x = b}
         x = self.y_physics.V(self.y_physics.V_adjoint(b) / scaling)
         return x
-

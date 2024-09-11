@@ -28,6 +28,7 @@ class LoRaParametrisation(nn.Module):
         if self.enabled:
             lora_update = torch.matmul(self.lora_A, self.lora_B).view(original_weights.shape) 
             lora_update = lora_update * self.scale
+            # print('LW: ', original_weights + lora_update)
             return original_weights + lora_update
         return original_weights
 
@@ -37,7 +38,6 @@ def layer_parametrisation(layer, device, rank = 2):
     return LoRaParametrisation(in_channel, out_channel, dtype, device = device, rank = rank)
 
 def apply_lora_parametrization(model, rank, device):
-    
     for name, layer in model.named_modules():
     #    Check if the layer name ends with "qkv" or "proj_out"
         if name.endswith("qkv") or name.endswith("proj_out"):

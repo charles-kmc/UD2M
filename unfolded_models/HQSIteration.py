@@ -51,7 +51,9 @@ class HQSDiff(torch.nn.Module):
         ## Proximal denoiser step
         x = cur_prior.prox(
             z,
-            physics.diff_physics.ts
+            physics.diff_physics.ts,
+            eta=cur_params["eta"]
         )
+        x = x.clip(0,1)
         
         return {"est":(x,z)}  

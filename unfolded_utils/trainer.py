@@ -41,7 +41,7 @@ class EarlyStopping(torch.nn.Module):
 
 ## Modified to plot images with checkpoints
 class TrainerPlt(Trainer):
-    def __init__(self, model, save_every_n_iter = None, training_metrics=None, resume_last=False, EarlyStopper=None, **kwargs):
+    def __init__(self, model, pretrain_optimizer = None, save_every_n_iter = None, training_metrics=None, resume_last=False, EarlyStopper=None, **kwargs):
         super().__init__(model, **kwargs)
         if save_every_n_iter is None:
             self.save_every_n_iter = len(self.train_dataloader[0])
@@ -51,6 +51,7 @@ class TrainerPlt(Trainer):
         self.resume_last=resume_last
         self._has_setup_train=False
         self.EarlyStopper = EarlyStopper
+        
 
     def plot(self, epoch, physics, x, y, x_net, train=True):
         r"""

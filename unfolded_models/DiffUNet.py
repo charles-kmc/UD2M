@@ -42,6 +42,8 @@ def load_model(
         for name, param in lora_model.named_parameters():
             if "output_blocks.2.0.out_layers.3" in name:
                 param.requires_grad_(True)
+            if "time_embed" in name:
+                param.requires_grad_(True)
         return lora_model
     else: 
         return frozen_model
@@ -62,16 +64,15 @@ class DiffUNet(torch.nn.Module):
         self.sigmas   = torch.div(self.sqrt_1m_alphas_cumprod, self.sqrt_alphas_cumprod)
 
 
-    def forward(self, x, t):
+    def forward(self, x, t, eta = 1.):
         x = 2.0 * x - 1.0  ## Denoiser operates on images in [-1,1]
         if not isinstance(t, torch.Tensor):
             t = torch.tensor(list([t]))
-        noise_map = self.model(x, t.clone().flatten())
+        noise_map = self.model(x, t.clone().flatten() * eta)
         noise_map = noise_map[:, :3, ...]   # Take noise map
-        noise_map = (noise_map + 1.0) / 2.0  ## Rescale back to [0,1]
-        x = (x + 1.0)/2.0
         x_denoised = x/self.sqrt_alphas_cumprod[t] - self.sigmas[t]*noise_map
+        x_denoised = (x_denoised + 1.0)/2.0  # Rescale back to [0,1]
         return x_denoised
     
-    def prox(self, x, ts, *args, **kwargs):  # Return prox operator
-        return self.forward(x, ts)
+    def prox(self, x, ts, *args, eta = 1., **kwargs):  # Return prox operator
+        return self.forward(x, ts, eta = eta)
