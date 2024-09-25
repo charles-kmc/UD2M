@@ -59,12 +59,8 @@ def layer_parametrisation(layer, device, rank = 2):
         rank = rank
     )
 
-<<<<<<< Updated upstream
-def apply_lora_parametrization(model, rank, device):
-=======
 def apply_lora_parametrization(model, target_layer, rank, device):
     
->>>>>>> Stashed changes
     for name, layer in model.named_modules():
     #    Check if the layer name ends with "qkv" or "proj_out"
         if name.endswith(tuple(target_layer)):
