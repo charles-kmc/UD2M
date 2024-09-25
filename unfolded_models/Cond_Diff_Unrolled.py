@@ -9,4 +9,4 @@ class DiffHQSUnrolled(torch.nn.Module):
 
 
     def single_iteration(self, x_t, y, y_physics, x_t_physics):
-        
+        pass

@@ -25,8 +25,8 @@ def main():
     prop = 0.1
     
     # path for resuming checkpoints during training
-    save_checkpoint_dir = os.path.join("/users/cmk2000/sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp", date, f"prop_data_{prop}", "simple")
-    save_results = os.path.join("/users/cmk2000/sharedscratch/Results/conditional-diffusion_model-for_ivp", date, f"prop_data_{prop}", "simple")
+    save_checkpoint_dir = os.path.join("../sharedscratch/Pretrained-Checkpoints/conditional-diffusion_model-for_ivp", date, f"prop_data_{prop}", "simple")
+    save_results = os.path.join("../sharedscratch/Results/conditional-diffusion_model-for_ivp", date, f"prop_data_{prop}", "simple")
     
     # --- device
     dist_util.setup_dist()
@@ -34,7 +34,7 @@ def main():
     
     # --- Pre trained model 
     frozen_model_name = 'diffusion_ffhq_10m' 
-    frozen_model_dir = '/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo' 
+    frozen_model_dir = '../sharedscratch/Pretrained-Checkpoints/model_zoo' 
     frozen_model_path = os.path.join(frozen_model_dir, f'{frozen_model_name}.pt')
     frozen_model, diffusion = load_frozen_model(frozen_model_name, frozen_model_path, device)
 
@@ -60,7 +60,7 @@ def main():
     loggers.info(f"device model: {lora_model.device} <--> {device}")
 
     # --- detaset 
-    dataset_dir = "/users/cmk2000/sharedscratch/Datasets/ImageNet/train"
+    dataset_dir = "../sharedscratch/Datasets/ImageNet/train"
     batch_size = 8
     train_dataloader, testloader = get_data_loader(dataset_dir, image_size, batch_size, prop)
     loggers.info(f"number of batch in dataset: {len(train_dataloader)}")

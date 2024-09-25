@@ -13,8 +13,24 @@ class LoRaParametrisation(nn.Module):
         self.rank = rank
         self.device = device
         self.alpha = alpha
-        self.lora_A = nn.Parameter(torch.zeros(self.in_channel, self.rank, device = self.device, dtype = self.dtype, requires_grad=True))
-        self.lora_B = nn.Parameter(torch.zeros(self.rank, self.out_channel, device = self.device, dtype = self.dtype, requires_grad=True))
+        self.lora_A = nn.Parameter(
+            torch.zeros(
+                self.in_channel, 
+                self.rank, 
+                device = self.device, 
+                dtype = self.dtype, 
+                requires_grad=True
+            )
+        )
+        self.lora_B = nn.Parameter(
+            torch.zeros(
+                self.rank, 
+                self.out_channel, 
+                device = self.device,
+                dtype = self.dtype, 
+                requires_grad=True
+            )
+        )
         
         # Verify requires_grad
         assert self.lora_A.requires_grad
@@ -35,18 +51,29 @@ class LoRaParametrisation(nn.Module):
 def layer_parametrisation(layer, device, rank = 2):
     in_channel, out_channel = layer.weight.squeeze().shape
     dtype = layer.weight.dtype
-    return LoRaParametrisation(in_channel, out_channel, dtype, device = device, rank = rank)
+    return LoRaParametrisation(
+        in_channel, 
+        out_channel, 
+        dtype, 
+        device = device, 
+        rank = rank
+    )
 
+<<<<<<< Updated upstream
 def apply_lora_parametrization(model, rank, device):
+=======
+def apply_lora_parametrization(model, target_layer, rank, device):
+    
+>>>>>>> Stashed changes
     for name, layer in model.named_modules():
     #    Check if the layer name ends with "qkv" or "proj_out"
-        if name.endswith("qkv") or name.endswith("proj_out"):
+        if name.endswith(tuple(target_layer)):
             P.register_parametrization(layer, "weight", layer_parametrisation(layer,  device, rank=rank))           
 
-def LoRa_model(model, device, rank = 2):
+def LoRa_model(model, target_layer, device, rank = 2):
     
     # Apply LoRA parametrization to input blocks
-    apply_lora_parametrization(model, rank, device)
+    apply_lora_parametrization(model, target_layer, rank, device)
     
     print(f'Number of Layers frozen: {num_frozen_layers(model)}')
     total_parameters_non_lora, total_parameters_lora = total_parameters(model)
@@ -62,15 +89,10 @@ def total_parameters(model):
             n_lora += param.numel()
     return n_frozen, n_lora
 
-# get all layers of the model
 def enable_disable_lora(model, enabled = True):
-    for _, layer in model.named_children():
-        if len(list(layer.children())) > 0:
-            enable_disable_lora(layer)
-        else:
-            for name, _ in layer.named_parameters():
-                if "lora_" in name:
-                    layer.parametrizations["weight"][0].enabled = enabled  
+    for name, layer in model.named_parameters():
+        if "lora_" in name:
+            layer.parametrizations["weight"][0].enabled = enabled  
                     
 # number of frozen layers
 def num_frozen_layers(model):
@@ -80,7 +102,3 @@ def num_frozen_layers(model):
             param.requires_grad = False
             num += 1
     return num
-
-def make_copy_model(model):
-    # Make a deep copy of the model
-    return copy.deepcopy(model)
