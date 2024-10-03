@@ -1,1 +1,2 @@
-slurmstepd: error: *** JOB 103581 ON gpu20 CANCELLED AT 2024-09-11T17:43:31 DUE TO TIME LIMIT ***
+/var/spool/slurmd/job114611/slurm_script: line 58: 1430505 Killed                  python3 main_unfolded.py > "$RESULTS_DIR"_out_train_dif.output 2> "$RESULTS_DIR"_err_train_dif.error
+slurmstepd: error: Detected 1 oom_kill event in StepId=114611.batch. Some of the step tasks have been OOM Killed.

@@ -8,6 +8,7 @@ import time
 import cv2
 import matplotlib.pyplot as plt
 import blobfile as bf
+import datetime
 
 from torchvision.utils import save_image
 from accelerate import Accelerator
@@ -90,6 +91,24 @@ class DiffusionScheduler:
         seq = seq[::-1]
         progress_seq = progress_seq[::-1]
         return (seq, progress_seq)
+
+# coustomise timesteps for the denoising step  
+class GetDenoisingTimestep:
+    def __init__(self):
+        self.scheduler = DiffusionScheduler()
+        
+    def get_timestep_z(self, t, sigma_y):
+        t_y = self.t_y(sigma_y)
+        print(sigma_y, self.scheduler.sigmas[t])
+        a1 = sigma_y / (sigma_y + self.scheduler.sigmas[t])
+        a2 = self.scheduler.sigmas[t] / (sigma_y + self.scheduler.sigmas[t])
+        t_hat = (t_y * a1 + t * a2).long()
+        return t_hat, t_y
+
+    def t_y(self, sigma_y):
+        t_y = torch.clamp(torch.abs(self.scheduler.sigmas - 2*sigma_y).argmin() + 2, 0, self.scheduler.num_timesteps)
+        return t_y    
+    
 # physic module        
 class physics_models:
     def __init__(
@@ -98,12 +117,17 @@ class physics_models:
         blur_name:str, 
         device = "cpu",
         sigma_model:float= 0.05, 
-        dtype = torch.float32
+        dtype = torch.float32, 
+        transform_y:bool = True
     ) -> None:
+        # parameters
+        self.transform_y = transform_y
         self.device = device
-        self.sigma_model = sigma_model
+        self.sigma_model = 2 * sigma_model if self.transform_y else sigma_model
         self.dtype = dtype
         self.kernel_size = kernel_size
+        
+        # kernel
         if blur_name == "gaussian":
             self.blur_kernel = self._gaussian_kernel(kernel_size).to(self.device)
         elif blur_name == "motion":
@@ -113,9 +137,9 @@ class physics_models:
         
     def _gaussian_kernel(self, kernel_size, std = 3.0):
         c = int((kernel_size - 1)/2)
-        x = torch.arange(-kernel_size + c, kernel_size - c, dtype = self.dtype).reshape(-1,1)
-        xT = x.T
-        exp = torch.exp(-0.5*(x**2+xT**2)/std)
+        v = torch.arange(-kernel_size + c, kernel_size - c, dtype = self.dtype).reshape(-1,1)
+        vT = v.T
+        exp = torch.exp(-0.5*(v**2+vT**2)/std)
         exp /= torch.sum(exp)
         return exp
         
@@ -137,6 +161,7 @@ class physics_models:
         FFT_H = torch.fft.fft2(H, dim = (-2,-1))
         return FFT_H[None, None, ...]
     
+    # forward operator
     def Ax(self, x):
         im_size = x.shape[-1]
         FFT_H = self.blur2A(im_size)
@@ -146,6 +171,7 @@ class physics_models:
         )
         return ax
     
+    # forward operator
     def ATx(self, x):
         im_size = x.shape[-1]
         FFT_HC = torch.conj(self.blur2A(im_size))
@@ -155,8 +181,13 @@ class physics_models:
         )
         return atx
     
+    # observation y
     def y(self, x:torch.Tensor)->torch.Tensor:
-        out = self.Ax(x) + self.sigma_model * torch.randn_like(x)
+        if not self.transform_y:
+            x0 = inverse_image_transform(x)
+        else:
+            x0 = x
+        out = self.Ax(x0) + self.sigma_model * torch.randn_like(x0)
         return out
 
 # Half-Quadratic Splitting module       
@@ -166,10 +197,15 @@ class HQS_models:
         model, 
         physic:physics_models, 
         diffusion_scheduler:DiffusionScheduler, 
+        get_denoising_timestep:GetDenoisingTimestep,
+        args
     ) -> None:
+        
         self.model = model
         self.diffusion_scheduler = diffusion_scheduler
         self.physic = physic
+        self.get_denoising_timestep = get_denoising_timestep
+        self.args = args
     
     def proxf_update(
         self, 
@@ -179,6 +215,7 @@ class HQS_models:
         rho:float, 
         t:int
     )-> torch.Tensor:
+        
         sigma_t = extract_tensor(self.diffusion_scheduler.sigmas, t, x_t.shape)
         sqrt_alpha_comprod = extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t, x_t.shape)
     
@@ -220,28 +257,48 @@ class HQS_models:
         max_iter:int = 3
     ) -> dict:
         B,C = x.shape[:2]
-        half_t = t / 1
-        half_t = half_t.long()
-        rho = 1000#extract_tensor(self.diffusion_scheduler.sigmas,half_t, x_t.shape)
+        
+        # get denoising timestep
+        t_denoisng, t_y = self.get_denoising_timestep.get_timestep_z(t, self.physic.sigma_model)
+        t_max = [t_denoisng.max(), t_y.max()]
+        t_min = [t_denoisng.min(), t_y.min()]
+        rho = extract_tensor(self.diffusion_scheduler.sigmas, t_denoisng, x_t.shape)
+        if self.args.use_wandb:
+            wandb.log(
+                {
+                    "t_max":t_max, 
+                    "t_min":t_min,
+                    "rho_min":rho.squeeze().min().cpu().numpy(),
+                    "rho_max":rho.squeeze().max().cpu().numpy()
+                }
+            )
+            
         for _ in range(max_iter):
             # prox step
             z = self.proxf_update(y, x, x_t, rho, t)
-            wandb.log({"min z":z.min(), "max z":z.max()})
-            
-            #z = torch.clamp(z, 0.0, 1.0)
-            sigma_t = extract_tensor(self.diffusion_scheduler.sigmas, half_t, x_t.shape)
-            sqrt_alpha_comprod = extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t, x_t.shape)
-            eps = self.model(z, half_t)
+
+            # noise prediction
+            eps = self.model(z, t_denoisng)
             eps, _ = torch.split(eps, C, dim=1) if eps.shape == (B, C * 2, *x_t.shape[2:]) else (eps, eps)
             
-            x_pred = self.diffusion_scheduler.predict_xstart_from_eps(z, half_t, eps)
-            wandb.log({"min eps":eps.min(), "max eps":eps.max()})
-            wandb.log({"min x_pred":x_pred.min(), "max x_pred":x_pred.max()})
-            # wandb.log({"min x_1":x_1.min(), "max x_1":x_1.max()})
+            # estimate of x_start
+            x_pred = self.diffusion_scheduler.predict_xstart_from_eps(z, t_denoisng, eps)
+            if self.args.use_wandb:
+                wandb.log(
+                    {
+                        "min eps":eps.min(), 
+                        "max eps":eps.max(),
+                        "min x_pred":x_pred.min(), 
+                        "max x_pred":x_pred.max(),
+                        "min z":z.min(), 
+                        "max z":z.max()  
+                    })
         
-        return {"u":x_pred,"xstart_pred":x_pred, "aux":z, "eps_pred":eps, "noisy_image":inverse_image_transform(x_pred),}
+        return {"xstart_pred":x_pred, "aux":z, "eps_pred":eps}
 
-class HQS_models_new:
+#################################################################################
+#################################################################################
+class HQS_models_new_approach:
     def __init__(
         self,
         model, 
@@ -257,10 +314,9 @@ class HQS_models_new:
         y:torch.Tensor,
         x:torch.Tensor, 
         rho:float, 
-    )-> torch.Tensor:    
+    )-> torch.Tensor: 
+           
         self.im_size = y.shape[-1]
-        # y = torch.clamp(y, 0, 1)
-        # x = torch.clamp(x, 0, 1)
         FFTy = torch.fft.fft2(y, dim = (-2,-1))
         FFT_H = self.physic.blur2A(self.im_size)
         FFT_HC = torch.conj(FFT_H)
@@ -297,7 +353,7 @@ class HQS_models_new:
         B,C = x.shape[:2]
         t_rho = t 
         t_rho = t_rho.long()
-        rho = extract_tensor(self.diffusion_scheduler.sigmas, t_rho, x.shape) + 100000
+        rho = extract_tensor(self.diffusion_scheduler.sigmas, t_rho, x.shape)
         #rho = 1000#rho / (rho.max().sqrt())
         
         half_t = t
@@ -341,6 +397,8 @@ class HQS_models_new:
             wandb.log({"min xt":x_t.min(), "max xt":x_t.max()})
         
         return {"u":u,"xstart_pred":x_pred, "aux":z, "eps_pred":eps, "noisy_image":inverse_image_transform(x_10),}
+#################################################################################
+#################################################################################
            
 # trainer model
 class Trainer:
@@ -385,35 +443,43 @@ class Trainer:
             self.testloader, 
             self.scheduler, 
         )
+        
         # HQS model
+        self.denoising_timestep = GetDenoisingTimestep()
         self.hqs_model = HQS_models(
             self.model,
             self.physic, 
             self.diffusion_scheduler, 
+            self.denoising_timestep,
+            self.args
         )
     
     def training(self, epochs):
         """_summary_
         """
-        dir_w = "../sharedscratch/Results/wandb"
-        wandb.init(
-                # set the wandb project where this run will be logged
-                project="Training Unfolded Conditional Diffusion Models",
-                dir=dir_w,
-
-                # track hyperparameters and run metadata
-                config={
-                "learning_rate": self.args.learning_rate,
-                "architecture": "Deep Unfolding",
-                "Structure": "HQS",
-                "dataset": "FFHQ - 256",
-                "epochs": epochs,
-                "dir": dir_w,
-                }
-            )
         
+        if self.args.use_wandb:
+            formatted_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            dir_w = "../sharedscratch/Results/wandb"
+            wandb.init(
+                    # set the wandb project where this run will be logged
+                    project="Training Unfolded Conditional Diffusion Models",
+                    dir=dir_w,
+                    config={
+                    "learning_rate": self.args.learning_rate,
+                    "architecture": "Deep Unfolding",
+                    "Structure": "HQS",
+                    "dataset": "FFHQ - 256",
+                    "epochs": epochs,
+                    "dir": dir_w,
+                    },
+                    name = f"date_{formatted_time}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}",
+                    
+                )
+        
+        # training loop
         for epoch in range(epochs):
-            # training mode
+            # setting training mode
             self.logger.info(f"Epoch ==== >> {epoch}")
             self.model.train()
             idx = 0
@@ -434,28 +500,24 @@ class Trainer:
                     noise_target = torch.randn_like(batch_0)
                     x_t = self.diffusion_scheduler.sample_xt(batch_0, t, noise=noise_target)
                     
-                    # observation y
+                    # observation y [-1, 1]
                     y = self.physic.y(batch_0)
                     
                     # unfolding: xstrat_pred, eps_pred, auxiliary variable
                     sigmas_t = extract_tensor(self.diffusion_scheduler.sigmas, t, y.shape)
-                    sqrt_alpha_cumprod_t = extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t, y.shape)
                    
-                    # noisy image in [0,1] from x_t in [-l,l]
-                    xt_unscale = x_t - sqrt_alpha_cumprod_t * (batch_0 - 1)
-                    
                     # initialisation unfolded model
                     x_init = (
-                        sigmas_t**2 / (sigmas_t**2 + self.physic.sigma_model**2) * xt_unscale + 
+                        sigmas_t**2 / (sigmas_t**2 + self.physic.sigma_model**2) * x_t + 
                         self.physic.sigma_model**2 / (sigmas_t**2 + self.physic.sigma_model**2) * y
                     )
+                    x_init = y.clone()
+                    
                     # unfolded model
-                    out = self.hqs_model.run_unfolded_loop( y, y, x_t, t, max_iter = self.max_unfolded_iter)
+                    out = self.hqs_model.run_unfolded_loop( y, x_init, x_t, t, max_iter = self.max_unfolded_iter)
                     xstart_pred = out["xstart_pred"]
                     eps_pred = out["eps_pred"]
                     aux = out["aux"]
-                    u_noisy = out["noisy_image"]
-                    u= out["u"]
                     
                     # loss
                     loss = nn.MSELoss()(eps_pred, noise_target).mean()
@@ -463,6 +525,7 @@ class Trainer:
                         loss += consistancy_loss(xstart_pred, y, self.physic)
                     self.accelerator.backward(loss)        
 
+                    # updating learnable parameters and setting gradient to zero
                     self.optimizer.step()
                     self.scheduler.step() 
                     self.model.zero_grad()
@@ -470,24 +533,24 @@ class Trainer:
                 with torch.no_grad():
                     loss_val = loss.clone().detach().cpu().mean().item()
                     self.logger.info(f"Loss: {loss_val}")            
-                    wandb.log({"loss": loss_val}) if self.args.use_wandb else None
                     
                     if self.args.use_wandb:
+                        wandb.log({"loss": loss_val})
                         wandb.log(
                             {
-                            "mse": self.metrics.mse_function(
-                                        inverse_image_transform(xstart_pred.detach().cpu()), 
-                                        batch_0.detach().cpu()
-                                    ).item(), 
-                            "psnr": self.metrics.psnr_function(
-                                        inverse_image_transform(xstart_pred.detach().cpu()), 
-                                        batch_0.detach().cpu()
-                                    ).item()
+                                "loss": loss_val,   
+                                "mse": self.metrics.mse_function(
+                                            inverse_image_transform(xstart_pred.detach().cpu()), 
+                                            batch_0.detach().cpu()
+                                        ).item(), 
+                                "psnr": self.metrics.psnr_function(
+                                            inverse_image_transform(xstart_pred.detach().cpu()), 
+                                            batch_0.detach().cpu()
+                                        ).item()
                             }
-                            )
+                        )
                         
                     # reporting some images 
-                    
                     if ii % 100 == 0:
                         if self.args.use_wandb:
                             xstart_pred_wdb = wandb.Image(
@@ -517,25 +580,14 @@ class Trainer:
                                     caption=f"z {idx}_{epoch}", 
                                     file_type="png"
                                 )
-                            u_noisy_wdb = wandb.Image(
-                                    get_batch_rgb_from_batch_tensor(u_noisy), 
-                                    caption=f"u noisy {idx}_{epoch}", 
-                                    file_type="png"
-                                )
-                            u_wdb = wandb.Image(
-                                    get_batch_rgb_from_batch_tensor(u), 
-                                    caption=f"u  {idx}_{epoch}", 
-                                    file_type="png"
-                                )
+
                             wandb.log(
                                 {
                                     "ref image": batch_wdb, 
                                     "blurred":ys_wdb, 
                                     "xt":xt_wdb, 
-                                    "U noisy":u_noisy_wdb,
                                     "x predict": xstart_pred_wdb, 
                                     "Auxiliary":aux_wdb,
-                                    "u":u_wdb,
                                 }
                             )
                             
@@ -550,71 +602,77 @@ class Trainer:
 
             torch.cuda.empty_cache() 
             
-            # Validation 
-            if 1 == 2:
-                with torch.no_grad():
-                    self.model.eval()
-                    im = 0
-                    for ii, batch_val in enumerate(self.testloader):
-                        
-                        seq, progress_seq = self.diffusion_scheduler.get_seq_progress_seq(100)
-                        
-                        # observation y
-                        y = self.physic.y(batch_val)
-                        x = torch.randn_like(batch_val)
-                        progress_img = []
-                        
-                        for ii in range(len(seq)):
-                            tii = seq[ii]
-                            # unfolding: xstrat_pred, eps_pred, auxiliary variable
-                            sigmas_tii = extract_tensor(self.diffusion_scheduler.sigmas, tii, y.shape)
-                            x_init = (
-                                sigmas_tii / (sigmas_t + self.physic.sigma_model) * x + 
-                                self.physic.sigma_model / (sigmas_tii + self.physic.sigma_model) * y
-                            )
-                            rho =  sigmas_t / 2
-                            out_val = self.hqs_model.run_unfolded_loop( y, x_init, x, tii, rho, max_iter = self.max_unfolded_iter)
-                            x0 = out_val["xstart_pred"]
-                            eps = out_val["eps_pred"]
-                            z0 = out_val["aux"]
-                            
-                            # sample from the predicted noise
-                            if seq[ii] != seq[-1]: 
-                                beta_t = self.diffusion_scheduler.betas[seq[ii]]    
-                                sqrt_1m_alphas_cumprodtii = self.diffusion_scheduler.sqrt_1m_alphas_cumprod[seq[ii]]    
-                                sqrt_1m_alphas_cumprodtiim1 = self.diffusion_scheduler.sqrt_1m_alphas_cumprod[seq[ii+1]]    
-                                eta_sigma = sqrt_1m_alphas_cumprodtiim1 / sqrt_1m_alphas_cumprodtii * torch.sqrt(beta_t)       
-                                x = (1 / math.sqrt(1 - beta_t)) * ( x - beta_t * eps / sqrt_1m_alphas_cumprodtii) + eta_sigma.sqrt() * torch.randn_like(x)
-                            else:
-                                x = x0
+            
+    #
+    def eval_epoch(self):
+        with torch.no_grad():
+            self.model.eval()
+            im = 0
+            for ii, batch_val in enumerate(self.testloader):
                 
-                            # transforming pixels from [-1,1] ---> [0,1]    
-                            x_0 = inverse_image_transform(x)
-                            
-                            # save the process
-                            if self.args.save_progressive and (seq[ii] in progress_seq):
-                                x_show = get_rgb_from_tensor(x_0)      #[0,1]
-                                progress_img.append(x_show)
-                        
-                        if self.args.save_progressive:   
-                            img_total = cv2.hconcat(progress_img)
-                            if self.args.use_wandb:
-                                image_wdb = wandb.Image(img_total, caption=f"progress sequence for im {im}", file_type="png")
-                                wandb.log({"pregressive":image_wdb})
-                            
-                        if self.args.use_wandb:
-                            x0_wdb = wandb.Image(
-                                get_rgb_from_tensor(x_0), 
-                                caption=f"pred x start {im}", 
-                                file_type="png"
-                            )
-                            y_wdb = wandb.Image(
-                                get_rgb_from_tensor(y), 
-                                caption=f"observation {im}", 
-                                file_type="png"
-                            )
-                            xy = [y_wdb, x0_wdb]
-                            wandb.log({"blurred and predict":xy})
+                seq, progress_seq = self.diffusion_scheduler.get_seq_progress_seq(100)
+                
+                # observation y
+                y = self.physic.y(batch_val)
+                x = torch.randn_like(batch_val)
+                progress_img = []
+                
+                for ii in range(len(seq)):
+                    tii = seq[ii]
+                    # unfolding: xstrat_pred, eps_pred, auxiliary variable
+                    sigmas_tii = extract_tensor(self.diffusion_scheduler.sigmas, tii, y.shape)
+                    x_init = (
+                        sigmas_tii / (sigmas_tii + self.physic.sigma_model) * x + 
+                        self.physic.sigma_model / (sigmas_tii + self.physic.sigma_model) * y
+                    )
+                    out_val = self.hqs_model.run_unfolded_loop( y, x_init, x, tii, max_iter = self.max_unfolded_iter)
+                    x0 = out_val["xstart_pred"]
+                    eps = out_val["eps_pred"]
+                    z0 = out_val["aux"]
+                    
+                    # sample from the predicted noise
+                    if seq[ii] != seq[-1]: 
+                        beta_t = self.diffusion_scheduler.betas[seq[ii]]    
+                        sqrt_1m_alphas_cumprodtii = self.diffusion_scheduler.sqrt_1m_alphas_cumprod[seq[ii]]    
+                        sqrt_1m_alphas_cumprodtiim1 = self.diffusion_scheduler.sqrt_1m_alphas_cumprod[seq[ii+1]]    
+                        eta_sigma = sqrt_1m_alphas_cumprodtiim1 / sqrt_1m_alphas_cumprodtii * torch.sqrt(beta_t)       
+                        x = (1 / math.sqrt(1 - beta_t)) * ( x - beta_t * eps / sqrt_1m_alphas_cumprodtii) + eta_sigma.sqrt() * torch.randn_like(x)
+                    else:
+                        x = x0
+        
+                    # transforming pixels from [-1,1] ---> [0,1]    
+                    x_0 = inverse_image_transform(x)
+                    
+                    # save the process
+                    if self.args.save_progressive and (seq[ii] in progress_seq):
+                        x_show = get_rgb_from_tensor(x_0)      #[0,1]
+                        progress_img.append(x_show)
+                
+                if self.args.save_progressive:   
+                    img_total = cv2.hconcat(progress_img)
+                    if self.args.use_wandb:
+                        image_wdb = wandb.Image(img_total, caption=f"progress sequence for im {im}", file_type="png")
+                        wandb.log({"pregressive":image_wdb})
+                    
+                if self.args.use_wandb:
+                    x0_wdb = wandb.Image(
+                        get_rgb_from_tensor(x_0), 
+                        caption=f"pred x start {im}", 
+                        file_type="png"
+                    )
+                    z0_wdb = wandb.Image(
+                        get_rgb_from_tensor(z0), 
+                        caption=f"latent variable {im}", 
+                        file_type="png"
+                    )
+                    
+                    y_wdb = wandb.Image(
+                        get_rgb_from_tensor(y), 
+                        caption=f"observation {im}", 
+                        file_type="png"
+                    )
+                    xy = [y_wdb, x0_wdb, z0_wdb]
+                    wandb.log({"blurred and predict":xy})
         
     # - save the checkpoint model   
     def save(self, epoch):
@@ -681,8 +739,4 @@ def model_parameters(model, logger):
     logger.info(f"Total parameters ====> {Total_params}")
     logger.info(f"Total frozen parameters ====> {frozon_params}")
     logger.info(f"Total trainable parameters ====> {trained_params}")
-    
 
-
-    
-    

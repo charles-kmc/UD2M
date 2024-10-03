@@ -15,7 +15,8 @@ class Datasets(object):
                 dataset_name = "ImageNet",
                 transform = None, 
                 clip_min = -1.0, 
-                clip_max = 1.0
+                clip_max = 1.0, 
+                transform_y = True,
                 
             ):
         self.dataset_name = dataset_name
@@ -24,8 +25,8 @@ class Datasets(object):
         self.clip_min = clip_min
         self.clip_max = clip_max
         
-        # deblurring model
-        self.deblurring_model = DeblurringModel(im_size)
+        # # deblurring model
+        # self.deblurring_model = DeblurringModel(im_size, transform_y = transform_y)
 
         # transformer
         if transform is None:
@@ -48,6 +49,8 @@ class Datasets(object):
             else:
                 raise ValueError(f"This dataset {dataset_name} is not yet implemented !!")
         
+        self.transform_y = transform_y  
+         
     def __len__(self):
         """ get the length of the dataset
         """
@@ -61,21 +64,21 @@ class Datasets(object):
         # apply transform
         if self.transform:
             image = self.transform(image)
-        if self.dataset_name == "ImageNet":
-            # get noisy image
-            noisy_image, op_image = self.deblurring_model.get_noisy_image(image)
-            # rescale image btw -1 and 1
-            image_scale = image_transform(image)
-            image_scale = torch.clamp(image_scale, self.clip_min, self.clip_max)
-            noisy_image = torch.clamp(noisy_image, 0, 1)
+        # if self.dataset_name == "ImageNet":
+        #     # get noisy image
+        #     if self.transform_y:
+        #         image_scale = image_transform(image)
+        #         noisy_image, op_image = self.deblurring_model.get_noisy_image(image_scale)
+        #     else:
+        #         image_scale = image_transform(image)
+        #         noisy_image, op_image = self.deblurring_model.get_noisy_image(image)
             
-            return image_scale, noisy_image, op_image
+        #     return image_scale, noisy_image, op_image
         
-        elif self.dataset_name == "FFHQ":
-            image = image # torch.clamp(image_transform(image), self.clip_min, self.clip_max)
-            return image
-        else:
-            raise ValueError(f"dataset {self.dataset_name} not implemented yet !!")
+        # elif self.dataset_name == "FFHQ":
+        
+        return image_transform(image)
+        
 
 # get data loader   
 def get_data_loader(

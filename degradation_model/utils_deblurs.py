@@ -14,7 +14,9 @@ class DeblurringModel(object):
                 blur_sizes = [21], 
                 blur_type = ["gaussian", "uniform"], 
                 device = "cpu", 
-                dtype = torch.float32
+                dtype = torch.float32,
+                tranform_y = True,
+                
             ):
         self.device = device
         self.blur_sizes = blur_sizes
@@ -30,8 +32,9 @@ class DeblurringModel(object):
         torch.manual_seed(seed)
         
     # get noisy image
-    def get_noisy_image(self, x:torch.tensor):
+    def get_noisy_image(self, x:torch.tensor, transform_y = False):
         noise_std = np.random.choice(self.noise_std)
+        noise_std = 2 * noise_std  if transform_y else noise_std 
         Ax = self.Ax(x)  
         y = Ax + noise_std * torch.randn_like(Ax)
         op = {
@@ -40,6 +43,7 @@ class DeblurringModel(object):
             f"im_size": self.im_size,
             f"blur_value": self.blur, 
             f"sigma": noise_std, 
+            f"transform_x":transform_y,
         }
         return y, op
     
