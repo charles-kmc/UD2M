@@ -64,6 +64,7 @@ def main():
     frozen_model_dir = '/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo' 
     frozen_model_path = os.path.join(frozen_model_dir, f'{frozen_model_name}.pt')
     frozen_model, _ = load_frozen_model(frozen_model_name, frozen_model_path, device)
+    
     # LoRA model 
     model = copy.deepcopy(frozen_model)
     LoRa_model(
@@ -73,18 +74,27 @@ def main():
         rank = args.rank
     )
     
+    # making some layers learnable
+    for param in model.l_model.out.parameters():
+        param.requires_grad_(True)
+    for name, param in model.named_parameters():
+        if "output_blocks.2.0.out_layers.3" in name:
+            param.requires_grad_(True)
+    
     # Diffusion noise
     diffusion_scheduler = DiffusionScheduler(device=device)
     pyhsic = physics_models(
         args.physic.kernel_size, 
         args.physic.blur_name, 
         device = device,
-        sigma_model = args.physic.sigma_model
+        sigma_model = args.physic.sigma_model,
+        transform_y= args.physic.transform_y
     )
     
     # trainer module
     args.date = date
     max_unfolded_iter = 1
+    args.max_unfolded_iter = max_unfolded_iter
     trainer = Trainer(
         model,
         diffusion_scheduler=diffusion_scheduler,

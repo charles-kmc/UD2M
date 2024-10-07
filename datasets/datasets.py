@@ -15,9 +15,7 @@ class Datasets(object):
                 dataset_name = "ImageNet",
                 transform = None, 
                 clip_min = -1.0, 
-                clip_max = 1.0, 
-                transform_y = True,
-                
+                clip_max = 1.0,                 
             ):
         self.dataset_name = dataset_name
         self.dataset_dir = dataset_dir
@@ -25,15 +23,12 @@ class Datasets(object):
         self.clip_min = clip_min
         self.clip_max = clip_max
         
-        # # deblurring model
-        # self.deblurring_model = DeblurringModel(im_size, transform_y = transform_y)
-
         # transformer
         if transform is None:
             self.transform = transforms.Compose([
                 transforms.Resize((self.im_size, self.im_size)),
                 transforms.ToTensor(), 
-                transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+                #transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
             ])
         else:
             self.transform = transform    
@@ -49,7 +44,6 @@ class Datasets(object):
             else:
                 raise ValueError(f"This dataset {dataset_name} is not yet implemented !!")
         
-        self.transform_y = transform_y  
          
     def __len__(self):
         """ get the length of the dataset
@@ -64,20 +58,8 @@ class Datasets(object):
         # apply transform
         if self.transform:
             image = self.transform(image)
-        # if self.dataset_name == "ImageNet":
-        #     # get noisy image
-        #     if self.transform_y:
-        #         image_scale = image_transform(image)
-        #         noisy_image, op_image = self.deblurring_model.get_noisy_image(image_scale)
-        #     else:
-        #         image_scale = image_transform(image)
-        #         noisy_image, op_image = self.deblurring_model.get_noisy_image(image)
-            
-        #     return image_scale, noisy_image, op_image
-        
-        # elif self.dataset_name == "FFHQ":
-        
-        return image_transform(image)
+        image = image_transform(image)
+        return image
         
 
 # get data loader   

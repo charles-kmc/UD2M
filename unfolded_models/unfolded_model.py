@@ -9,6 +9,7 @@ import cv2
 import matplotlib.pyplot as plt
 import blobfile as bf
 import datetime
+import kornia
 
 from torchvision.utils import save_image
 from accelerate import Accelerator
@@ -19,6 +20,8 @@ import torch.nn.functional as F
 
 from utils.utils import Metrics, inverse_image_transform, image_transform
 from utils_lora.lora_parametrisation import LoRa_model, enable_disable_lora
+
+T_AUG = 3
 
 # extract into tensor       
 def extract_tensor(
@@ -39,8 +42,10 @@ class DiffusionScheduler:
         end_beta: float = 20*1e-3, 
         num_timesteps:int = 1000,
         dtype = torch.float32,
-        device = "cpu"
+        device = "cpu", 
+        fix_timestep = True
     ) -> None:
+        self.fix_timestep = fix_timestep
         self.num_timesteps = num_timesteps
         betas = np.linspace(start_beta, end_beta, num_timesteps)
         self.betas = torch.from_numpy(betas).to(dtype)
@@ -51,13 +56,17 @@ class DiffusionScheduler:
         self.sigmas   = torch.div(self.sqrt_1m_alphas_cumprod, self.sqrt_alphas_cumprod)
         
     def sample_times(self, bzs, device):
-        t = torch.randint(
-            0, 
-            self.num_timesteps, 
-            (bzs,), 
-            device=device
-        )
-        t = t.long()
+        if self.fix_timestep:
+            t_ = torch.randint(1, self.num_timesteps, (1,))
+            t = (t_ * torch.ones((bzs,))).long().to(device)
+        else:
+            t = torch.randint(
+                1, 
+                self.num_timesteps, 
+                (bzs,), 
+                device=device
+            ).long()
+        
         return t
     
     def sample_xt(
@@ -66,6 +75,7 @@ class DiffusionScheduler:
         timesteps:torch.Tensor, 
         noise:torch.Tensor
     ) -> torch.Tensor:
+        
         if noise is None:
             noise = torch.randn_like(x_start)
         assert noise.shape == x_start.shape
@@ -94,19 +104,46 @@ class DiffusionScheduler:
 
 # coustomise timesteps for the denoising step  
 class GetDenoisingTimestep:
-    def __init__(self):
+    def __init__(self, device):
         self.scheduler = DiffusionScheduler()
-        
-    def get_timestep_z(self, t, sigma_y):
-        t_y = self.t_y(sigma_y)
-        print(sigma_y, self.scheduler.sigmas[t])
-        a1 = sigma_y / (sigma_y + self.scheduler.sigmas[t])
-        a2 = self.scheduler.sigmas[t] / (sigma_y + self.scheduler.sigmas[t])
-        t_hat = (t_y * a1 + t * a2).long()
-        return t_hat, t_y
-
+        self.device = device
+    
+    # getting differently the timestep   
+    def get_tz_ty_rho(self, t, sigma_y, x_shape):
+        print(f"sigma y {sigma_y}\n\n")
+        sigma_t = self.scheduler.sigmas.to(self.device)[t]
+        if not torch.is_tensor(sigma_y):
+            sigma_y = torch.tensor(sigma_y).to(self.device)
+        else:
+            sigma_y = sigma_y.to(self.device)
+        ty = self.t_y(sigma_y)
+        a1 = sigma_y / (sigma_y + sigma_t)
+        a2 = sigma_t / (sigma_y + sigma_t)
+        tz = (ty * a1 + t * a2).long()
+        rho = extract_tensor(self.scheduler.sigmas, tz, x_shape)
+        return rho, tz, ty
+    
+    # get rho and t from sigma_t and sigma_y
+    def get_tz_rho(self, t, sigma_y, x_shape):
+        sigma_t = extract_tensor(self.scheduler.sigmas, t, x_shape) 
+        if not torch.is_tensor(sigma_y):
+            sigma_y = torch.tensor(sigma_y).to(self.device)
+        else:
+            sigma_y = sigma_y.to(self.device)
+        rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2))
+        tz = torch.clamp(
+            self.t_y(rho.squeeze()[0,0,0,0]).cpu() + torch.tensor(T_AUG),
+            1,
+            self.scheduler.num_timesteps
+        )
+        tz = (tz * torch.ones((x_shape[0],))).long().to(self.device)
+        rho_ = extract_tensor(self.scheduler.sigmas, tz, x_shape)
+        ty = self.t_y(sigma_y)
+        return rho_, tz, ty
+    
+    # getting the corresponding timestep from the diffusion process   
     def t_y(self, sigma_y):
-        t_y = torch.clamp(torch.abs(self.scheduler.sigmas - 2*sigma_y).argmin() + 2, 0, self.scheduler.num_timesteps)
+        t_y = torch.clamp(torch.abs(self.scheduler.sigmas.to(self.device) - sigma_y).argmin() + T_AUG, 0, self.scheduler.num_timesteps)
         return t_y    
     
 # physic module        
@@ -118,7 +155,7 @@ class physics_models:
         device = "cpu",
         sigma_model:float= 0.05, 
         dtype = torch.float32, 
-        transform_y:bool = True
+        transform_y:bool = False
     ) -> None:
         # parameters
         self.transform_y = transform_y
@@ -154,31 +191,44 @@ class physics_models:
             raise ValueError("The kernel dimension is not correct")
         device = blur.device
         n, m = blur.shape
-        H = torch.zeros(im_size, im_size, dtype=blur.dtype).to(device)
-        H[:n,:m] = blur
+        H_op = torch.zeros(im_size, im_size, dtype=blur.dtype).to(device)
+        H_op[:n,:m] = blur
         for axis, axis_size in enumerate(blur.shape):
-            H = torch.roll(H, -int((axis_size) / 2), dims=axis)
-        FFT_H = torch.fft.fft2(H, dim = (-2,-1))
-        return FFT_H[None, None, ...]
+            H_op = torch.roll(H_op, -int((axis_size) / 2), dims=axis)
+        FFT_h = torch.fft.fft2(H_op, dim = (-2,-1))
+        return FFT_h[None, None, ...], blur
     
+    def actualconvolve(self, x, kernel, transpose = False):
+        if len(kernel.shape) == 2:
+            kernel = kernel.unsqueeze(0)
+        else:
+            pass
+        if transpose:
+            return(kornia.filters.filter2d(x, kernel.rot90(2,[2,1]), border_type='circular'))
+        else:
+            return(kornia.filters.filter2d(x, kernel, border_type='circular'))
+        
     # forward operator
     def Ax(self, x):
         im_size = x.shape[-1]
-        FFT_H = self.blur2A(im_size)
-        FFT_x = torch.fft.fft2(x, dim = (-2,-1))
-        ax = torch.real(
-            torch.fft.ifft2(FFT_H * FFT_x, dim = (-2,-1))
-        )
+        FFT_h, h = self.blur2A(im_size)
+        # FFT_x = torch.fft.fft2(x, dim = (-2,-1))
+        # ax = torch.real(
+        #     torch.fft.ifft2(FFT_h * FFT_x, dim = (-2,-1))
+        # )
+        ax = self.actualconvolve(x,h)
         return ax
     
     # forward operator
     def ATx(self, x):
         im_size = x.shape[-1]
-        FFT_HC = torch.conj(self.blur2A(im_size))
-        FFT_x = torch.fft.fft2(x, dim = (-2,-1))
-        atx = torch.real(
-            torch.fft.ifft2(FFT_HC * FFT_x, dim = (-2,-1))
-        )
+        FFT_h, h = self.blur2A(im_size)
+        # FFT_hc = torch.conj(FFT_h)
+        # FFT_x = torch.fft.fft2(x, dim = (-2,-1))
+        # atx = torch.real(
+        #     torch.fft.ifft2(FFT_hc * FFT_x, dim = (-2,-1))
+        # )
+        atx = self.actualconvolve(x, h, transpose=True)
         return atx
     
     # observation y
@@ -220,32 +270,32 @@ class HQS_models:
         sqrt_alpha_comprod = extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t, x_t.shape)
     
         self.im_size = y.shape[-1]
-        FFTy = torch.fft.fft2(y, dim = (-2,-1))
-        FFT_H = self.physic.blur2A(self.im_size)
-        FFT_HC = torch.conj(FFT_H)
+        Aty = self.physic.ATx(y)
+        FFTAty = torch.fft.fft2(Aty, dim = (-2,-1))        
+        FFT_h,_ = self.physic.blur2A(self.im_size)
         FFTx = torch.fft.fft2(x, dim=(-2,-1))
         FFTx_t = torch.fft.fft2(x_t, dim=(-2,-1))
-        _mu = FFT_HC * FFTy / self.physic.sigma_model**2 + FFTx / rho**2 + FFTx_t  / (sigma_t**2 * sqrt_alpha_comprod)
+        _mu = FFTAty / self.physic.sigma_model**2 + FFTx / rho**2 + FFTx_t  / (sigma_t**2 * sqrt_alpha_comprod)
        
         return torch.real(
             torch.fft.ifft2(
-                _mu * self._precision(FFT_H, rho, sigma_t),
+                _mu * self._precision(FFT_h, rho, sigma_t),
                 dim = (-2,-1)
             )
         )
         
     def _precision(
         self,
-        FFT_H:torch.Tensor, 
+        FFT_h:torch.Tensor, 
         rho:float, 
         sigma_t:float
         ) -> torch.Tensor:
+        
         out =  (
-            FFT_H**2 / self.physic.sigma_model**2 
+            FFT_h**2 / self.physic.sigma_model**2 
             + 1 / sigma_t**2
             + 1 / rho**2 
         )
-        
         return 1 / out
     
     def run_unfolded_loop(
@@ -259,30 +309,44 @@ class HQS_models:
         B,C = x.shape[:2]
         
         # get denoising timestep
-        t_denoisng, t_y = self.get_denoising_timestep.get_timestep_z(t, self.physic.sigma_model)
-        t_max = [t_denoisng.max(), t_y.max()]
-        t_min = [t_denoisng.min(), t_y.min()]
-        rho = extract_tensor(self.diffusion_scheduler.sigmas, t_denoisng, x_t.shape)
+        # rho, t_denoisng, ty = self.get_denoising_timestep.get_tz_ty_rho(t, self.physic.sigma_model)
+        rho, t_denoising, ty = self.get_denoising_timestep.get_tz_rho(t, self.physic.sigma_model, x_t.shape)
+        
+        # --- initialisation
+        x = x / extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t_denoising, x.shape)
+        
         if self.args.use_wandb:
             wandb.log(
                 {
-                    "t_max":t_max, 
-                    "t_min":t_min,
+                    "tz_max":t_denoising.squeeze().max().cpu().numpy(), 
+                    "tz_min":t_denoising.squeeze().min().cpu().numpy(), 
+                    "ty_min":ty.squeeze().min().cpu().numpy(), 
+                    "ty_max":ty.squeeze().min().cpu().numpy(), 
                     "rho_min":rho.squeeze().min().cpu().numpy(),
                     "rho_max":rho.squeeze().max().cpu().numpy()
                 }
             )
             
-        for _ in range(max_iter):
+        for ii in range(max_iter):
             # prox step
-            z = self.proxf_update(y, x, x_t, rho, t)
+            z_ = self.proxf_update(y, x, x_t, rho, t)
 
             # noise prediction
-            eps = self.model(z, t_denoisng)
+            if self.args.pertub:
+                noise = torch.randn_like(z_)
+                tu = torch.clamp(t_denoising - 3, 2, 1000)
+                z = self.diffusion_scheduler.sample_xt(z_, tu, noise=noise)
+            else:
+                z = z_.clone()
+                
+            eps = self.model(z, t_denoising)
             eps, _ = torch.split(eps, C, dim=1) if eps.shape == (B, C * 2, *x_t.shape[2:]) else (eps, eps)
             
             # estimate of x_start
-            x_pred = self.diffusion_scheduler.predict_xstart_from_eps(z, t_denoisng, eps)
+            x = self.diffusion_scheduler.predict_xstart_from_eps(z, t_denoising, eps)
+            x_pred = inverse_image_transform(x)
+            x_ = torch.clamp(x_pred, 0.0, 1.0)
+            
             if self.args.use_wandb:
                 wandb.log(
                     {
@@ -294,7 +358,7 @@ class HQS_models:
                         "max z":z.max()  
                     })
         
-        return {"xstart_pred":x_pred, "aux":z, "eps_pred":eps}
+        return {"xstart_pred":x_, "aux":z_, "eps_pred":eps}
 
 #################################################################################
 #################################################################################
@@ -414,6 +478,7 @@ class Trainer:
         args,
         max_unfolded_iter:int = 1,
         ) -> None:
+        
         self.args = args
         self.logger = logger
         self.diffusion_scheduler = diffusion_scheduler
@@ -445,7 +510,7 @@ class Trainer:
         )
         
         # HQS model
-        self.denoising_timestep = GetDenoisingTimestep()
+        self.denoising_timestep = GetDenoisingTimestep(self.device)
         self.hqs_model = HQS_models(
             self.model,
             self.physic, 
@@ -460,20 +525,22 @@ class Trainer:
         
         if self.args.use_wandb:
             formatted_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            dir_w = "../sharedscratch/Results/wandb"
+            dir_w = "/users/cmk2000/sharedscratch/Results/wandb"
             wandb.init(
                     # set the wandb project where this run will be logged
                     project="Training Unfolded Conditional Diffusion Models",
-                    dir=dir_w,
+                    dir = dir_w,
                     config={
-                    "learning_rate": self.args.learning_rate,
-                    "architecture": "Deep Unfolding",
-                    "Structure": "HQS",
-                    "dataset": "FFHQ - 256",
-                    "epochs": epochs,
-                    "dir": dir_w,
+                        "consistency":self.args.use_consistancy,
+                        "learning_rate": self.args.learning_rate,
+                        "architecture": "Deep Unfolding",
+                        "Structure": "HQS",
+                        "dataset": "FFHQ - 256",
+                        "epochs": epochs,
+                        "dir": dir_w,
+                        "pertub":self.args.pertub,
                     },
-                    name = f"date_{formatted_time}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}",
+                    name = f"date_{formatted_time}_Consistency_{self.args.use_consistancy}_init_xty_{self.args.init_xt_y}_pertubation_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}",
                     
                 )
         
@@ -500,18 +567,20 @@ class Trainer:
                     noise_target = torch.randn_like(batch_0)
                     x_t = self.diffusion_scheduler.sample_xt(batch_0, t, noise=noise_target)
                     
-                    # observation y [-1, 1]
+                    # observation y 
                     y = self.physic.y(batch_0)
                     
                     # unfolding: xstrat_pred, eps_pred, auxiliary variable
                     sigmas_t = extract_tensor(self.diffusion_scheduler.sigmas, t, y.shape)
                    
                     # initialisation unfolded model
-                    x_init = (
-                        sigmas_t**2 / (sigmas_t**2 + self.physic.sigma_model**2) * x_t + 
-                        self.physic.sigma_model**2 / (sigmas_t**2 + self.physic.sigma_model**2) * y
-                    )
-                    x_init = y.clone()
+                    if self.args.init_xt_y:
+                        x_init = (
+                            sigmas_t**2 / (sigmas_t**2 + self.physic.sigma_model**2) * x_t + 
+                            self.physic.sigma_model**2 / (sigmas_t**2 + self.physic.sigma_model**2) * y
+                        )
+                    else:
+                        x_init = y.clone()
                     
                     # unfolded model
                     out = self.hqs_model.run_unfolded_loop( y, x_init, x_t, t, max_iter = self.max_unfolded_iter)
@@ -540,12 +609,12 @@ class Trainer:
                             {
                                 "loss": loss_val,   
                                 "mse": self.metrics.mse_function(
-                                            inverse_image_transform(xstart_pred.detach().cpu()), 
-                                            batch_0.detach().cpu()
+                                            xstart_pred.detach().cpu(), 
+                                            inverse_image_transform(batch_0).detach().cpu()
                                         ).item(), 
                                 "psnr": self.metrics.psnr_function(
-                                            inverse_image_transform(xstart_pred.detach().cpu()), 
-                                            batch_0.detach().cpu()
+                                            xstart_pred.detach().cpu(), 
+                                            inverse_image_transform(batch_0).detach().cpu()
                                         ).item()
                             }
                         )
@@ -554,9 +623,7 @@ class Trainer:
                     if ii % 100 == 0:
                         if self.args.use_wandb:
                             xstart_pred_wdb = wandb.Image(
-                                    get_batch_rgb_from_batch_tensor(
-                                        inverse_image_transform(xstart_pred)
-                                    ), 
+                                    get_batch_rgb_from_batch_tensor(xstart_pred), 
                                     caption=f"x0_hat {idx}_{epoch}", 
                                     file_type="png"
                                 )

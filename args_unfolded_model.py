@@ -5,10 +5,12 @@ def args_unfolded():
         "task":"debur",
         "learning_rate":3e-6,
         "weight_decay":1e-2,
-        "rank":5,
-        "use_consistancy":True,
+        "rank":10,
+        "use_consistancy":False,
         "use_wandb":True,
         "save_progressive":True,
+        "init_xt_y":True,
+        "pertub":True,
         "train_batch_size":8,
         "shuffle":True,
         "test_batch_size":1,
@@ -22,6 +24,7 @@ def args_unfolded():
         "kernel_size": 25,
         "blur_name":"gaussian",
         "sigma_model":0.05,
+        "transform_y": True,
     }
     args = DotDict(main_args)
     args.physic = DotDict(pyhsic)
