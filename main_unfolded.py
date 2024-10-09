@@ -75,7 +75,7 @@ def main():
     )
     
     # making some layers learnable
-    for param in model.l_model.out.parameters():
+    for param in model.out.parameters():
         param.requires_grad_(True)
     for name, param in model.named_parameters():
         if "output_blocks.2.0.out_layers.3" in name:
@@ -93,7 +93,7 @@ def main():
     
     # trainer module
     args.date = date
-    max_unfolded_iter = 1
+    max_unfolded_iter = 3
     args.max_unfolded_iter = max_unfolded_iter
     trainer = Trainer(
         model,
@@ -108,7 +108,7 @@ def main():
     )
     
     # training loop
-    trainer.training(epochs=1000)
+    trainer.training(epochs=10000)
     
 if __name__ == "__main__":
     main()

@@ -68,8 +68,7 @@ class DPIR_deb:
             FB, FBC, F2B, FBFy = sr.pre_calculate(y, k, self.sf)
             x = y.clone()
             taus = [self.rhos[i].float().repeat(1, 1, 1, 1) for i in range(iter_num)]
-            model_cache = {int(np.ceil(s.cpu().numpy() * 255. / 2.) - 1): self.model25[str(int(np.ceil(s.cpu().numpy() * 255. / 2.) - 1))]
-                        for s in set(self.sigmas)}
+            
             
             # main iterations
             for i in range(iter_num):
@@ -80,7 +79,7 @@ class DPIR_deb:
                 if 'ircnn' in self.model_name:
                     current_idx = int(np.ceil(self.sigmas[i].cpu().numpy() * 255. / 2.) - 1)
                     if current_idx != self.former_idx:
-                        self.model.load_state_dict(model_cache[current_idx], strict=True)
+                        self.model.load_state_dict(self.model25[str(current_idx)], strict=True)
                         self.model.eval()
                         self._freeze_model()
                         self.model = self.model.to(self.device)
@@ -102,7 +101,7 @@ class DPIR_deb:
                     x = util.augment_img_tensor4(x, aug_mode)
 
                 if 'drunet' in self.model_name:
-                    x = torch.cat((x, self.sigmas[i].float().repeat(1, 1, x.shape[2], x.shape[3])), dim=1)
+                    x = torch.cat((x, self.sigmas[i].float().repeat(x.shape[0], 1, x.shape[2], x.shape[3])), dim=1)
                     x = utils_model.test_mode(self.model, x, mode=2, refield=32, min_size=256, modulo=16)
                 elif 'ircnn' in self.model_name:
                     x = self.model(x)

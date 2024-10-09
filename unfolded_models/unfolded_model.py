@@ -10,6 +10,8 @@ import matplotlib.pyplot as plt
 import blobfile as bf
 import datetime
 import kornia
+import copy
+import yaml
 
 from torchvision.utils import save_image
 from accelerate import Accelerator
@@ -20,8 +22,9 @@ import torch.nn.functional as F
 
 from utils.utils import Metrics, inverse_image_transform, image_transform
 from utils_lora.lora_parametrisation import LoRa_model, enable_disable_lora
+from DPIR.dpir_models import DPIR_deb
 
-T_AUG = 3
+T_AUG = 0
 
 # extract into tensor       
 def extract_tensor(
@@ -29,7 +32,7 @@ def extract_tensor(
         timesteps:torch.Tensor, 
         broadcast_shape:torch.Size
     ) -> torch.Tensor:
-        out = arr.to(device=timesteps.device)[timesteps].float()
+        out = arr.to(device=arr.device)[timesteps].float()
         while len(out.shape) < len(broadcast_shape):
             out = out[..., None]
         return out.expand(broadcast_shape)
@@ -48,7 +51,7 @@ class DiffusionScheduler:
         self.fix_timestep = fix_timestep
         self.num_timesteps = num_timesteps
         betas = np.linspace(start_beta, end_beta, num_timesteps)
-        self.betas = torch.from_numpy(betas).to(dtype)
+        self.betas = torch.from_numpy(betas).to(dtype).to(device)
         self.alphas                  = 1.0 - self.betas
         self.alphas_cumprod          = torch.from_numpy(np.cumprod(self.alphas.cpu().numpy(), axis=0)).to(device)
         self.sqrt_alphas_cumprod     = torch.sqrt(self.alphas_cumprod)
@@ -83,14 +86,26 @@ class DiffusionScheduler:
             extract_tensor(self.sqrt_alphas_cumprod, timesteps, x_start.shape) * x_start
             + extract_tensor(self.sqrt_1m_alphas_cumprod, timesteps, x_start.shape)
             * noise
-        )    
+        )   
+    
+    #predict x_start from eps 
     def predict_xstart_from_eps(self, x_t, t, eps):
         assert x_t.shape == eps.shape, ValueError(f"x_t and eps have different shape ({x_t.shape} != {eps.shape})")
         return (
-            (x_t- extract_tensor( self.sqrt_1m_alphas_cumprod, t, x_t.shape ) * eps) / 
+            (x_t - extract_tensor( self.sqrt_1m_alphas_cumprod, t, x_t.shape ) * eps) / 
             extract_tensor(self.sqrt_alphas_cumprod, t, x_t.shape )
         )
-
+        
+    # predict eps from x_start
+    def predict_eps_from_xstrat(self, x_t, t, xstart):
+        assert x_t.shape == xstart.shape, ValueError(f"x_t and eps have different shape ({x_t.shape} != {xstart.shape})")
+        return (
+            (x_t - extract_tensor(self.sqrt_alphas_cumprod, t, x_t.shape ) * xstart) / 
+            extract_tensor( self.sqrt_1m_alphas_cumprod, t, x_t.shape )
+            
+        )
+    
+    # get sequence of timesteps 
     def get_seq_progress_seq(self, iter_num):
         seq = np.sqrt(np.linspace(0, self.num_timesteps**2, iter_num))
         seq = [int(s) for s in list(seq)]
@@ -105,7 +120,7 @@ class DiffusionScheduler:
 # coustomise timesteps for the denoising step  
 class GetDenoisingTimestep:
     def __init__(self, device):
-        self.scheduler = DiffusionScheduler()
+        self.scheduler = DiffusionScheduler(device=device)
         self.device = device
     
     # getting differently the timestep   
@@ -132,7 +147,7 @@ class GetDenoisingTimestep:
             sigma_y = sigma_y.to(self.device)
         rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2))
         tz = torch.clamp(
-            self.t_y(rho.squeeze()[0,0,0,0]).cpu() + torch.tensor(T_AUG),
+            self.t_y(rho[0,0,0,0]).cpu() + torch.tensor(T_AUG),
             1,
             self.scheduler.num_timesteps
         )
@@ -143,7 +158,7 @@ class GetDenoisingTimestep:
     
     # getting the corresponding timestep from the diffusion process   
     def t_y(self, sigma_y):
-        t_y = torch.clamp(torch.abs(self.scheduler.sigmas.to(self.device) - sigma_y).argmin() + T_AUG, 0, self.scheduler.num_timesteps)
+        t_y = torch.clamp(torch.abs(self.scheduler.sigmas.to(self.device) - sigma_y).argmin(), 1, self.scheduler.num_timesteps)
         return t_y    
     
 # physic module        
@@ -173,12 +188,14 @@ class physics_models:
             raise ValueError(f"Blur type {blur_name} not implemented !!")
         
     def _gaussian_kernel(self, kernel_size, std = 3.0):
+        
+        
         c = int((kernel_size - 1)/2)
         v = torch.arange(-kernel_size + c, kernel_size - c, dtype = self.dtype).reshape(-1,1)
         vT = v.T
-        exp = torch.exp(-0.5*(v**2+vT**2)/std)
+        exp = torch.exp(-0.5*(v**2 + vT**2)/std**2)
         exp /= torch.sum(exp)
-        return exp
+        return exp #
         
     def _motion_kernel(self, kernel_size):
         exp = torch.ones(kernel_size, kernel_size).to(self.dtype)
@@ -194,7 +211,7 @@ class physics_models:
         H_op = torch.zeros(im_size, im_size, dtype=blur.dtype).to(device)
         H_op[:n,:m] = blur
         for axis, axis_size in enumerate(blur.shape):
-            H_op = torch.roll(H_op, -int((axis_size) / 2), dims=axis)
+            H_op = torch.roll(H_op, -int(axis_size / 2), dims=axis)
         FFT_h = torch.fft.fft2(H_op, dim = (-2,-1))
         return FFT_h[None, None, ...], blur
     
@@ -212,23 +229,23 @@ class physics_models:
     def Ax(self, x):
         im_size = x.shape[-1]
         FFT_h, h = self.blur2A(im_size)
-        # FFT_x = torch.fft.fft2(x, dim = (-2,-1))
-        # ax = torch.real(
-        #     torch.fft.ifft2(FFT_h * FFT_x, dim = (-2,-1))
-        # )
-        ax = self.actualconvolve(x,h)
+        FFT_x = torch.fft.fft2(x, dim = (-2,-1))
+        ax = torch.real(
+            torch.fft.ifft2(FFT_h * FFT_x, dim = (-2,-1))
+        )
+        #ax = self.actualconvolve(x,h)
         return ax
     
     # forward operator
     def ATx(self, x):
         im_size = x.shape[-1]
         FFT_h, h = self.blur2A(im_size)
-        # FFT_hc = torch.conj(FFT_h)
-        # FFT_x = torch.fft.fft2(x, dim = (-2,-1))
-        # atx = torch.real(
-        #     torch.fft.ifft2(FFT_hc * FFT_x, dim = (-2,-1))
-        # )
-        atx = self.actualconvolve(x, h, transpose=True)
+        FFT_hc = torch.conj(FFT_h)
+        FFT_x = torch.fft.fft2(x, dim = (-2,-1))
+        atx = torch.real(
+            torch.fft.ifft2(FFT_hc * FFT_x, dim = (-2,-1))
+        )
+        # atx = self.actualconvolve(x, h, transpose=True)
         return atx
     
     # observation y
@@ -309,13 +326,12 @@ class HQS_models:
         B,C = x.shape[:2]
         
         # get denoising timestep
-        # rho, t_denoisng, ty = self.get_denoising_timestep.get_tz_ty_rho(t, self.physic.sigma_model)
         rho, t_denoising, ty = self.get_denoising_timestep.get_tz_rho(t, self.physic.sigma_model, x_t.shape)
         
         # --- initialisation
         x = x / extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t_denoising, x.shape)
         
-        if self.args.use_wandb:
+        if self.args.use_wandb and self.args.mode == "train":
             wandb.log(
                 {
                     "tz_max":t_denoising.squeeze().max().cpu().numpy(), 
@@ -334,7 +350,7 @@ class HQS_models:
             # noise prediction
             if self.args.pertub:
                 noise = torch.randn_like(z_)
-                tu = torch.clamp(t_denoising - 3, 2, 1000)
+                tu = torch.clamp(t_denoising-4, 0, 1000)
                 z = self.diffusion_scheduler.sample_xt(z_, tu, noise=noise)
             else:
                 z = z_.clone()
@@ -347,7 +363,7 @@ class HQS_models:
             x_pred = inverse_image_transform(x)
             x_ = torch.clamp(x_pred, 0.0, 1.0)
             
-            if self.args.use_wandb:
+            if self.args.use_wandb and self.args.mode == "train":
                 wandb.log(
                     {
                         "min eps":eps.min(), 
@@ -357,8 +373,13 @@ class HQS_models:
                         "min z":z.min(), 
                         "max z":z.max()  
                     })
-        
-        return {"xstart_pred":x_, "aux":z_, "eps_pred":eps}
+        pred_eps = self.diffusion_scheduler.predict_eps_from_xstrat(x_t, t, x)
+        return {
+            "xstart_pred":x_, 
+            "aux":inverse_image_transform(z_), 
+            "eps_pred":pred_eps,
+            "eps_z":eps
+        }
 
 #################################################################################
 #################################################################################
@@ -463,7 +484,7 @@ class HQS_models_new_approach:
         return {"u":u,"xstart_pred":x_pred, "aux":z, "eps_pred":eps, "noisy_image":inverse_image_transform(x_10),}
 #################################################################################
 #################################################################################
-           
+     
 # trainer model
 class Trainer:
     def __init__(
@@ -476,7 +497,7 @@ class Trainer:
         logger,
         device:str,
         args,
-        max_unfolded_iter:int = 1,
+        max_unfolded_iter:int = 3,
         ) -> None:
         
         self.args = args
@@ -487,6 +508,8 @@ class Trainer:
         self.model = model.to(device)
         self.trainloader = trainloader
         self.testloader = testloader
+        
+        self.copy_model = copy.deepcopy(self.model)
         
         # Accelerator: DDP
         self.accelerator = Accelerator()
@@ -518,11 +541,17 @@ class Trainer:
             self.denoising_timestep,
             self.args
         )
+        
+        # DPIR model
+        self.dpir_model = DPIR_deb(device = self.device, model_name = self.args.dpir.model_name, pretrained_pth=self.args.dpir.pretrained_pth)
     
     def training(self, epochs):
         """_summary_
         """
-        
+        if self.args.dpir.use_dpir:
+            init = f"init_model_{self.args.dpir.model_name}"
+        else:
+            init = f"init_xty_{self.args.init_xt_y}"
         if self.args.use_wandb:
             formatted_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             dir_w = "/users/cmk2000/sharedscratch/Results/wandb"
@@ -539,8 +568,10 @@ class Trainer:
                         "epochs": epochs,
                         "dir": dir_w,
                         "pertub":self.args.pertub,
+                        "T_AUG":T_AUG,
+                        "max_unfolded_iter":self.args.max_unfolded_iter,
                     },
-                    name = f"date_{formatted_time}_Consistency_{self.args.use_consistancy}_init_xty_{self.args.init_xt_y}_pertubation_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}",
+                    name = f"{formatted_time}_Cons_{self.args.use_consistancy}_{init}_pertub_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}_max_iter_unfold_{self.args.max_unfolded_iter}",
                     
                 )
         
@@ -581,6 +612,10 @@ class Trainer:
                         )
                     else:
                         x_init = y.clone()
+                    if self.args.dpir.use_dpir:
+                        y_ = inverse_image_transform(y)
+                        x_init = self.dpir_model.run(y_, self.physic.blur_kernel, iter_num = 1) #y.clone()
+                        x_init = image_transform(x_init)
                     
                     # unfolded model
                     out = self.hqs_model.run_unfolded_loop( y, x_init, x_t, t, max_iter = self.max_unfolded_iter)
@@ -588,9 +623,13 @@ class Trainer:
                     eps_pred = out["eps_pred"]
                     aux = out["aux"]
                     
+                    # save args
+                    if epoch ==0 and ii == 0:
+                        self.save_args_yaml()
+                    
                     # loss
                     loss = nn.MSELoss()(eps_pred, noise_target).mean()
-                    if self.args.use_consistancy:
+                    if self.args.use_consistancy and False:
                         loss += consistancy_loss(xstart_pred, y, self.physic)
                     self.accelerator.backward(loss)        
 
@@ -659,17 +698,27 @@ class Trainer:
                             )
                             
                             idx += 1
-                    #########################################################
-                    if ii == 100:
-                        pass
+                    
                         
                     end_time = time.time()  
                     ellapsed = end_time - t_start       
                     self.logger.info(f"Elapsed time per epoch: {ellapsed}") 
 
+                    
             torch.cuda.empty_cache() 
             
-            
+            # save checkpoints
+            if epoch%self.args.save_checkpoint_range == 0:
+                self.save(epoch)
+                self.save_trainable_params(epoch)   
+    
+    def save_args_yaml(self):
+        checkpoint_dir = bf.join(self.args.save_checkpoint_dir, self.args.date)
+        os.makedirs(checkpoint_dir, exist_ok=True)
+        filename = f"LoRA_model_{self.args.task}.yaml"
+        filepath = bf.join(checkpoint_dir, filename)
+        with open(filepath, 'w') as f:
+            yaml.dump(self.args, f)        
     #
     def eval_epoch(self):
         with torch.no_grad():
@@ -743,10 +792,8 @@ class Trainer:
         
     # - save the checkpoint model   
     def save(self, epoch):
-        checkpoint_dir = os.makedirs(
-            bf.join(self.args.save_checkpoint_dir, self.args.date),
-            exist_ok=True
-        )
+        checkpoint_dir = bf.join(self.args.save_checkpoint_dir, self.args.date)
+           
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
         except:
@@ -764,13 +811,44 @@ class Trainer:
                     }, f)
 
         del unwrap_model
+        
+    # saving only trainable parameters
+    def save_trainable_params(self, epoch):
+        checkpoint_dir = bf.join(self.args.save_checkpoint_dir, self.args.date) 
+        try:
+            unwrap_model = self.accelerator.unwrap_model(self.model)
+        except:
+            unwrap_model = self.model
+        
+        # state dict 
+        trainable_lora_state_dict = {name: param for name, param in unwrap_model.named_parameters() if param.requires_grad}  
+        
+        if self.accelerator.is_main_process:
+            self.logger.info(f"Saving checkpoint {epoch}...")
+            filename = f"LoRA_model_{self.args.task}_{(epoch):03d}.pt"
             
+            filepath = bf.join(checkpoint_dir, filename)
+            with bf.BlobFile(filepath, "wb") as f:
+                torch.save({
+                        'model_state_dict': trainable_lora_state_dict,
+                        'optimizer_state_dict': self.optimizer.state_dict(),
+                        "epoch":epoch,
+                    }, f)
+    def load_trainable_params(self, epoch):
+        checkpoint_dir = bf.join(self.args.save_checkpoint_dir, self.args.date)
+        filename = f"LoRA_model_{self.args.task}_{(epoch):03d}.pt"
+        filepath = bf.join(checkpoint_dir, filename)
+        trainable_state_dict = torch.load(filepath)
+        self.copy_model.load_state_dict(trainable_state_dict, strict=False)
+# ---  
 def get_rgb_from_tensor(x):
     x0_np = x.detach().cpu().numpy()       #[0,1]
     x0_np = np.squeeze(x0_np)
     if x0_np.ndim == 3:
         x0_np = np.transpose(x0_np, (1, 2, 0))
     return x0_np
+
+# ---
 def get_batch_rgb_from_batch_tensor(x):
     L = [get_rgb_from_tensor(xi) for xi in x]
     out= cv2.hconcat(L)*255.
