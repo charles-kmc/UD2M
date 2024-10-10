@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import random
 import copy
 import os
 import psutil
@@ -511,6 +512,9 @@ class Trainer:
         
         self.copy_model = copy.deepcopy(self.model)
         
+        # set seed
+        self._seed(self.args.seed)
+        
         # Accelerator: DDP
         self.accelerator = Accelerator()
         self.device =  self.accelerator.device
@@ -574,9 +578,13 @@ class Trainer:
                     name = f"{formatted_time}_Cons_{self.args.use_consistancy}_{init}_pertub_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}_max_iter_unfold_{self.args.max_unfolded_iter}",
                     
                 )
+            
+        # resume training 
+        if self.args.resume_model:
+            self._resume_model()
         
         # training loop
-        for epoch in range(epochs):
+        for epoch in range(self.args.resume_epoch, epochs):
             # setting training mode
             self.logger.info(f"Epoch ==== >> {epoch}")
             self.model.train()
@@ -808,7 +816,10 @@ class Trainer:
                 torch.save({
                         'model_state_dict': unwrap_model.state_dict(),
                         'optimizer_state_dict': self.optimizer.state_dict(),
-                    }, f)
+                        'scheduler_state_dict': self.scheduler.state_dict(),
+                    }, 
+                f
+            )
 
         del unwrap_model
         
@@ -832,14 +843,55 @@ class Trainer:
                 torch.save({
                         'model_state_dict': trainable_lora_state_dict,
                         'optimizer_state_dict': self.optimizer.state_dict(),
+                        'scheduler_state_dict': self.scheduler.state_dict(),  
                         "epoch":epoch,
-                    }, f)
+                    }, 
+                f
+            )
+    
     def load_trainable_params(self, epoch):
         checkpoint_dir = bf.join(self.args.save_checkpoint_dir, self.args.date)
         filename = f"LoRA_model_{self.args.task}_{(epoch):03d}.pt"
         filepath = bf.join(checkpoint_dir, filename)
         trainable_state_dict = torch.load(filepath)
-        self.copy_model.load_state_dict(trainable_state_dict, strict=False)
+        self.copy_model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)
+        
+    def _resume_model(self):
+        if self.args.resume_model:
+            resume_dates = os.listdir(self.args.save_checkpoint_dir)
+            if len(resume_dates)>=1:
+                resume_date = sorted(resume_dates)[-1]
+                checkpoint_dir = bf.join(self.args.save_checkpoint_dir, resume_date)
+                
+                # Filter files that start with 'LoRA_model' and end with '.pt'
+                filtered_files = [f for f in os.listdir(checkpoint_dir) if f.startswith("LoRA_model_deblur") and f.endswith(".pt")]
+                if len(filtered_files)>=1:
+                    filename = sorted(filtered_files)[-1]
+                    file_path = bf.join(checkpoint_dir, filename)
+            
+                    checkpoint = torch.load(file_path)
+                    self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+                    self.optimizer.load_state_dict(checkpoint['optimizer_state_dict']) 
+                    self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+                else:
+                    raise ValueError("We can resume the training because there is no checkpoint in this directory.")
+            else:
+                raise ValueError("We can resume the training because there is no checkpoint in this directory.")
+            
+    def _seed(self, seed):
+        # Set random seeds for reproducibility
+        torch.manual_seed(seed)
+        np.random.seed(seed)
+        random.seed(seed)
+
+        # For GPU operations, set the seed for CUDA as well
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)  # If you're using multi-GPU
+
+        # Ensure that deterministic algorithms are used for certain operations
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False          
+               
 # ---  
 def get_rgb_from_tensor(x):
     x0_np = x.detach().cpu().numpy()       #[0,1]

@@ -188,7 +188,7 @@ def load_trainable_params(model, epoch, args, device):
     filename = f"LoRA_model_{args.task}_{(epoch):03d}.pt"
     filepath = bf.join(checkpoint_dir, filename)
     trainable_state_dict = torch.load(filepath)
-    model.load_state_dict(trainable_state_dict, strict=False)               
+    model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)               
     
     return model
 

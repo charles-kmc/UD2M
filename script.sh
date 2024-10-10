@@ -7,8 +7,8 @@
 #SBATCH --export=ALL
 ## Output and Error Files
 ##SBATCH -o job-%j.output
-#SBATCH -o o_train_dif.output
-#SBATCH -e e_train_dif.error
+#SBATCH -o o_train_test.output
+#SBATCH -e e_train_test.error
 ## Job name
 #SBATCH -J conditional_diffusion
 ## Run time: "hours:minutes:seconds", "days-hours"
@@ -55,7 +55,8 @@ mkdir -p "$RESULTS_DIR1"
 #  Application launch commands
 #-------------------------------
 # Running python scripts
-python3 main_training.py > "$RESULTS_DIR"_out_train_dif.output 2> "$RESULTS_DIR"_err_train_dif.error
+#python3 main_training.py > "$RESULTS_DIR"_out_train_dif.output 2> "$RESULTS_DIR"_err_train_dif.error
+python3 pytorch.py > "$RESULTS_DIR"_pytorch.output 2> "$RESULTS_DIR"_pytorch.error
 
 # Final message
 echo "Finish!!"

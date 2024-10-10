@@ -101,7 +101,7 @@ def main():
     # parameters
     num_timesteps = 100
     eta = 0.0
-    zeta = 0.4
+    zeta = 0.3
     args.zeta = zeta
     args.eta = eta
     for ii, im in enumerate(testset):

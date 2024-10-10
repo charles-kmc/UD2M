@@ -68,7 +68,7 @@ def get_data_loader(
                     im_size, 
                     batch_size, 
                     prop,
-                    num_workers = 0, 
+                    num_workers = 2, 
                     shuffle = True
                 ):
     assert prop <= 1, f"proportion {prop} should between 0 and 1!!"
@@ -87,14 +87,16 @@ def get_data_loader(
                             train_dataset, 
                             batch_size=batch_size, 
                             shuffle=shuffle, 
-                            num_workers=num_workers
+                            num_workers=num_workers,
+                            pin_memory=True
                             )
     
     testloader = DataLoader(
                             test_dataset, 
                             batch_size=8, 
                             shuffle=shuffle, 
-                            num_workers=num_workers
+                            num_workers=num_workers,
+                            pin_memory=True
                             )
     return data_loader, testloader
             

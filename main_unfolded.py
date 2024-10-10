@@ -92,6 +92,7 @@ def main():
     )
     
     # trainer module
+    args.resume_model = False
     args.date = date
     max_unfolded_iter = 3
     args.max_unfolded_iter = max_unfolded_iter

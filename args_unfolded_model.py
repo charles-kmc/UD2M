@@ -3,9 +3,12 @@ from utils.utils import DotDict
 def args_unfolded():
     main_args = {
         "task":"debur",
+        "resume_epoch":0,
+        "resume_model":0,
         "learning_rate":3e-5,
         "weight_decay":1e-2,
         "rank":10,
+        "seed":46,
         "save_checkpoint_range":10,
         "use_consistancy":False,
         "use_wandb":True,
