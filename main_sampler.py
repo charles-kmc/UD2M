@@ -27,13 +27,13 @@ def main():
     
     # parameters
     LORA = True
-    device = deepinv.utils.get_freer_gpu() #torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print("00000000", device,  torch.cuda.is_available())
-    print(torch.cuda.is_available())  # Should return True if CUDA is available
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu") #torch.device("cuda" if torch.cuda.is_available() else "cpu") #deepinv.utils.get_freer_gpu()
+    # print("00000000", device,  torch.cuda.is_available())
+    # print(torch.cuda.is_available())  # Should return True if CUDA is available
     
-    print(torch.cuda.current_device())  # Should return the index of the current GPU
-    print(torch.cuda.device_count())  # Should return the number of GPUs available
-    print(torch.cuda.get_device_name(0))
+    # print(torch.cuda.current_device())  # Should return the index of the current GPU
+    # print(torch.cuda.device_count())  # Should return the number of GPUs available
+    # print(torch.cuda.get_device_name(0))
     
     # data
     dir_test = "/users/cmk2000/sharedscratch/Datasets/testsets/ffhq"
@@ -59,8 +59,9 @@ def main():
     model = copy.deepcopy(frozen_model)
     
     args.mode = "eval"
-    args.date = "08-10-2024"
-    args.epoch = 120
+    args.date = "09-10-2024"
+    args.epoch = 60
+    #args.dpir.model_name = 'drunet_color', #"ircnn_color, drunet_color"
     
     if LORA:
         LoRa_model(
@@ -69,7 +70,7 @@ def main():
             device=device, 
             rank = args.rank
         )
-        load_trainable_params(model, args.epoch, args, device)
+        load_trainable_params(model, args.epoch, args)
         
     # physics
     physics = physics_models(
@@ -90,12 +91,14 @@ def main():
         args
     )
     # sampler
+    max_unfolded_iter = 5
     diffsampler = DDIM_SAMPLER(
         hqs_model, 
         physics, 
         diffusion, 
         device, 
-        args
+        args,
+        max_unfolded_iter = max_unfolded_iter
     )
 
     # parameters
@@ -104,6 +107,7 @@ def main():
     zeta = 0.3
     args.zeta = zeta
     args.eta = eta
+    args.max_unfolded_iter = max_unfolded_iter
     for ii, im in enumerate(testset):
         # obs
         im = im.to(device)

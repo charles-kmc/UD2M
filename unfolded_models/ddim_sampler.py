@@ -83,7 +83,7 @@ class DDIM_SAMPLER:
                         #"dir": dir_w,
                         "pertub":self.args.pertub,
                     },
-                    name = f"{formatted_time}_num_timesteps_{num_timesteps}_{init}_task_{self.args.task}_rank_{self.args.rank}_eta{self.args.eta}_zeta_{self.args.zeta}_epoch_{self.args.epoch}",
+                    name = f"{formatted_time}_num_steps_{num_timesteps}_unfolded_iter_{self.args.max_unfolded_iter}_{init}_task_{self.args.task}_rank_{self.args.rank}_eta{self.args.eta}_zeta_{self.args.zeta}_epoch_{self.args.epoch}",
                 )
             
         with torch.no_grad():
@@ -183,7 +183,7 @@ class DDIM_SAMPLER:
             "progress_img":progress_img,
         }
 # load lara weights                
-def load_trainable_params(model, epoch, args, device):
+def load_trainable_params(model, epoch, args):
     checkpoint_dir = bf.join(args.save_checkpoint_dir, args.date)
     filename = f"LoRA_model_{args.task}_{(epoch):03d}.pt"
     filepath = bf.join(checkpoint_dir, filename)

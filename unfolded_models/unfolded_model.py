@@ -194,7 +194,7 @@ class physics_models:
         c = int((kernel_size - 1)/2)
         v = torch.arange(-kernel_size + c, kernel_size - c, dtype = self.dtype).reshape(-1,1)
         vT = v.T
-        exp = torch.exp(-0.5*(v**2 + vT**2)/std**2)
+        exp = torch.exp(-0.5*(v**2 + vT**2)/std)
         exp /= torch.sum(exp)
         return exp #
         
@@ -351,7 +351,9 @@ class HQS_models:
             # noise prediction
             if self.args.pertub:
                 noise = torch.randn_like(z_)
-                tu = torch.clamp(t_denoising-4, 0, 1000)
+                val = 10 * torch.ones_like(t_denoising).long()
+                m = 1000 * torch.ones_like(t_denoising).long()
+                tu = torch.clamp(val, t_denoising, m)
                 z = self.diffusion_scheduler.sample_xt(z_, tu, noise=noise)
             else:
                 z = z_.clone()

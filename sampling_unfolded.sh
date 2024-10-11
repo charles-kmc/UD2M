@@ -7,8 +7,8 @@
 #SBATCH --export=ALL
 ## Output and Error Files
 ##SBATCH -o job-%j.output
-#SBATCH -o o_train_dif.output
-#SBATCH -e e_train_dif.error
+#SBATCH -o o_sample_dif.output
+#SBATCH -e e_sample_dif.error
 ## Job name
 #SBATCH -J CDM
 ## Run time: "hours:minutes:seconds", "days-hours"
@@ -55,7 +55,7 @@ mkdir -p "$RESULTS_DIR1"
 #  Application launch commands
 #-------------------------------
 # Running python scripts
-python3 main_sampler.py > "$RESULTS_DIR"_out_train_dif.output 2> "$RESULTS_DIR"_err_train_dif.error
+python3 main_sampler.py > "$RESULTS_DIR"_out_sample_dif.output 2> "$RESULTS_DIR"_err_sample_dif.error
 
 # Final message
 echo "Finish!!"
