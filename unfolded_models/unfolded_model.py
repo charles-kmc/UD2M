@@ -335,12 +335,8 @@ class HQS_models:
         if self.args.use_wandb and self.args.mode == "train":
             wandb.log(
                 {
-                    "tz_max":t_denoising.squeeze().max().cpu().numpy(), 
-                    "tz_min":t_denoising.squeeze().min().cpu().numpy(), 
-                    "ty_min":ty.squeeze().min().cpu().numpy(), 
-                    "ty_max":ty.squeeze().min().cpu().numpy(), 
-                    "rho_min":rho.squeeze().min().cpu().numpy(),
-                    "rho_max":rho.squeeze().max().cpu().numpy()
+                    "tz":t_denoising.squeeze().max().cpu().numpy(), 
+                    "rho":rho.squeeze().min().cpu().numpy(),
                 }
             )
             
@@ -352,8 +348,8 @@ class HQS_models:
             if self.args.pertub:
                 noise = torch.randn_like(z_)
                 val = 10 * torch.ones_like(t_denoising).long()
-                m = 1000 * torch.ones_like(t_denoising).long()
-                tu = torch.clamp(val, t_denoising, m)
+                max_val = 1000 * torch.ones_like(t_denoising).long()
+                tu = torch.clamp(val, t_denoising, max_val)
                 z = self.diffusion_scheduler.sample_xt(z_, tu, noise=noise)
             else:
                 z = z_.clone()

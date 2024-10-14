@@ -1,9 +1,10 @@
-# from torchmetrics.image import StructuralSimilarityIndexMeasure 
+from torchmetrics.image import StructuralSimilarityIndexMeasure 
 import torch 
 import math
 import os 
+import cv2
 import logging
-# from torchviz import make_dot 
+from torchviz import make_dot 
 import lpips
 
 
@@ -55,10 +56,10 @@ class Metrics():
         return -10*torch.log10(mse_xy)
     
     # --- ssim
-    # def ssim_function(self,x,y):
-    #     ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(self.device)
-    #     ss  = ssim(x, y)
-    #     return ss
+    def ssim_function(self,x,y):
+        ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(self.device)
+        ss  = ssim(x, y)
+        return ss
     
     # --- L1 loss
     def L1loss(self, x, y):
@@ -104,17 +105,17 @@ class RegisterHook:
                 module.register_backward_hook(self.backward_hook)
                 
 # get the graph and achitecture
-# def modelGaph(model, pred, save_path = "."):
-#     dot = make_dot(pred, params=dict(model.named_parameters()))
+def modelGaph(model, pred, save_path = "."):
+    dot = make_dot(pred, params=dict(model.named_parameters()))
 
-#     # Save the visualized achitecture as a PNG file
-#     dot.format = 'png'
-#     dot.render('model_architecture')
+    # Save the visualized achitecture as a PNG file
+    dot.format = 'png'
+    dot.render('model_architecture')
     
-#     # Visualize the computational graph
-#     graph = make_dot(pred, params=dict(model.named_parameters()))
-#     graph.render("simple_model_graph", format="png")  
-#     graph.view()  
+    # Visualize the computational graph
+    graph = make_dot(pred, params=dict(model.named_parameters()))
+    graph.render("simple_model_graph", format="png")  
+    graph.view()  
 
 # Define the DotDict class
 class DotDict(dict):
@@ -132,3 +133,19 @@ class DotDict(dict):
             del self[item]
         else:
             raise AttributeError(f"'{self.__class__.__name__}' object has no attribute '{item}'")
+
+# save images
+def save_images(dir, image, name):
+    """
+    Save an image to a specified directory with a given name.
+
+    Args:
+        dir (str): The directory where the image will be saved.
+        image (numpy.ndarray): The image to be saved.
+        name (str): The name of the image file.
+
+    Returns:
+        None
+    """
+    image_array = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    cv2.imwrite(os.path.join(dir, name + '.png'), image_array)
