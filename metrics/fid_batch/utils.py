@@ -1,6 +1,7 @@
 import matplotlib.image as mpimg
 import cv2
 import os
+import numpy as np
 
 # save images
 def save_images(dir, image, name):
@@ -15,7 +16,9 @@ def save_images(dir, image, name):
     Returns:
         None
     """
+    image = np.uint8((image*255.0).round())
     image_array = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    
     cv2.imwrite(os.path.join(dir, name + '.png'), image_array)
 
 # create batches
@@ -64,10 +67,10 @@ def create_batches(dir_images, num_patches):
             ii_x_next = ii_x + patch_size
             for ii_y in range(0, im_size, patch_size):
                 ii_y_next = ii_y + patch_size
-                patch = im[ii_x:ii_x_next, ii_y:ii_y_next]
+                patch = im[ii_x:ii_x_next, ii_y:ii_y_next,...]
                 
                 # Save the patch image
-                save_images(dir_images_batches, patch, "{}_{:05}_{:06}".format(filename, ii, idx))
+                save_images(dir_images_batches, patch, "{:05}_{:06}".format(ii, idx))
                 ii += 1
                 idx += 1
                 
@@ -80,7 +83,7 @@ def create_batches(dir_images, num_patches):
                 patch = im[cc_x:cc_x_next, cc_y:cc_y_next]
                 
                 # Save the patch image
-                save_images(dir_images_batches, patch, "{}_{:05}_{:06}".format(filename, ii, idx))
+                save_images(dir_images_batches, patch, "{:05}_{:06}".format(ii, idx))
                 ii += 1
                 idx += 1
     

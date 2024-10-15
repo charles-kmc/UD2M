@@ -7,10 +7,11 @@ import matplotlib.image as mpimg
 import numpy as np
 import pandas as pd
 import cv2
+import shutil
 import os
 import lpips
         
-from utils import create_batches
+from .utils import create_batches
 
 def Fid_evatuation(dir_results, device):
     """
@@ -29,10 +30,16 @@ def Fid_evatuation(dir_results, device):
     dir_ref = os.path.join(dir_results, "ref")  
     dir_mmse = os.path.join(dir_results, "mmse")
     
+    # make patches
     batch_dir_ref = create_batches(dir_mmse, 4)
     batch_dir_mmse = create_batches(dir_ref, 4)
     
+    # computing fid
     fid_val = fid(batch_dir_ref, batch_dir_mmse) 
+    
+    # remove folder with patches
+    shutil.rmtree(batch_dir_ref)
+    shutil.rmtree(batch_dir_mmse)
     
     return fid_val
 

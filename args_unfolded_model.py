@@ -24,6 +24,8 @@ def args_unfolded():
         "mode":"train",
         "dataset_path":"/users/cmk2000/sharedscratch/Datasets/ffhq_dataset",
         "save_checkpoint_dir":"/users/cmk2000/sharedscratch/Pretrained-Checkpoints/Conditional-diffusion_model_for_ivp",
+        # "save_checkpoint_dir":"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model_for_ivp/Checkpoints",
+        "path_save": "/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp"
     }
     pyhsic = {
         "kernel_size": 25,
@@ -36,7 +38,16 @@ def args_unfolded():
         "model_name": "drunet_color", #"ircnn_color, drunet_color",
         "use_dpir":True,
     }
+    evaluation = {
+        "fid":True,
+        "swd":True,
+        "cmmd":True,
+        "metrics":True,
+        "skipper":2,
+        "coverage":True,
+    }
     args = DotDict(main_args)
     args.physic = DotDict(pyhsic)
     args.dpir = DotDict(dpir)
+    args.evaluation = DotDict(evaluation)
     return args

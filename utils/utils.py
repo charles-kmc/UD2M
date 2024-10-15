@@ -6,6 +6,7 @@ import cv2
 import logging
 from torchviz import make_dot 
 import lpips
+import numpy as np
 
 
 # --- noise level evaluation function
@@ -136,16 +137,16 @@ class DotDict(dict):
 
 # save images
 def save_images(dir, image, name):
-    """
-    Save an image to a specified directory with a given name.
-
-    Args:
-        dir (str): The directory where the image will be saved.
-        image (numpy.ndarray): The image to be saved.
-        name (str): The name of the image file.
-
-    Returns:
-        None
-    """
+    """Save an image to a specified directory with a given name."""
+    
+    if torch.is_tensor(image):
+        image = tensor2uint(image)
     image_array = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     cv2.imwrite(os.path.join(dir, name + '.png'), image_array)
+
+# convert torch tensor to uint
+def tensor2uint(img):
+    img = img.data.squeeze().float().clamp_(0, 1).cpu().numpy()
+    if img.ndim == 3:
+        img = np.transpose(img, (1, 2, 0))
+    return np.uint8((img*255.0).round())

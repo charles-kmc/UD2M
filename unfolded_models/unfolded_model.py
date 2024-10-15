@@ -719,10 +719,10 @@ class Trainer:
                 self.save_trainable_params(epoch)   
     
     def save_args_yaml(self):
-        checkpoint_dir = bf.join(self.args.save_checkpoint_dir, self.args.date)
-        os.makedirs(checkpoint_dir, exist_ok=True)
-        filename = f"LoRA_model_{self.args.task}.yaml"
-        filepath = bf.join(checkpoint_dir, filename)
+        yaml_dir = bf.join(self.args.path_save, self.args.task, "Config", self.args.date)
+        os.makedirs(yaml_dir, exist_ok=True)
+        filename = f"lora_model_{self.args.task}.yaml"
+        filepath = bf.join(yaml_dir, filename)
         with open(filepath, 'w') as f:
             yaml.dump(self.args, f)        
     #
@@ -798,7 +798,7 @@ class Trainer:
         
     # - save the checkpoint model   
     def save(self, epoch):
-        checkpoint_dir = bf.join(self.args.save_checkpoint_dir, self.args.date)
+        checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date)
            
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
@@ -823,7 +823,7 @@ class Trainer:
         
     # saving only trainable parameters
     def save_trainable_params(self, epoch):
-        checkpoint_dir = bf.join(self.args.save_checkpoint_dir, self.args.date) 
+        checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date) 
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
         except:
@@ -848,18 +848,19 @@ class Trainer:
             )
     
     def load_trainable_params(self, epoch):
-        checkpoint_dir = bf.join(self.args.save_checkpoint_dir, self.args.date)
+        checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date)
         filename = f"LoRA_model_{self.args.task}_{(epoch):03d}.pt"
         filepath = bf.join(checkpoint_dir, filename)
         trainable_state_dict = torch.load(filepath)
         self.copy_model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)
         
     def _resume_model(self):
+        dir_ = bf.joint(self.args.path_save, self.args.task, "Checkpoints")
         if self.args.resume_model:
-            resume_dates = os.listdir(self.args.save_checkpoint_dir)
+            resume_dates = os.listdir(dir_)
             if len(resume_dates)>=1:
                 resume_date = sorted(resume_dates)[-1]
-                checkpoint_dir = bf.join(self.args.save_checkpoint_dir, resume_date)
+                checkpoint_dir = bf.join(dir_, resume_date)
                 
                 # Filter files that start with 'LoRA_model' and end with '.pt'
                 filtered_files = [f for f in os.listdir(checkpoint_dir) if f.startswith("LoRA_model_deblur") and f.endswith(".pt")]

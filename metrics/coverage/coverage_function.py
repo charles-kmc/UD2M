@@ -38,7 +38,7 @@ def coverage_eval(x : torch, op: object):
 
     # Save the results
     temp_df = pd.DataFrame(list(zip(op.im_num,list(op.quantilelist_list),op.inside_interval,op.num_dist_greater,op.truexdist_list)), columns =['im_num','quantilelist','inside_interval','num_dist_greater','truexdist'])
-    op.save_dir = os.path.join(op.save_dir, f'output_coverage_{op.name_method}.csv')
+    op.save_dir = os.path.join(op.save_dir, f'output_coverage.csv')
     temp_df.to_csv(op.save_dir, mode='a', header=not os.path.exists(op.save_dir))
     
     

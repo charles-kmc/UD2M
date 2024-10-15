@@ -71,16 +71,17 @@ class DDIM_SAMPLER:
         
         if self.args.use_wandb:
             formatted_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            #dir_w = "/users/cmk2000/sharedscratch/Results"
+            dir_w = "/users/cmk2000/sharedscratch/Results/wandb"
+            os.makedirs(dir_w, exist_ok=True)
             wandb.init(
                     # set the wandb project where this run will be logged
                     project="Sampling Unfolded Conditional Diffusion Models",
-                    #dir = dir_w,
+                    dir = dir_w,
                     config={
                         "model": "Deep Unfolding",
                         "Structure": "HQS",
                         "dataset": "FFHQ - 256",
-                        #"dir": dir_w,
+                        "dir": dir_w,
                         "pertub":self.args.pertub,
                     },
                     name = f"{formatted_time}_num_steps_{num_timesteps}_unfolded_iter_{self.args.max_unfolded_iter}_{init}_task_{self.args.task}_rank_{self.args.rank}_eta{self.args.eta}_zeta_{self.args.zeta}_epoch_{self.args.epoch}",
@@ -130,7 +131,7 @@ class DDIM_SAMPLER:
             
             if self.args.save_progressive:   
                 img_total = cv2.hconcat(progress_img)
-                if self.args.use_wandb:
+                if self.args.use_wandb and self.args.save_wandb_img:
                     image_wdb = wandb.Image(img_total, caption=f"progress sequence for im {im_name}", file_type="png")
                     wandb.log({"pregressive":image_wdb})
             
@@ -152,7 +153,7 @@ class DDIM_SAMPLER:
                                             inverse_image_transform(im).detach().cpu()
                                         ).item()
             
-            if self.args.use_wandb:
+            if self.args.use_wandb and self.args.save_wandb_img:
                 im_wdb = wandb.Image(
                     get_rgb_from_tensor(inverse_image_transform(im)), 
                     caption=f"true image {im_name}", 
@@ -180,7 +181,7 @@ class DDIM_SAMPLER:
         return {
             "xstart_pred":x_0,
             "auxiliary":z0,
-            "progress_img":progress_img,
+            "progress_img":img_total,
         }
 # load lara weights                
 def load_trainable_params(model, epoch, args):

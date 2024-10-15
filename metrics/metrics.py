@@ -27,6 +27,8 @@ class Metrics():
     
     # --- ssim
     def ssim_function(self,x,y):
+        x = x.unsqueeze(0) if x.dim()==3 else x
+        y = y.unsqueeze(0) if y.dim()==3 else y
         ssim_val  = self.ssim(x, y)
         return ssim_val.cpu().detach().squeeze().numpy()
     
