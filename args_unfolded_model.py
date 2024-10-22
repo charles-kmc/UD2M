@@ -3,8 +3,8 @@ from utils.utils import DotDict
 def args_unfolded():
     main_args = {
         "task":"debur",
-        "resume_epoch":0,
-        "resume_model":0,
+        "resume_epoch": 0,
+        "resume_model": True,
         "learning_rate":3e-5,
         "weight_decay":1e-2,
         "rank":10,
@@ -23,8 +23,8 @@ def args_unfolded():
         "im_size":256,
         "mode":"train",
         "dataset_path":"/users/cmk2000/sharedscratch/Datasets/ffhq_dataset",
-        "save_checkpoint_dir":"/users/cmk2000/sharedscratch/Pretrained-Checkpoints/Conditional-diffusion_model_for_ivp",
-        # "save_checkpoint_dir":"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model_for_ivp/Checkpoints",
+        # "save_checkpoint_dir":"/users/cmk2000/sharedscratch/Pretrained-Checkpoints/Conditional-diffusion_model_for_ivp",
+        "save_checkpoint_dir":"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model_for_ivp",
         "path_save": "/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp"
     }
     pyhsic = {
@@ -32,6 +32,7 @@ def args_unfolded():
         "blur_name":"gaussian",
         "sigma_model":0.05,
         "transform_y": True,
+        "random_blur": False,
     }
     dpir = {
         "pretrained_pth": "/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo",
@@ -44,7 +45,7 @@ def args_unfolded():
         "cmmd":True,
         "metrics":True,
         "skipper":2,
-        "coverage":True,
+        "coverage":False,
     }
     args = DotDict(main_args)
     args.physic = DotDict(pyhsic)

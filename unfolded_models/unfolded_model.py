@@ -8,6 +8,7 @@ import wandb
 import time
 import cv2
 import matplotlib.pyplot as plt
+from PIL import Image
 import blobfile as bf
 import datetime
 import kornia
@@ -20,12 +21,12 @@ from torch.optim import AdamW
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.transforms as transforms
 
 from utils.utils import Metrics, inverse_image_transform, image_transform
 from utils_lora.lora_parametrisation import LoRa_model, enable_disable_lora
 from DPIR.dpir_models import DPIR_deb
 
-T_AUG = 0
 
 # extract into tensor       
 def extract_tensor(
@@ -140,7 +141,7 @@ class GetDenoisingTimestep:
         return rho, tz, ty
     
     # get rho and t from sigma_t and sigma_y
-    def get_tz_rho(self, t, sigma_y, x_shape):
+    def get_tz_rho(self, t, sigma_y, x_shape, T_AUG):
         sigma_t = extract_tensor(self.scheduler.sigmas, t, x_shape) 
         if not torch.is_tensor(sigma_y):
             sigma_y = torch.tensor(sigma_y).to(self.device)
@@ -148,7 +149,7 @@ class GetDenoisingTimestep:
             sigma_y = sigma_y.to(self.device)
         rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2))
         tz = torch.clamp(
-            self.t_y(rho[0,0,0,0]).cpu() + torch.tensor(T_AUG),
+            self.t_y(rho[0,0,0,0]).cpu() - torch.tensor(T_AUG),
             1,
             self.scheduler.num_timesteps
         )
@@ -168,10 +169,12 @@ class physics_models:
         self, 
         kernel_size:int, 
         blur_name:str, 
-        device = "cpu",
+        random_blur: bool = False,
+        device:str = "cpu",
         sigma_model:float= 0.05, 
         dtype = torch.float32, 
-        transform_y:bool = False
+        transform_y:bool = False,
+        path_motion_kernel:str = "/users/cmk2000/sharedscratch/Datasets/blur-kernels/kernels/training_set" 
     ) -> None:
         # parameters
         self.transform_y = transform_y
@@ -179,32 +182,56 @@ class physics_models:
         self.sigma_model = 2 * sigma_model if self.transform_y else sigma_model
         self.dtype = dtype
         self.kernel_size = kernel_size
+        self.blur_name = blur_name
+        self.random_blur = random_blur
         
-        # kernel
+        # motion kernel
+        self.path_motion_kernel = path_motion_kernel
+        self.list_motion_kernel = os.listdir(self.path2motion_kernel) 
+        self.transforms_kernel = transforms.Compose([
+                transforms.Resize((self.kernel_size, self.kernel_size)),
+                transforms.ToTensor()
+            ])
+        
+    def _get_kernel(self,blur_name):
         if blur_name == "gaussian":
-            self.blur_kernel = self._gaussian_kernel(kernel_size).to(self.device)
-        elif blur_name == "motion":
-            self.blur_kernel = self._motion_kernel(kernel_size).to(self.device)
+            self.blur_kernel = self._gaussian_kernel(self.kernel_size).to(self.device)
+        elif blur_name  == "uniform":
+            self.blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
+        elif blur_name  == "motion":
+            self.blur_kernel = self._motion_kernel(self.kernel_size).to(self.device)
         else:
-            raise ValueError(f"Blur type {blur_name} not implemented !!")
-        
+            raise ValueError(f"Blur type {blur_name } not implemented !!")
+    
+    def _motion_kernel(self):
+        kernel_name = random.choice(self.list_motion_kernel)   
+        kernel = Image.open(os.path.join(self.path_motion_kernel, kernel_name))
+        kernel_ = self.transforms_kernel(kernel)[0,...].squeeze()
+        kernel_ /= kernel_.sum()
+        return kernel_
+    
     def _gaussian_kernel(self, kernel_size, std = 3.0):
-        
-        
         c = int((kernel_size - 1)/2)
         v = torch.arange(-kernel_size + c, kernel_size - c, dtype = self.dtype).reshape(-1,1)
         vT = v.T
         exp = torch.exp(-0.5*(v**2 + vT**2)/std)
         exp /= torch.sum(exp)
-        return exp #
+        return exp 
         
-    def _motion_kernel(self, kernel_size):
+    def _uniform_kernel(self, kernel_size):
         exp = torch.ones(kernel_size, kernel_size).to(self.dtype)
         exp /= torch.sum(exp)
         return exp
     
     def blur2A(self, im_size):
-        blur = self.blur_kernel.squeeze()
+        if self.random_blur:
+            blur_name = random.choice(["gaussian", "uniform", "motion"])
+        else:
+            blur_name = self.blur_name
+            
+        # blur = self.blur_kernel.squeeze()
+        blur = self._get_kernel(blur_name)
+        
         if len(blur.shape) > 2:
             raise ValueError("The kernel dimension is not correct")
         device = blur.device
@@ -215,17 +242,7 @@ class physics_models:
             H_op = torch.roll(H_op, -int(axis_size / 2), dims=axis)
         FFT_h = torch.fft.fft2(H_op, dim = (-2,-1))
         return FFT_h[None, None, ...], blur
-    
-    def actualconvolve(self, x, kernel, transpose = False):
-        if len(kernel.shape) == 2:
-            kernel = kernel.unsqueeze(0)
-        else:
-            pass
-        if transpose:
-            return(kornia.filters.filter2d(x, kernel.rot90(2,[2,1]), border_type='circular'))
-        else:
-            return(kornia.filters.filter2d(x, kernel, border_type='circular'))
-        
+
     # forward operator
     def Ax(self, x):
         im_size = x.shape[-1]
@@ -234,7 +251,6 @@ class physics_models:
         ax = torch.real(
             torch.fft.ifft2(FFT_h * FFT_x, dim = (-2,-1))
         )
-        #ax = self.actualconvolve(x,h)
         return ax
     
     # forward operator
@@ -246,7 +262,6 @@ class physics_models:
         atx = torch.real(
             torch.fft.ifft2(FFT_hc * FFT_x, dim = (-2,-1))
         )
-        # atx = self.actualconvolve(x, h, transpose=True)
         return atx
     
     # observation y
@@ -322,16 +337,17 @@ class HQS_models:
         x:torch.Tensor, 
         x_t:torch.Tensor, 
         t:int, 
-        max_iter:int = 3
+        max_iter:int = 3,
+        T_AUG:int = 0
     ) -> dict:
         B,C = x.shape[:2]
         
         # get denoising timestep
-        rho, t_denoising, ty = self.get_denoising_timestep.get_tz_rho(t, self.physic.sigma_model, x_t.shape)
+        rho, t_denoising, ty = self.get_denoising_timestep.get_tz_rho(t, self.physic.sigma_model, x_t.shape, T_AUG)
         
         # --- initialisation
         x = x / extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t_denoising, x.shape)
-        
+            
         if self.args.use_wandb and self.args.mode == "train":
             wandb.log(
                 {
@@ -347,9 +363,9 @@ class HQS_models:
             # noise prediction
             if self.args.pertub:
                 noise = torch.randn_like(z_)
-                val = 10 * torch.ones_like(t_denoising).long()
+                val = 1 * torch.ones_like(t_denoising).long()
                 max_val = 1000 * torch.ones_like(t_denoising).long()
-                tu = torch.clamp(val, t_denoising, max_val)
+                tu = torch.clamp(t_denoising, val, max_val)
                 z = self.diffusion_scheduler.sample_xt(z_, tu, noise=noise)
             else:
                 z = z_.clone()
@@ -380,110 +396,6 @@ class HQS_models:
             "eps_z":eps
         }
 
-#################################################################################
-#################################################################################
-class HQS_models_new_approach:
-    def __init__(
-        self,
-        model, 
-        physic:physics_models, 
-        diffusion_scheduler:DiffusionScheduler, 
-    ) -> None:
-        self.model = model
-        self.diffusion_scheduler = diffusion_scheduler
-        self.physic = physic
-    
-    def proxf_update(
-        self, 
-        y:torch.Tensor,
-        x:torch.Tensor, 
-        rho:float, 
-    )-> torch.Tensor: 
-           
-        self.im_size = y.shape[-1]
-        FFTy = torch.fft.fft2(y, dim = (-2,-1))
-        FFT_H = self.physic.blur2A(self.im_size)
-        FFT_HC = torch.conj(FFT_H)
-        FFTx = torch.fft.fft2(x, dim=(-2,-1))
-        _mu = FFT_HC * FFTy / self.physic.sigma_model**2 + FFTx / rho**2 
-       
-        return torch.real(
-            torch.fft.ifft2(
-                _mu * self._precision(FFT_H, rho),
-                dim = (-2,-1)
-            )
-        )
-        
-    def _precision(
-        self,
-        FFT_H:torch.Tensor, 
-        rho:float, 
-        ) -> torch.Tensor:
-        out =  (
-            FFT_H**2 / self.physic.sigma_model**2 
-            + 1 / rho 
-        )
-        
-        return 1 / out
-    
-    def run_unfolded_loop(
-        self, 
-        y:torch.Tensor, 
-        x:torch.Tensor, 
-        x_t:torch.Tensor, 
-        t:int, 
-        max_iter:int = 3
-    ) -> dict:
-        B,C = x.shape[:2]
-        t_rho = t 
-        t_rho = t_rho.long()
-        rho = extract_tensor(self.diffusion_scheduler.sigmas, t_rho, x.shape)
-        #rho = 1000#rho / (rho.max().sqrt())
-        
-        half_t = t
-        half_t = half_t.long()
-        sigma_t = extract_tensor(self.diffusion_scheduler.sigmas, half_t, x_t.shape)
-        sqrt_alpha_comprod = extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t, x_t.shape)
-        
-        # unfolded loop
-        for _ in range(max_iter):
-            
-            # prox step
-            z = self.proxf_update(y, x, rho)
-            wandb.log({"min z":z.min(), "max z":z.max()})
-            z = torch.clamp(z, 0, 1)
-            
-            # noisy image 
-            Sigma_inv = (sigma_t**2 * rho) / (sigma_t**2+rho)
-            _mu_z = z/rho + x_t / (sigma_t**2 * sqrt_alpha_comprod)
-            u = Sigma_inv * _mu_z
-            
-            # noise prediction         
-            eps = self.model(u, t_rho)
-            eps, _ = torch.split(eps, C, dim=1) if eps.shape == (B, C * 2, *x_t.shape[2:]) else (eps, eps)
-            x_1 = self.diffusion_scheduler.predict_xstart_from_eps(u, t_rho, eps)
-            x_pred = u - Sigma_inv.sqrt() * eps
-            x = inverse_image_transform(x_pred)
-            
-            ##############
-            ##############
-            eps0 = self.model(x_t, half_t)
-            eps0, _ = torch.split(eps0, C, dim=1) if eps0.shape == (B, C * 2, *x_t.shape[2:]) else (eps0, eps0)
-            x_10 = self.diffusion_scheduler.predict_xstart_from_eps(x_t, half_t, eps0)
-            ##############
-            ##############
-            
-            wandb.log({"min eps":eps.min(), "max eps":eps.max()})
-            wandb.log({"min x_":x_pred.min(), "max x_":x_pred.max()})
-            wandb.log({"min x_1":x_1.min(), "max x_1":x_1.max()})
-            wandb.log({"min u":u.min(), "max u":u.max()})
-            wandb.log({"min x10":x_10.min(), "max x10":x_10.max()})
-            wandb.log({"min xt":x_t.min(), "max xt":x_t.max()})
-        
-        return {"u":u,"xstart_pred":x_pred, "aux":z, "eps_pred":eps, "noisy_image":inverse_image_transform(x_10),}
-#################################################################################
-#################################################################################
-     
 # trainer model
 class Trainer:
     def __init__(
@@ -570,19 +482,21 @@ class Trainer:
                         "epochs": epochs,
                         "dir": dir_w,
                         "pertub":self.args.pertub,
-                        "T_AUG":T_AUG,
                         "max_unfolded_iter":self.args.max_unfolded_iter,
+                        "random blur":self.args.physic.random_blur,
+                        "blur name": self.args.physic.blur_name if not self.args.physic.random_blur else None
                     },
                     name = f"{formatted_time}_Cons_{self.args.use_consistancy}_{init}_pertub_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}_max_iter_unfold_{self.args.max_unfolded_iter}",
                     
                 )
             
         # resume training 
+        self.resume_epoch = -1
         if self.args.resume_model:
             self._resume_model()
-        
+
         # training loop
-        for epoch in range(self.args.resume_epoch, epochs):
+        for epoch in range(self.resume_epoch+1, epochs):
             # setting training mode
             self.logger.info(f"Epoch ==== >> {epoch}")
             self.model.train()
@@ -635,11 +549,9 @@ class Trainer:
                     
                     # loss
                     loss = nn.MSELoss()(eps_pred, noise_target).mean()
-                    if self.args.use_consistancy and False:
-                        loss += consistancy_loss(xstart_pred, y, self.physic)
-                    self.accelerator.backward(loss)        
-
+            
                     # updating learnable parameters and setting gradient to zero
+                    self.accelerator.backward(loss)        
                     self.optimizer.step()
                     self.scheduler.step() 
                     self.model.zero_grad()
@@ -663,59 +575,52 @@ class Trainer:
                                         ).item()
                             }
                         )
-                        
-                    # reporting some images 
-                    if ii % 100 == 0:
-                        if self.args.use_wandb:
-                            xstart_pred_wdb = wandb.Image(
-                                    get_batch_rgb_from_batch_tensor(xstart_pred), 
-                                    caption=f"x0_hat {idx}_{epoch}", 
-                                    file_type="png"
-                                )
-                            batch_wdb = wandb.Image(
-                                    get_batch_rgb_from_batch_tensor(batch_0), 
-                                    caption=f"x0 {idx}_{epoch}", 
-                                    file_type="png"
-                                )
-                            ys_wdb = wandb.Image(
-                                    get_batch_rgb_from_batch_tensor(y), 
-                                    caption=f"y {idx}_{epoch}", 
-                                    file_type="png"
-                                )
-                            xt_wdb = wandb.Image(
-                                    get_batch_rgb_from_batch_tensor(x_t), 
-                                    caption=f"xt {idx}_{epoch}", 
-                                    file_type="png"
-                                )
-                            aux_wdb = wandb.Image(
-                                    get_batch_rgb_from_batch_tensor(aux), 
-                                    caption=f"z {idx}_{epoch}", 
-                                    file_type="png"
-                                )
-
-                            wandb.log(
-                                {
-                                    "ref image": batch_wdb, 
-                                    "blurred":ys_wdb, 
-                                    "xt":xt_wdb, 
-                                    "x predict": xstart_pred_wdb, 
-                                    "Auxiliary":aux_wdb,
-                                }
-                            )
-                            
-                            idx += 1
-                    
-                        
+   
                     end_time = time.time()  
                     ellapsed = end_time - t_start       
                     self.logger.info(f"Elapsed time per epoch: {ellapsed}") 
+            
+            # reporting some images 
+            if self.args.use_wandb:
+                xstart_pred_wdb = wandb.Image(
+                        get_batch_rgb_from_batch_tensor(xstart_pred), 
+                        caption=f"x0_hat Epoch: {epoch}", 
+                        file_type="png"
+                    )
+                batch_wdb = wandb.Image(
+                        get_batch_rgb_from_batch_tensor(batch_0), 
+                        caption=f"x0 Epoch: {epoch}", 
+                        file_type="png"
+                    )
+                ys_wdb = wandb.Image(
+                        get_batch_rgb_from_batch_tensor(y), 
+                        caption=f"y Epoch: {epoch}", 
+                        file_type="png"
+                    )
+                xt_wdb = wandb.Image(
+                        get_batch_rgb_from_batch_tensor(x_t), 
+                        caption=f"xt Epoch: {epoch}", 
+                        file_type="png"
+                    )
+                aux_wdb = wandb.Image(
+                        get_batch_rgb_from_batch_tensor(aux), 
+                        caption=f"z Epoch: {epoch}", 
+                        file_type="png"
+                    )
 
-                    
+                wandb.log(
+                    {
+                        "ref image": batch_wdb, 
+                        "blurred":ys_wdb, 
+                        "xt":xt_wdb, 
+                        "x predict": xstart_pred_wdb, 
+                        "Auxiliary":aux_wdb,
+                    }
+                )
             torch.cuda.empty_cache() 
             
             # save checkpoints
             if epoch%self.args.save_checkpoint_range == 0:
-                self.save(epoch)
                 self.save_trainable_params(epoch)   
     
     def save_args_yaml(self):
@@ -854,29 +759,54 @@ class Trainer:
         trainable_state_dict = torch.load(filepath)
         self.copy_model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)
         
-    def _resume_model(self):
-        dir_ = bf.joint(self.args.path_save, self.args.task, "Checkpoints")
+    # resume training 
+    def _resume_model(self, resume_date = None, resume_epoch = None):
+        dir_ = bf.join(self.args.path_save, self.args.task, "Checkpoints")
+        
         if self.args.resume_model:
-            resume_dates = os.listdir(dir_)
-            if len(resume_dates)>=1:
-                resume_date = sorted(resume_dates)[-1]
+            if resume_date is not None:
                 checkpoint_dir = bf.join(dir_, resume_date)
-                
-                # Filter files that start with 'LoRA_model' and end with '.pt'
-                filtered_files = [f for f in os.listdir(checkpoint_dir) if f.startswith("LoRA_model_deblur") and f.endswith(".pt")]
-                if len(filtered_files)>=1:
+            else:
+                resume_dates = os.listdir(dir_)
+                if len(resume_dates)>0:
+                    resume_date = sorted(resume_dates)[-1]
+                    checkpoint_dir = bf.join(dir_, resume_date)
+                else:
+                    self.resume_epoch = 0
+                    self.logger.info(f"This folder is empty: {resume_date}. We will restart the training!!")
+                    return -1
+
+            self.resume_date = resume_date
+            # Filter files that start with 'LoRA_model' and end with '.pt'
+            filtered_files = [f for f in os.listdir(checkpoint_dir) if f.startswith("LoRA_model_debur") and f.endswith(".pt")]
+            if len(filtered_files)>0:
+                if resume_epoch is None:
+                    # recent checkpoint base on epoch
                     filename = sorted(filtered_files)[-1]
                     file_path = bf.join(checkpoint_dir, filename)
-            
+                    resume_epoch = np.int32(filename.rsplit("_",1)[-1].split(".")[0])
+                else:
+                    filename = f"LoRA_model_{self.args.task}_{(resume_epoch):03d}.pt"
+                    file_path = bf.join(checkpoint_dir, filename)
+                    
+                self.resume_epoch=resume_epoch
+                if os.path.exists(file_path):
                     checkpoint = torch.load(file_path)
                     self.model.load_state_dict(checkpoint['model_state_dict'], strict=False)
                     self.optimizer.load_state_dict(checkpoint['optimizer_state_dict']) 
                     self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+                    self.resume_epoch = resume_epoch#checkpoint["epoch"]
+                    self.logger.info(f"We are resuming training from epoch: {self.resume_epoch}.")
+                    print(f"We are resuming training from epoch: {self.resume_epoch}.")
                 else:
-                    raise ValueError("We can resume the training because there is no checkpoint in this directory.")
+                    self.logger.info(f"This file ({filename}) do not exist. We will start training from epoch 0 !!!")
+                    self.resume_epoch=0
+                    return -1
             else:
-                raise ValueError("We can resume the training because there is no checkpoint in this directory.")
-            
+                self.logger.info(f"This folder ({resume_date}) do not contains any checkpoints. We will restart the training  from epoch 0 !!!")
+                self.resume_epoch=0
+                return -1        
+    
     def _seed(self, seed):
         # Set random seeds for reproducibility
         torch.manual_seed(seed)
@@ -904,22 +834,6 @@ def get_batch_rgb_from_batch_tensor(x):
     L = [get_rgb_from_tensor(xi) for xi in x]
     out= cv2.hconcat(L)*255.
     return out
-                    
-def consistancy_loss(
-    x:torch.Tensor,
-    y:torch.Tensor,
-    physic: physics_models,
-) -> torch.Tensor:
-    device = x.device
-    # Create a list of kernels and images
-    mse_per_sample = []
-    for i in range(y.shape[0]):
-        x_i = inverse_image_transform(x[i,...])
-        Ax_i = physic.Ax(x_i).squeeze()
-        mse_per_sample.append(nn.MSELoss()(Ax_i, y[i]).mean().item())
-    mse_val = torch.tensor(mse_per_sample).to(device)
-    loss =  mse_val #/ (2*physic.sigma_model**2)  
-    return loss.mean()
       
 def model_parameters(model, logger):
     trained_params = 0

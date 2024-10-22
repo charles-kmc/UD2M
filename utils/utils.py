@@ -23,7 +23,10 @@ def projbox(x, min_x, max_x):
 class welford:
     def __init__(self, x, startit = 1):
         self.k = startit
-        self.M = x.clone().detach()
+        try:
+            self.M = x.clone().detach()
+        except:
+            self.M = x.clone()
         self.S = 0
 
     # -- update new data
@@ -144,9 +147,19 @@ def save_images(dir, image, name):
     image_array = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
     cv2.imwrite(os.path.join(dir, name + '.png'), image_array)
 
+    del image
+    del image_array
+    torch.cuda.empty_cache()
+
 # convert torch tensor to uint
 def tensor2uint(img):
     img = img.data.squeeze().float().clamp_(0, 1).cpu().numpy()
     if img.ndim == 3:
         img = np.transpose(img, (1, 2, 0))
     return np.uint8((img*255.0).round())
+
+def delete(var:list):
+    if len(var)>1:
+        for x in var:
+            del x
+        torch.cuda.empty_cache()

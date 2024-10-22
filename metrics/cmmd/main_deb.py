@@ -15,6 +15,7 @@
 
 """The main entry point for the CMMD calculation."""
 import os
+import pandas as pd
 from absl import app
 from absl import flags
 import distance
@@ -27,6 +28,7 @@ import logging
 import matplotlib.image as mpimg
 
 import cv2
+import shutil
 
 
 _BATCH_SIZE = flags.DEFINE_integer(
@@ -66,16 +68,17 @@ def rewrite_images(dir):
         # Convert RGB to RGBA (add an alpha channel if not present)
         if image_rgb.shape[2] == 3:
             alpha_channel = 255 * np.ones((image_rgb.shape[0], image_rgb.shape[1], 1), dtype=image_rgb.dtype)
-            image_rgba = np.concatenate((image_rgb, alpha_channel), axis=2)
+            image_rgba = cv2.merge((image_rgb, alpha_channel))
         else:
             image_rgba = image_rgb
 
+        
         # Convert RGBA to BGRA
         image_bgra = cv2.cvtColor(image_rgba, cv2.COLOR_RGBA2BGRA)
-        dir_save = os.path.join(dir0, folder+"_a")
+        dir_save = os.path.join(dir0, folder+"_cmmd")
         os.makedirs(dir_save, exist_ok=True)
         save_images(dir_save, image_bgra, dataname)
-    
+        
     return dir_save
         
 def compute_cmmd(
@@ -108,13 +111,13 @@ def compute_cmmd(
   return np.asarray(val)
 
 def main(argv):
-  if len(argv) != 7:
+  if len(argv) != 5:
     raise app.UsageError('Too few/too many command-line arguments.')
-  _, dir1, dir2, method, dataset, blur, noise_val = argv
+  _, dir1, dir2, eta, zeta = argv
   
   # Create logger
   script_dir = os.path.dirname(__file__)
-  logger_name = f'{dataset}_{blur}.log'
+  logger_name = f'"cmmd_results_zeta_{zeta}_eta_{eta}.log'
   log_dir = os.path.join(script_dir, "log")
   
   if not os.path.exists(log_dir):
@@ -126,25 +129,20 @@ def main(argv):
   if os.path.isdir(log_file):
     raise IsADirectoryError(f"The specified log file path is a directory: {log_file}")
 
-  # Configure the logging
-  logging.basicConfig(
-      filename=log_file,                # Full path to the log file
-      filemode='a',                      # Append mode
-      level=logging.DEBUG,               # Set the logging level
-      format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log format
-      datefmt='%Y-%m-%d %H:%M:%S'        # Date format
-  )
-
-  logger = logging.getLogger(__name__)
-    
   
   dir1_new = rewrite_images(dir1)
   dir2_new = rewrite_images(dir2)
-  logger.info(
-      f'method: {method} -- noise: {noise_val} -- Blur:{blur}. The CMMD value is: '
-      f' {compute_cmmd(dir1_new, dir2_new, _BATCH_SIZE.value, _MAX_COUNT.value):.5f}'
-  )
-
+  cmmd_val = compute_cmmd(dir1_new, dir2_new, _BATCH_SIZE.value, _MAX_COUNT.value)
+  shutil.rmtree(dir1_new)
+  shutil.rmtree(dir2_new)
+  save_dir = dir1.rsplit("/",1)[0]
+  save_dir = os.path.join(save_dir, f"cmmd_results_zeta_{zeta}_eta_{eta}.csv")
+  print(save_dir)
+  # save data in a csv file 
+  print(f"cmmd_results zeta {zeta} eta {eta}: {cmmd_val}")
+  fid_pd = pd.DataFrame({"cmmd":[cmmd_val]})
+  fid_pd.to_csv(save_dir, mode='a', header=not os.path.exists(save_dir))
+  
 
 if __name__ == '__main__':
   app.run(main)

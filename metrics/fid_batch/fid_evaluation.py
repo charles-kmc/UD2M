@@ -13,7 +13,7 @@ import lpips
         
 from .utils import create_batches
 
-def Fid_evatuation(dir_results, device):
+def Fid_evatuation(dir_results, device, last_sample = False):
     """
     Calculate the Fréchet Inception Distance (FID) between the target and estimated images.
 
@@ -29,19 +29,27 @@ def Fid_evatuation(dir_results, device):
     
     dir_ref = os.path.join(dir_results, "ref")  
     dir_mmse = os.path.join(dir_results, "mmse")
+    if os.path.exists(os.path.join(dir_results, "last")):
+        dir_last = os.path.join(dir_results, "last")
+        
     
     # make patches
-    batch_dir_ref = create_batches(dir_mmse, 4)
-    batch_dir_mmse = create_batches(dir_ref, 4)
+    batch_dir_mmse = create_batches(dir_mmse, 4)
+    batch_dir_ref = create_batches(dir_ref, 4)
+    batch_dir_last = create_batches(dir_last, 4) if last_sample else None
     
     # computing fid
-    fid_val = fid(batch_dir_ref, batch_dir_mmse) 
+    print("we want to compute the fid")
+    fid_mmse = fid(batch_dir_ref, batch_dir_mmse) 
+    fid_last = fid(batch_dir_ref, batch_dir_last) if last_sample else "Not computed" 
+    print("fid computed")
     
     # remove folder with patches
     shutil.rmtree(batch_dir_ref)
     shutil.rmtree(batch_dir_mmse)
+    shutil.rmtree(batch_dir_last) if last_sample else None
     
-    return fid_val
+    return fid_mmse, fid_last
 
 
 

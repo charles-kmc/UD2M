@@ -86,13 +86,13 @@ def main():
     pyhsic = physics_models(
         args.physic.kernel_size, 
         args.physic.blur_name, 
+        random_blur=args.physic.random_blur,
         device = device,
         sigma_model = args.physic.sigma_model,
         transform_y= args.physic.transform_y
     )
     
     # trainer module
-    args.resume_model = False
     args.date = date
     max_unfolded_iter = 3
     args.max_unfolded_iter = max_unfolded_iter
