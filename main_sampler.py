@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 import psutil
 import datetime
-import wandb
+
 import torch
 from torch.utils.data import DataLoader
 
@@ -38,15 +38,16 @@ from metrics.coverage.coverage_function import coverage_eval
 from metrics.sliced_wasserstein_distance.evaluate_swd import eval_swd
 from metrics.metrics import Metrics
 from metrics.fid_batch.fid_evaluation import Fid_evatuation
-import deepinv
 
 
-LORA = True
-MAX_UNFOLDED_ITER = [3]
-T_AUG = 4
-ZETA = [0.0]#6, 0.7, 0.8, 0.9, 1]#np.arange(0.6, 1, 0.1)
 
-def main():
+
+def main(num_timesteps):
+    LORA = True
+    MAX_UNFOLDED_ITER = [3]
+    T_AUG = 4
+    ZETA = [0.0]#6, 0.7, 0.8, 0.9, 1]#np.arange(0.6, 1, 0.1)
+    
     with torch.no_grad():
         # args
         args = args_unfolded()
@@ -63,7 +64,7 @@ def main():
         
         # parameters
         max_iter = 150 if args.evaluation.coverage else 1
-        num_timesteps = 100
+        # num_timesteps = 100
         eta = 0.0
         
         args.eta = eta
@@ -77,7 +78,7 @@ def main():
 
                 args.mode = "eval"
                 args.date = "14-10-2024"
-                args.epoch = 210
+                args.epoch = 300
                 args.eval_date = datetime.datetime.now().strftime("%d-%m-%Y")
                 args.save_wandb_img = False
                 #args.dpir.model_name = 'drunet_color', #"ircnn_color, drunet_color"
@@ -87,6 +88,7 @@ def main():
                 else:
                     init = f"init_xty_{args.init_xt_y}"
                 if args.use_wandb:
+                    import wandb
                     formatted_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     dir_w = "/users/cmk2000/sharedscratch/Results/wandb"
                     os.makedirs(dir_w, exist_ok=True)
@@ -141,7 +143,9 @@ def main():
                     args.physic.blur_name, 
                     device = device,
                     sigma_model = args.physic.sigma_model,
-                    transform_y= args.physic.transform_y
+                    transform_y= args.physic.transform_y,
+                    random_blur=args.physic.random_blur,
+                    mode = "test",
                 )
                 # HQS model
                 denoising_timestep = GetDenoisingTimestep(device)
@@ -379,11 +383,16 @@ def main():
                     print("after fid function !!!!")
                     fid_pd = pd.DataFrame({
                                             "fid mmse":[fid_mmse],
-                                        "fid last": [fid_last]
+                                        "fid last":[fid_last]
                                         })
                     save_dir_fid = os.path.join(save_metric_path, 'fid_results.csv')
                     fid_pd.to_csv(save_dir_fid, mode='a', header=not os.path.exists(save_dir_fid))
                 
-                wandb.finish()    
+                #wandb.finish()    
 if __name__ == "__main__":
-    main()
+    # num_timesteps_vec = [20, 50, 100, 150, 200, 250, 350, 500, 600, 700, 800, 900, 1000]
+    num_timesteps_vec = [200]
+    for steps in num_timesteps_vec:
+        print(f"start steps: {steps}")
+        main(steps)
+        print(f"End steps: {steps}\n\n")

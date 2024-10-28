@@ -117,9 +117,10 @@ class DDIM_SAMPLER:
 
 # load lara weights                
 def load_trainable_params(model, epoch, args):
-    checkpoint_dir = bf.join(args.save_checkpoint_dir, args.date)
+    checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", args.date)
     filename = f"LoRA_model_{args.task}_{(epoch):03d}.pt"
     filepath = bf.join(checkpoint_dir, filename)
+    
     trainable_state_dict = torch.load(filepath)
     model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)               
     

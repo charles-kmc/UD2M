@@ -1,0 +1,4 @@
+Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/22-10-2024/Max_iter_1/unroll_iter_3/timesteps_50/Epoch_300/T_AUG_4/zeta_0.0/eta_0.0/ref_cmmd.
+Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/22-10-2024/Max_iter_1/unroll_iter_3/timesteps_50/Epoch_300/T_AUG_4/zeta_0.0/eta_0.0/mmse_cmmd.
+/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/22-10-2024/Max_iter_1/unroll_iter_3/timesteps_50/Epoch_300/T_AUG_4/zeta_0.0/eta_0.0/cmmd_results_zeta_0.0_eta_0.0_timesteps_50.csv
+cmmd_results zeta 0.0 eta 0.0 timesteps 50: 0.012952430173754692

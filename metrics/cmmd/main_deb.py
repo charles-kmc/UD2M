@@ -111,13 +111,13 @@ def compute_cmmd(
   return np.asarray(val)
 
 def main(argv):
-  if len(argv) != 5:
+  if len(argv) != 6:
     raise app.UsageError('Too few/too many command-line arguments.')
-  _, dir1, dir2, eta, zeta = argv
+  _, dir1, dir2, eta, zeta,timesteps  = argv
   
   # Create logger
   script_dir = os.path.dirname(__file__)
-  logger_name = f'"cmmd_results_zeta_{zeta}_eta_{eta}.log'
+  logger_name = f'"cmmd_results_zeta_{zeta}_eta_{zeta}_timesteps_{timesteps}.log'
   log_dir = os.path.join(script_dir, "log")
   
   if not os.path.exists(log_dir):
@@ -136,10 +136,10 @@ def main(argv):
   shutil.rmtree(dir1_new)
   shutil.rmtree(dir2_new)
   save_dir = dir1.rsplit("/",1)[0]
-  save_dir = os.path.join(save_dir, f"cmmd_results_zeta_{zeta}_eta_{eta}.csv")
+  save_dir = os.path.join(save_dir, f"cmmd_results_zeta_{zeta}_eta_{eta}_timesteps_{timesteps}.csv")
   print(save_dir)
   # save data in a csv file 
-  print(f"cmmd_results zeta {zeta} eta {eta}: {cmmd_val}")
+  print(f"cmmd_results zeta {zeta} eta {eta} timesteps {timesteps}: {cmmd_val}")
   fid_pd = pd.DataFrame({"cmmd":[cmmd_val]})
   fid_pd.to_csv(save_dir, mode='a', header=not os.path.exists(save_dir))
   

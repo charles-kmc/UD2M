@@ -174,7 +174,8 @@ class physics_models:
         sigma_model:float= 0.05, 
         dtype = torch.float32, 
         transform_y:bool = False,
-        path_motion_kernel:str = "/users/cmk2000/sharedscratch/Datasets/blur-kernels/kernels/training_set" 
+        path_motion_kernel:str = "/users/cmk2000/sharedscratch/Datasets/blur-kernels/kernels",
+        mode = "test",
     ) -> None:
         # parameters
         self.transform_y = transform_y
@@ -184,10 +185,17 @@ class physics_models:
         self.kernel_size = kernel_size
         self.blur_name = blur_name
         self.random_blur = random_blur
+        self.mode = mode
         
         # motion kernel
-        self.path_motion_kernel = path_motion_kernel
-        self.list_motion_kernel = os.listdir(self.path2motion_kernel) 
+        if mode == "train":
+            self.path_motion_kernel_train = os.path.join(path_motion_kernel, "training_set")
+            self.list_motion_kernel = os.listdir(self.path_motion_kernel_train)
+        else:
+            self.path_motion_kernel_val = os.path.join(path_motion_kernel, "validation_set")
+            self.list_motion_kernel = os.listdir(self.path_motion_kernel_val)
+        
+        # defined transforms 
         self.transforms_kernel = transforms.Compose([
                 transforms.Resize((self.kernel_size, self.kernel_size)),
                 transforms.ToTensor()
@@ -195,17 +203,23 @@ class physics_models:
         
     def _get_kernel(self,blur_name):
         if blur_name == "gaussian":
-            self.blur_kernel = self._gaussian_kernel(self.kernel_size).to(self.device)
+            blur_kernel = self._gaussian_kernel(self.kernel_size).to(self.device)
         elif blur_name  == "uniform":
-            self.blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
+            blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
         elif blur_name  == "motion":
-            self.blur_kernel = self._motion_kernel(self.kernel_size).to(self.device)
+            blur_kernel = self._motion_kernel(self.kernel_size).to(self.device)
         else:
             raise ValueError(f"Blur type {blur_name } not implemented !!")
+        return blur_kernel
     
     def _motion_kernel(self):
-        kernel_name = random.choice(self.list_motion_kernel)   
-        kernel = Image.open(os.path.join(self.path_motion_kernel, kernel_name))
+        if self.mode == "train":
+            kernel_name = random.choice(self.list_motion_kernel) 
+            kernel = Image.open(os.path.join(self.path_motion_kernel_train, kernel_name)) 
+        else:
+            kernel_name = self.list_motion_kernel[7]  
+            kernel = Image.open(os.path.join(self.path_motion_kernel_val, kernel_name))
+            
         kernel_ = self.transforms_kernel(kernel)[0,...].squeeze()
         kernel_ /= kernel_.sum()
         return kernel_
@@ -231,6 +245,7 @@ class physics_models:
             
         # blur = self.blur_kernel.squeeze()
         blur = self._get_kernel(blur_name)
+        self.blur_kernel = blur
         
         if len(blur.shape) > 2:
             raise ValueError("The kernel dimension is not correct")

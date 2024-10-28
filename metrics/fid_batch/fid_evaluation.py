@@ -32,7 +32,6 @@ def Fid_evatuation(dir_results, device, last_sample = False):
     if os.path.exists(os.path.join(dir_results, "last")):
         dir_last = os.path.join(dir_results, "last")
         
-    
     # make patches
     batch_dir_mmse = create_batches(dir_mmse, 4)
     batch_dir_ref = create_batches(dir_ref, 4)

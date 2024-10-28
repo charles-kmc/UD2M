@@ -89,7 +89,8 @@ def main():
         random_blur=args.physic.random_blur,
         device = device,
         sigma_model = args.physic.sigma_model,
-        transform_y= args.physic.transform_y
+        transform_y= args.physic.transform_y,
+        mode = args.mode,
     )
     
     # trainer module
