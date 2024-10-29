@@ -37,6 +37,7 @@ class DDIM_SAMPLER:
         device,
         args,
         max_unfolded_iter:int = 3,
+        solver_type = "ddim",
     ) -> None:
         self.hqs_model = hqs_model
         self.diffusion = diffusion
@@ -44,6 +45,7 @@ class DDIM_SAMPLER:
         self.device = device
         self.args = args
         self.max_unfolded_iter = max_unfolded_iter
+        self.solver_type = solver_type
         
         # DPIR model
         self.dpir_model = DPIR_deb(
@@ -67,7 +69,7 @@ class DDIM_SAMPLER:
         with torch.no_grad():
             # sequence of timesteps
             seq, progress_seq = self.diffusion.get_seq_progress_seq(num_timesteps)
-            
+            diffusionsolver = DiffusionSolver(seq, self.diffusion)
             # initilisation
             x = torch.randn_like(y)
             
@@ -89,12 +91,12 @@ class DDIM_SAMPLER:
                 
                 # sample from the predicted noise
                 if seq[ii] != seq[-1] and ii < len(seq)-1: 
-                    t_im1 = seq[ii+1]
-                    beta_t = self.diffusion.betas[seq[ii]]
-                    eta_sigma = eta * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] / self.diffusion.sqrt_1m_alphas_cumprod[t_i] * torch.sqrt(beta_t)
-                    x = self.diffusion.sqrt_alphas_cumprod[t_im1] * x0 + np.sqrt(1-zeta) * (torch.sqrt(self.diffusion.sqrt_1m_alphas_cumprod[t_im1]**2 - eta_sigma**2) * out_val["eps_pred"] \
-                                    + eta_sigma * torch.randn_like(x)) + np.sqrt(zeta) * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] * torch.randn_like(x)
-                
+                    if self.solver_type == "ddim":
+                        x = diffusionsolver.ddim_solver(x0, out_val["eps_pred"], ii, eta, zeta)
+                    elif self.solver_type == "ddpm":
+                        x = diffusionsolver.ddpm_solver(x, out_val["eps_pred"], ii, ddpm_param = self.args.ddpm_param)
+                    else:
+                        raise ValueError(f"This solver {self.solver_type} is not implemented. Please verify your solver.")
                 else:
                     x = x0
     
@@ -115,6 +117,36 @@ class DDIM_SAMPLER:
         
         return out_val
 
+class DiffusionSolver:
+    def __init__(
+        self, 
+        seq, 
+        diffusion:DiffusionScheduler, 
+    ):
+        self.seq = seq
+        self.diffusion = diffusion
+    
+    # DDIM solver   
+    def ddim_solver(self, x0, eps, ii, eta, zeta):
+        t_i = self.seq[ii]
+        t_im1 = self.seq[ii+1]
+        beta_t = self.diffusion.betas[self.seq[ii]]
+        eta_sigma = eta * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] / self.diffusion.sqrt_1m_alphas_cumprod[t_i] * torch.sqrt(beta_t)
+        x = self.diffusion.sqrt_alphas_cumprod[t_im1] * x0 \
+            + np.sqrt(1-zeta) * (torch.sqrt(self.diffusion.sqrt_1m_alphas_cumprod[t_im1]**2 - eta_sigma**2) * eps + eta_sigma * torch.randn_like(x0)) \
+                + np.sqrt(zeta) * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] * torch.randn_like(x0)
+        return x
+    
+    # DDPM solver
+    def ddpm_solver(self, x, eps, ii, ddpm_param = 1):
+        t_i = self.seq[ii]
+        t_im1 = self.seq[ii+1]
+        eta_sigma = self.diffusion.sqrt_1m_alphas_cumprod[t_im1] / self.diffusion.sqrt_1m_alphas_cumprod[t_i] * torch.sqrt(self.diffusion.betas[t_i])
+        alpha_t = 1 - self.diffusion.betas[t_i]
+        x = (1 / alpha_t.sqrt()) * ( x - (ddpm_param*self.diffusion.betas[t_i]).sqrt() * eps ) + (ddpm_param*eta_sigma**2 ).sqrt() * torch.randn_like(x)
+        
+        return x
+        
 # load lara weights                
 def load_trainable_params(model, epoch, args):
     checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", args.date)

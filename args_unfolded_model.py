@@ -2,6 +2,7 @@
 from utils.utils import DotDict
 def args_unfolded():
     main_args = {
+        "ddpm_param":1,
         "task":"debur",
         "resume_epoch": 0,
         "resume_model": True,

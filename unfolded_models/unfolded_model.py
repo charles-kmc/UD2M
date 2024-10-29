@@ -393,16 +393,16 @@ class HQS_models:
             x_pred = inverse_image_transform(x)
             x_ = torch.clamp(x_pred, 0.0, 1.0)
             
-            if self.args.use_wandb and self.args.mode == "train":
-                wandb.log(
-                    {
-                        "min eps":eps.min(), 
-                        "max eps":eps.max(),
-                        "min x_pred":x_pred.min(), 
-                        "max x_pred":x_pred.max(),
-                        "min z":z.min(), 
-                        "max z":z.max()  
-                    })
+            # if self.args.use_wandb and self.args.mode == "train":
+                # wandb.log(
+                #     {
+                #         "min eps":eps.min(), 
+                #         "max eps":eps.max(),
+                #         "min x_pred":x_pred.min(), 
+                #         "max x_pred":x_pred.max(),
+                #         "min z":z.min(), 
+                #         "max z":z.max()  
+                #     })
         pred_eps = self.diffusion_scheduler.predict_eps_from_xstrat(x_t, t, x)
         return {
             "xstart_pred":x_, 
@@ -596,42 +596,43 @@ class Trainer:
                     self.logger.info(f"Elapsed time per epoch: {ellapsed}") 
             
             # reporting some images 
-            if self.args.use_wandb:
-                xstart_pred_wdb = wandb.Image(
-                        get_batch_rgb_from_batch_tensor(xstart_pred), 
-                        caption=f"x0_hat Epoch: {epoch}", 
-                        file_type="png"
-                    )
-                batch_wdb = wandb.Image(
-                        get_batch_rgb_from_batch_tensor(batch_0), 
-                        caption=f"x0 Epoch: {epoch}", 
-                        file_type="png"
-                    )
-                ys_wdb = wandb.Image(
-                        get_batch_rgb_from_batch_tensor(y), 
-                        caption=f"y Epoch: {epoch}", 
-                        file_type="png"
-                    )
-                xt_wdb = wandb.Image(
-                        get_batch_rgb_from_batch_tensor(x_t), 
-                        caption=f"xt Epoch: {epoch}", 
-                        file_type="png"
-                    )
-                aux_wdb = wandb.Image(
-                        get_batch_rgb_from_batch_tensor(aux), 
-                        caption=f"z Epoch: {epoch}", 
-                        file_type="png"
-                    )
+            if epoch%5 == 0:
+                if self.args.use_wandb:
+                    xstart_pred_wdb = wandb.Image(
+                            get_batch_rgb_from_batch_tensor(xstart_pred), 
+                            caption=f"x0_hat Epoch: {epoch}", 
+                            file_type="png"
+                        )
+                    batch_wdb = wandb.Image(
+                            get_batch_rgb_from_batch_tensor(batch_0), 
+                            caption=f"x0 Epoch: {epoch}", 
+                            file_type="png"
+                        )
+                    ys_wdb = wandb.Image(
+                            get_batch_rgb_from_batch_tensor(y), 
+                            caption=f"y Epoch: {epoch}", 
+                            file_type="png"
+                        )
+                    xt_wdb = wandb.Image(
+                            get_batch_rgb_from_batch_tensor(x_t), 
+                            caption=f"xt Epoch: {epoch}", 
+                            file_type="png"
+                        )
+                    aux_wdb = wandb.Image(
+                            get_batch_rgb_from_batch_tensor(aux), 
+                            caption=f"z Epoch: {epoch}", 
+                            file_type="png"
+                        )
 
-                wandb.log(
-                    {
-                        "ref image": batch_wdb, 
-                        "blurred":ys_wdb, 
-                        "xt":xt_wdb, 
-                        "x predict": xstart_pred_wdb, 
-                        "Auxiliary":aux_wdb,
-                    }
-                )
+                    wandb.log(
+                        {
+                            "ref image": batch_wdb, 
+                            "blurred":ys_wdb, 
+                            "xt":xt_wdb, 
+                            "x predict": xstart_pred_wdb, 
+                            "Auxiliary":aux_wdb,
+                        }
+                    )
             torch.cuda.empty_cache() 
             
             # save checkpoints
