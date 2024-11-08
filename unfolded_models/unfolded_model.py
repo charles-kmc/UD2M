@@ -218,10 +218,7 @@ class physics_models:
     
 
     def _uniform_motion_kernel(self):
-        if self.mode == "train" or not hasattr(self, "blur"):
-            return self.uniform_kernel_generator.step()["filter"]
-        else:
-            return self.blur
+        return self.uniform_kernel_generator.step(1)["filter"]
 
     
     def _motion_kernel(self):
