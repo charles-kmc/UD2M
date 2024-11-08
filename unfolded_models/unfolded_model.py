@@ -22,6 +22,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
+from .unrolledPhysics import UniformMotionBlurGenerator
 
 from utils.utils import Metrics, inverse_image_transform, image_transform
 from utils_lora.lora_parametrisation import LoRa_model, enable_disable_lora
@@ -186,6 +187,7 @@ class physics_models:
         self.blur_name = blur_name
         self.random_blur = random_blur
         self.mode = mode
+        self.uniform_kernel_generator = UniformMotionBlurGenerator(kernel_size=(kernel_size,kernel_size))
         
         # motion kernel
         if mode == "train":
@@ -208,9 +210,19 @@ class physics_models:
             blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
         elif blur_name  == "motion":
             blur_kernel = self._motion_kernel(self.kernel_size).to(self.device)
+        elif blur_name == "uniform_motion":
+            blur_kernel = self._uniform_motion_kernel().to(self.device)
         else:
             raise ValueError(f"Blur type {blur_name } not implemented !!")
         return blur_kernel
+    
+
+    def _uniform_motion_kernel(self):
+        if self.mode == "train" or not hasattr(self, "blur"):
+            return self.uniform_kernel_generator.step()["filter"]
+        else:
+            return self.blur
+
     
     def _motion_kernel(self):
         if self.mode == "train":
@@ -244,19 +256,21 @@ class physics_models:
             blur_name = self.blur_name
             
         # blur = self.blur_kernel.squeeze()
-        blur = self._get_kernel(blur_name)
-        self.blur_kernel = blur
+        if not hasattr(self, "blur"):
+            blur = self._get_kernel(blur_name)
+        else:
+            self.blur_kernel = self.blur
         
-        if len(blur.shape) > 2:
+        if len(self.blur.shape) > 2:
             raise ValueError("The kernel dimension is not correct")
-        device = blur.device
-        n, m = blur.shape
-        H_op = torch.zeros(im_size, im_size, dtype=blur.dtype).to(device)
-        H_op[:n,:m] = blur
-        for axis, axis_size in enumerate(blur.shape):
+        device = self.blur.device
+        n, m = self.blur.shape
+        H_op = torch.zeros(im_size, im_size, dtype=self.blur.dtype).to(device)
+        H_op[:n,:m] = self.blur
+        for axis, axis_size in enumerate(self.blur.shape):
             H_op = torch.roll(H_op, -int(axis_size / 2), dims=axis)
         FFT_h = torch.fft.fft2(H_op, dim = (-2,-1))
-        return FFT_h[None, None, ...], blur
+        return FFT_h[None, None, ...], self.blur
 
     # forward operator
     def Ax(self, x):
@@ -285,6 +299,7 @@ class physics_models:
             x0 = inverse_image_transform(x)
         else:
             x0 = x
+        self.blur = self._get_kernel()
         out = self.Ax(x0) + self.sigma_model * torch.randn_like(x0)
         return out
 
@@ -656,6 +671,7 @@ class Trainer:
                 seq, progress_seq = self.diffusion_scheduler.get_seq_progress_seq(100)
                 
                 # observation y
+                self.physic.step()
                 y = self.physic.y(batch_val)
                 x = torch.randn_like(batch_val)
                 progress_img = []
