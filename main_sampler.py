@@ -176,6 +176,10 @@ def main(num_timesteps, solver_type, ddpm_param = 1):
                     samples_mmse_y = []
                     samples_last_y = []
                     
+
+                    # PSNR paths 
+                    psnr_paths = []
+                    
                     # directories
                     if solver_type == "ddim":
                         param_name_folder = os.path.join(f"zeta_{zeta}", f"eta_{eta}")
@@ -226,8 +230,11 @@ def main(num_timesteps, solver_type, ddpm_param = 1):
                                 im_name, 
                                 num_timesteps = num_timesteps, 
                                 eta=eta, 
-                                zeta=zeta
+                                zeta=zeta,
+                                x_true = x
                             )
+                            
+                            psnr_paths.append(out["psnrs"])
                             
                             process = psutil.Process(os.getpid()) 
                             memo1 = process.memory_info().rss / 1024 ** 2
@@ -382,6 +389,8 @@ def main(num_timesteps, solver_type, ddpm_param = 1):
                                 delete([samples_last_y,samples_mmse_y,samples_ref_y])
                                 # delete([samples_last,samples_last_y,samples_mmse_y,samples_ref_y,samples_mmse,samples_ref])
                         delete([X_posterior_mean,out])
+                    
+
                         
                     # FiD
                     if args.evaluation.fid:
@@ -394,6 +403,13 @@ def main(num_timesteps, solver_type, ddpm_param = 1):
                                             })
                         save_dir_fid = os.path.join(save_metric_path, 'fid_results.csv')
                         fid_pd.to_csv(save_dir_fid, mode='a', header=not os.path.exists(save_dir_fid))
+                    
+                    psnr_paths = np.mean(np.array(psnr_paths), axis=0)
+                    psnr_paths_pd = pd.DataFrame({
+                                                "psnr_paths":psnr_paths
+                                            })
+                    save_dir_psnr_paths = os.path.join(save_metric_path, 'psnr_paths.csv')
+                    psnr_paths_pd.to_csv(save_dir_psnr_paths, mode='a', header=not os.path.exists(save_dir_psnr_paths))
                     
                     wandb.finish()    
 if __name__ == "__main__":
