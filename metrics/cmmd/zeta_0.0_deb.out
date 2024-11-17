@@ -1,17 +1,0 @@
-2024-10-21 15:54:16.079688: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:485] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
-2024-10-21 15:54:16.177334: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:8454] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
-2024-10-21 15:54:16.206596: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1452] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
-2024-10-21 15:54:18.348820: W tensorflow/compiler/tf2tensorrt/utils/py_utils.cc:38] TF-TRT Warning: Could not find TensorRT
-I1021 15:54:30.296823 140163948234560 xla_bridge.py:889] Unable to initialize backend 'cuda': 
-I1021 15:54:30.297195 140163948234560 xla_bridge.py:889] Unable to initialize backend 'rocm': module 'jaxlib.xla_extension' has no attribute 'GpuAllocatorConfig'
-I1021 15:54:30.301549 140163948234560 xla_bridge.py:889] Unable to initialize backend 'tpu': INTERNAL: Failed to open libtpu.so: libtpu.so: cannot open shared object file: No such file or directory
-Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/18-10-2024/Max_iter_1/unroll_iter_3/timesteps_100/Epoch_210/T_AUG_4/zeta_0.0/eta_0.0/ref_cmmd.
-  0%|          | 0/16 [00:00<?, ?it/s]Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/18-10-2024/Max_iter_1/unroll_iter_3/timesteps_100/Epoch_210/T_AUG_4/zeta_0.0/eta_0.0/ref_cmmd.
-Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/18-10-2024/Max_iter_1/unroll_iter_3/timesteps_100/Epoch_210/T_AUG_4/zeta_0.0/eta_0.0/ref_cmmd.
-Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/18-10-2024/Max_iter_1/unroll_iter_3/timesteps_100/Epoch_210/T_AUG_4/zeta_0.0/eta_0.0/ref_cmmd.
-Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/18-10-2024/Max_iter_1/unroll_iter_3/timesteps_100/Epoch_210/T_AUG_4/zeta_0.0/eta_0.0/ref_cmmd.
-Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/18-10-2024/Max_iter_1/unroll_iter_3/timesteps_100/Epoch_210/T_AUG_4/zeta_0.0/eta_0.0/ref_cmmd.
-Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/18-10-2024/Max_iter_1/unroll_iter_3/timesteps_100/Epoch_210/T_AUG_4/zeta_0.0/eta_0.0/ref_cmmd.
-Calculating embeddings for 201 images from /users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/18-10-2024/Max_iter_1/unroll_iter_3/timesteps_100/Epoch_210/T_AUG_4/zeta_0.0/eta_0.0/mmse_cmmd.
-/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/18-10-2024/Max_iter_1/unroll_iter_3/timesteps_100/Epoch_210/T_AUG_4/zeta_0.0/eta_0.0/cmmd_results_zeta_0.0_eta_0.0.csv
-cmmd_results zeta 0.0 eta 0.0: 0.01255506556481123

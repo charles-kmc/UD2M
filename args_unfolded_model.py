@@ -2,6 +2,7 @@
 from utils.utils import DotDict
 def args_unfolded():
     main_args = {
+        "noise_schedule_type":"cosine",
         "ddpm_param":1,
         "task":"debur",
         "resume_epoch": 0,
@@ -41,6 +42,7 @@ def args_unfolded():
         "use_dpir":True,
     }
     evaluation = {
+        "save_images":True,
         "fid":True,
         "swd":True,
         "cmmd":True,
@@ -48,8 +50,13 @@ def args_unfolded():
         "skipper":2,
         "coverage":False,
     }
+    model = {
+        "model_name":"diffusion_ffhq_10m",
+        "pretrained_model_path":"/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo"
+    }
     args = DotDict(main_args)
     args.physic = DotDict(pyhsic)
     args.dpir = DotDict(dpir)
     args.evaluation = DotDict(evaluation)
+    args.model = DotDict(model)
     return args

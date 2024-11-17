@@ -55,7 +55,7 @@ mkdir -p "$RESULTS_DIR1"
 #  Application launch commands
 #-------------------------------
 # Running python scripts
-python3 main_sampler.py > "$RESULTS_DIR"_out_sample_dif.output 2> "$RESULTS_DIR"_err_sample_dif.error
+python3 main_sample_conditional.py > "$RESULTS_DIR"_out_sample_dif.output 2> "$RESULTS_DIR"_err_sample_dif.error
 
 # Final message
 echo "Finish!!"

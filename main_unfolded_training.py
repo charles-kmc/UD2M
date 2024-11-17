@@ -82,7 +82,7 @@ def main():
             param.requires_grad_(True)
     
     # Diffusion noise
-    diffusion_scheduler = DiffusionScheduler(device=device)
+    diffusion_scheduler = DiffusionScheduler(device=device,noise_schedule_type=args.noise_schedule_type)
     pyhsic = physics_models(
         args.physic.kernel_size, 
         args.physic.blur_name, 
