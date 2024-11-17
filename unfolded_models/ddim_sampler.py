@@ -63,7 +63,8 @@ class DDIM_SAMPLER:
         im_name:str, 
         num_timesteps:int = 100, 
         eta:float=1, 
-        zeta:float=1
+        zeta:float=1,
+        x_true = None
     ):
     
         with torch.no_grad():
@@ -72,7 +73,7 @@ class DDIM_SAMPLER:
             diffusionsolver = DiffusionSolver(seq, self.diffusion)
             # initilisation
             x = torch.randn_like(y)
-            
+
             if self.args.dpir.use_dpir:
                 y_ = inverse_image_transform(y)
                 x0 = self.dpir_model.run(y_, self.physics.blur_kernel, iter_num = 1) #y.clone()
@@ -83,11 +84,15 @@ class DDIM_SAMPLER:
             progress_img = []
             
             # reverse process
+            if x_true:
+                psnrs = []
             for ii in range(len(seq)):
                 t_i = seq[ii]
                 # unfolding: xstrat_pred, eps_pred, auxiliary variable
                 out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter)
                 x0 = image_transform(out_val["xstart_pred"])
+                if x_true:
+                    psnrs.append(self.metrics.psnr_function(x_true, out_val["xstart_pred"]))
                 
                 # sample from the predicted noise
                 if seq[ii] != seq[-1] and ii < len(seq)-1: 
@@ -114,7 +119,8 @@ class DDIM_SAMPLER:
                     delete([progress_img])
         
         out_val["progress_img"] = img_total
-        
+        if x_true:
+            out_val["psnrs"] = psnrs
         return out_val
 
 class DiffusionSolver:
