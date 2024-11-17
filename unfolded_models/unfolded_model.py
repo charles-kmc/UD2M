@@ -39,6 +39,23 @@ def extract_tensor(
             out = out[..., None]
         return out.expand(broadcast_shape)
 
+def LinearScheduler(timesteps, beta_start = 0.0001, beta_end=0.02):
+    scale = 1000 / timesteps
+    beta_start = scale * beta_start
+    beta_end = scale * beta_end
+    betas = np.linspace(beta_start, beta_end, timesteps, dtype=np.float32)
+    return betas
+
+def CosineScheduler(timesteps, beta_max =0.999):
+    cos_function = lambda x: math.cos((x + 0.008) / (1.008) * math.pi / 2)**2
+    betas = []
+    for t in range(timesteps):
+        t1 = t/timesteps
+        t2 = (t+1)/timesteps
+        beta = min(1 - cos_function(t2) / cos_function(t1), beta_max)
+        betas.append(beta)
+    return np.array(betas)
+
 # diffusion scheduler module        
 class DiffusionScheduler:
     def __init__(
@@ -48,11 +65,18 @@ class DiffusionScheduler:
         num_timesteps:int = 1000,
         dtype = torch.float32,
         device = "cpu", 
-        fix_timestep = True
+        fix_timestep = True,
+        noise_schedule_type:str = "linear"
     ) -> None:
         self.fix_timestep = fix_timestep
         self.num_timesteps = num_timesteps
-        betas = np.linspace(start_beta, end_beta, num_timesteps)
+        if noise_schedule_type == "cosine":
+            betas = CosineScheduler(num_timesteps)
+        elif noise_schedule_type=="linear":
+            betas = LinearScheduler(num_timesteps, beta_start=start_beta, beta_end=end_beta)
+        else:
+            raise NotImplementedError("This noise schedule is not implemented !!!")
+        
         self.betas = torch.from_numpy(betas).to(dtype).to(device)
         self.alphas                  = 1.0 - self.betas
         self.alphas_cumprod          = torch.from_numpy(np.cumprod(self.alphas.cpu().numpy(), axis=0)).to(device)
@@ -121,8 +145,8 @@ class DiffusionScheduler:
 
 # coustomise timesteps for the denoising step  
 class GetDenoisingTimestep:
-    def __init__(self, device):
-        self.scheduler = DiffusionScheduler(device=device)
+    def __init__(self, device, noise_schedule_type = "linear"):
+        self.scheduler = DiffusionScheduler(device=device,noise_schedule_type = noise_schedule_type)
         self.device = device
     
     # getting differently the timestep   
@@ -393,16 +417,6 @@ class HQS_models:
             x_pred = inverse_image_transform(x)
             x_ = torch.clamp(x_pred, 0.0, 1.0)
             
-            # if self.args.use_wandb and self.args.mode == "train":
-                # wandb.log(
-                #     {
-                #         "min eps":eps.min(), 
-                #         "max eps":eps.max(),
-                #         "min x_pred":x_pred.min(), 
-                #         "max x_pred":x_pred.max(),
-                #         "min z":z.min(), 
-                #         "max z":z.max()  
-                #     })
         pred_eps = self.diffusion_scheduler.predict_eps_from_xstrat(x_t, t, x)
         return {
             "xstart_pred":x_, 
@@ -640,7 +654,7 @@ class Trainer:
                 self.save_trainable_params(epoch)   
     
     def save_args_yaml(self):
-        yaml_dir = bf.join(self.args.path_save, self.args.task, "Config", self.args.date)
+        yaml_dir = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Config", self.args.date)
         os.makedirs(yaml_dir, exist_ok=True)
         filename = f"lora_model_{self.args.task}.yaml"
         filepath = bf.join(yaml_dir, filename)
@@ -719,7 +733,7 @@ class Trainer:
         
     # - save the checkpoint model   
     def save(self, epoch):
-        checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date)
+        checkpoint_dir = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.model_noise}")
            
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
@@ -744,7 +758,7 @@ class Trainer:
         
     # saving only trainable parameters
     def save_trainable_params(self, epoch):
-        checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date) 
+        checkpoint_dir = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.model_noise}") 
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
         except:
@@ -769,7 +783,7 @@ class Trainer:
             )
     
     def load_trainable_params(self, epoch):
-        checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date)
+        checkpoint_dir = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.model_noise}")
         filename = f"LoRA_model_{self.args.task}_{(epoch):03d}.pt"
         filepath = bf.join(checkpoint_dir, filename)
         trainable_state_dict = torch.load(filepath)
@@ -777,7 +791,7 @@ class Trainer:
         
     # resume training 
     def _resume_model(self, resume_date = None, resume_epoch = None):
-        dir_ = bf.join(self.args.path_save, self.args.task, "Checkpoints")
+        dir_ = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Checkpoints", f"model_noise_{self.args.model_noise}")
         
         if self.args.resume_model:
             if resume_date is not None:
