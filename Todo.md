@@ -10,3 +10,6 @@
 - Train LORA on Imagenet
 - Methods to improve variance of posterior sampoles for accurate uncertainty intervals/coverage probabilities
 - Possible speedup by relaxing training/inference on small $\sigma_t$
+
+- Improve the model to have a better coverage results.
+- Checking distribution shift on a subpopulation from FFHQ.
