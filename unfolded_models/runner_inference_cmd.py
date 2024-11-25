@@ -1,13 +1,7 @@
-import torch.nn as nn
-from torch.utils.data import DataLoader
 import torch 
 import numpy as np
-import datetime
-import math
-import os 
 import cv2
 import wandb
-import copy
 import yaml
 import blobfile as bf
 
@@ -25,8 +19,6 @@ from .unfolded_model import (
     HQS_models,
     GetDenoisingTimestep,
 )
-
-
 
 class DDIM_SAMPLER:
     def __init__(
@@ -63,28 +55,42 @@ class DDIM_SAMPLER:
         y:torch.tensor, 
         im_name:str, 
         num_timesteps:int = 100, 
-        eta:float=1, 
-        zeta:float=1,
-  
+        eta:float=0., 
+        zeta:float=1.,
+        x_true:bool = None,
+        track:bool = False,
+        lambda_:int = 1
     ):
     
         with torch.no_grad():
             # sequence of timesteps
             seq, progress_seq = self.diffusion.get_seq_progress_seq(num_timesteps)
             diffusionsolver = DiffusionSolver(seq, self.diffusion)
+            
+            # Setting stochastic layer in model 
+            if self.args.stochastic_model and track:
+                prob = np.random.uniform(0,1)  
+                if prob >= .5:
+                    target_lora_layer= self.args.target_lora_layer
+                    orig_params = self.args.orig_params
+                    for name, param in self.hqs_model.model.named_parameters():
+                        if name.endswith(tuple(target_lora_layer)) and "weight" in name:
+                            noise = torch.randn_like(param) * self.args.stochastic_rate
+                            param.data = orig_params[name] + noise
+            
             # initilisation
             x = torch.randn_like(y)
-            
             if self.args.dpir.use_dpir:
-                y_ = inverse_image_transform(y)
-                x0 = self.dpir_model.run(y_, self.physics.blur_kernel, iter_num = 1) #y.clone()
+                y_01 = inverse_image_transform(y)
+                x0 = self.dpir_model.run(y_01, self.physics.blur, iter_num = 1) #y.clone()
                 x0 = image_transform(x0)
             else:
                 x0 = y.clone()
-                
             progress_img = []
             
             # reverse process
+            if x_true is not None:
+                psnrs = []
             for ii in range(len(seq)):
                 t_i = seq[ii]
                 if self.classic_sampling:
@@ -92,8 +98,13 @@ class DDIM_SAMPLER:
                     x0 = image_transform(out_val["xstart_pred"])
                 else:
                     # unfolding: xstrat_pred, eps_pred, auxiliary variable
-                    out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter)
+                    out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter, lambda_= lambda_)
                     x0 = image_transform(out_val["xstart_pred"])
+                
+                if x_true is not None:
+                    psnrs.append(self.metrics.psnr_function(x_true, out_val["xstart_pred"]).cpu().numpy())
+                    if self.args.use_wandb:
+                        wandb.log({f"progression of the psnr in the reverse process {im_name}":self.metrics.psnr_function(x_true, out_val["xstart_pred"])})
                 
                 # sample from the predicted noise
                 if seq[ii] != seq[-1] and ii < len(seq)-1: 
@@ -120,7 +131,8 @@ class DDIM_SAMPLER:
                     delete([progress_img])
         
         out_val["progress_img"] = img_total
-        
+        if x_true is not None:
+            out_val["psnrs"] = psnrs
         return out_val
     
     def sampling_prior(self, xt, t):
@@ -172,7 +184,7 @@ class DiffusionSolver:
         
 # load lara weights                
 def load_trainable_params(model, epoch, args):
-    checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", args.date)
+    checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", args.date, f"model_noise_{args.physic.sigma_model}")
     filename = f"LoRA_model_{args.task}_{(epoch):03d}.pt"
     filepath = bf.join(checkpoint_dir, filename)
     

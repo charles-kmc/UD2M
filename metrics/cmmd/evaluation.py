@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from cmmd import compute_cmmd, main_cmmd
 
 TIMESTEPS = [200]
-ZETA = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+ZETA = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7,0.8,.9,1]
 
 def eval(root_dir, save_dir, device, axis_vec = ZETA, val = TIMESTEPS, val_name = "T", axis_name = "Zeta"):
     dic_results = {}
@@ -33,7 +33,7 @@ def eval(root_dir, save_dir, device, axis_vec = ZETA, val = TIMESTEPS, val_name 
     # save data in a csv file 
     os.makedirs(save_metric_path, exist_ok=True)
     fid_pd = pd.DataFrame(dic_results)
-    save_dir_fid_cmmd = os.path.join(save_metric_path, f'fid_cmmd_metrics__{val_name}_{val}.csv') #_eta_{eta}_zeta{zeta}
+    save_dir_fid_cmmd = os.path.join(save_metric_path, f'fid_cmmd_metrics__{val_name}_{val}_new.csv') #_eta_{eta}_zeta{zeta}
     fid_pd.to_csv(save_dir_fid_cmmd, mode='a', header=not os.path.exists(save_dir_fid_cmmd))
     
     # plot the results

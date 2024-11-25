@@ -21,14 +21,14 @@ def coverage_eval(x : torch, op: object):
     """
     
     # Distance between samples and posterior mean
-    distancelist = [torch.linalg.matrix_norm(sample.detach().cpu().squeeze()-op.post_mean.squeeze(), ord='fro')[0].item() for sample in op.data]
+    distancelist = [torch.linalg.matrix_norm(sample.detach().cpu().squeeze()-op.post_mean.squeeze(), ord='fro').mean().item() for sample in op.data]
 
     # Compute quantiles
     quantilelist = mquantiles(distancelist, prob = op.prob, alphap=0.5, betap=0.5)
     # op.quantilelist_list.append(quantilelist)
     
     # Compute the distance between the true image and the posterior mean
-    truexdist = torch.linalg.matrix_norm(x.squeeze()-op.post_mean.squeeze(), ord='fro')[0].item() 
+    truexdist = torch.linalg.matrix_norm(x.squeeze()-op.post_mean.squeeze(), ord='fro').mean().item() 
     # op.truexdist_list.append(truexdist)
     
     # Check if the true distance is inside the interval
@@ -47,4 +47,4 @@ def coverage_eval(x : torch, op: object):
     op.save_dir = os.path.join(op.save_dir, f'output_coverage.csv')
     temp_df.to_csv(op.save_dir, mode='a', header=not os.path.exists(op.save_dir))
     
-    
+    return {"sampledist":distancelist, "truexdist":truexdist}

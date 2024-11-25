@@ -1,8 +1,7 @@
 import torch 
 import numpy as np
 import cv2
-import wandb
-
+import blobfile as bf
 from utils.utils import inverse_image_transform, image_transform, delete
 from .unfolded_model import (
     get_rgb_from_tensor,
@@ -106,5 +105,15 @@ class DiffusionSolver:
         alpha_t = 1 - self.diffusion.betas[t_i]
         x = (1 / alpha_t.sqrt()) * ( x - (ddpm_param*self.diffusion.betas[t_i]).sqrt() * eps ) + (ddpm_param*eta_sigma**2 ).sqrt() * torch.randn_like(x)
         return x
+
+def load_trainable_params(model, epoch, args):
+    checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", args.date)
+    filename = f"LoRA_model_{args.task}_{(epoch):03d}.pt"
+    filepath = bf.join(checkpoint_dir, filename)
+    
+    trainable_state_dict = torch.load(filepath)
+    model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)               
+    
+    return model
    
 

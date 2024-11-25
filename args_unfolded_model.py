@@ -2,16 +2,16 @@
 from utils.utils import DotDict
 def args_unfolded():
     main_args = {
-        "noise_schedule_type":"cosine",
+        "noise_schedule_type":"linear",
         "ddpm_param":1,
         "task":"debur",
         "resume_epoch": 0,
         "resume_model": True,
-        "learning_rate":3e-5,
+        "learning_rate":3e-7,#3e-5,
         "weight_decay":1e-2,
         "rank":10,
         "seed":46,
-        "save_checkpoint_range":10,
+        "save_checkpoint_range":30,
         "use_consistancy":False,
         "use_wandb":True,
         "save_progressive":True,
@@ -39,7 +39,7 @@ def args_unfolded():
     dpir = {
         "pretrained_pth": "/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo",
         "model_name": "drunet_color", #"ircnn_color, drunet_color",
-        "use_dpir":True,
+        "use_dpir":False,
     }
     evaluation = {
         "save_images":True,

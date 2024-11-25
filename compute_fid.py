@@ -8,7 +8,7 @@ from utils.utils import DotDict
 
 from metrics.fid_batch.fid_evaluation import Fid_evatuation
 
-ZETA = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+ZETA = [0.4]
 TIMESTEPS = [200]#[20, 50, 100, 150, 200, 250, 350, 500, 600, 700]#, 800, 900, 1000]
 def main_metrics(args, solver, axis_vec = ZETA, val = TIMESTEPS, val_name = "T", axis_name = "Zeta"):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -34,14 +34,22 @@ def main_metrics(args, solver, axis_vec = ZETA, val = TIMESTEPS, val_name = "T",
         else:
             raise ValueError("Not implemented !!")
         # root_dir = f"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/{task}/Results/{date}/{solver}/no_lora/Max_iter_{max_iter}/unroll_iter_{max_unfolded_iter}/timesteps_{timesteps}/Epoch_{epoch}/T_AUG_{T_AUG}/ddpm_param_3" #zeta_{zeta}/eta_{eta}
-        root_dir = f"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/11-11-2024/ddim/lora/Max_iter_50/unroll_iter_3/timesteps_{timesteps}/Epoch_600/T_AUG_4/zeta_{zeta}/eta_0.0" #zeta_{zeta}/eta_{eta}
-        save_metric_path = os.path.join(f"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/11-11-2024/ddim/lora/Max_iter_50/unroll_iter_3", "metrics_results_calib_timesteps_last")
-        
+        # root_dir0 = f"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/11-11-2024/ddim/lora/Max_iter_50/unroll_iter_3/timesteps_{timesteps}/Epoch_600/T_AUG_4/zeta_{zeta}/eta_0.0" #zeta_{zeta}/eta_{eta}
+        # save_metric_path0 = os.path.join(f"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/11-11-2024/ddim/lora/Max_iter_50/unroll_iter_3", "metrics_results_calib_timesteps_last")
+        save_metric_path1= os.path.join("sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/20-11-2024/ddim/lora/Max_iter_20/unroll_iter_3,metrics_results_calib_timesteps_last")
+        root_dir1= "/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/20-11-2024/ddim/lora/Max_iter_20/unroll_iter_3/timesteps_100/Epoch_600/T_AUG_10/zeta_0.4/eta_0.0/stochastic_0.05"
+        root_dir2 = "/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/19-11-2024/ddim/lora/Max_iter_50/unroll_iter_3/timesteps_100/Epoch_600/T_AUG_10/zeta_0.4/eta_0.0"
+        save_metric_path2 = os.path.join("sharedscratch/CKM/Conditional-diffusion_model-for_ivp/debur/Results/19-11-2024/ddim/lora/Max_iter_50/unroll_iter_3,metrics_results_calib_timesteps_last")
+        root_dir = root_dir1
+        save_metric_path = save_metric_path1
         # FID
-        out = Fid_evatuation(root_dir, device, mmse_sample=False, last_sample=True)
+        out = Fid_evatuation(root_dir, device, mmse_sample=True, last_sample=True)
         vec_fid_mmse.append(out["fid_last"])
         dic_results[f"fid mmse_vec_{axis_name}_{axis}"] = [out["fid_last"]]
         
+        print(f"fid_last = {out['fid_last']}")
+        print(f"fid_mmse = {out['fid_mmse']}")
+       
         # other metrics: PSNR, SSIM, LPIPs
         root_dir_csv = os.path.join(root_dir, "metrics_results")
         data = pd.read_csv(os.path.join(root_dir_csv, "metrics_results.csv"))

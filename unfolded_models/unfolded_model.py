@@ -227,24 +227,22 @@ class physics_models:
                 transforms.ToTensor()
             ])
         
-    def _get_kernel(self,blur_name):
-        if blur_name == "gaussian":
+    def _get_kernel(self):
+        if self.blur_name == "gaussian":
             blur_kernel = self._gaussian_kernel(self.kernel_size).to(self.device)
-        elif blur_name  == "uniform":
+        elif self.blur_name  == "uniform":
             blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
-        elif blur_name  == "motion":
+        elif self.blur_name  == "motion":
             blur_kernel = self._motion_kernel(self.kernel_size).to(self.device)
-        elif blur_name == "uniform_motion":
+        elif self.blur_name == "uniform_motion":
             blur_kernel = self._uniform_motion_kernel().to(self.device)
         else:
-            raise ValueError(f"Blur type {blur_name } not implemented !!")
+            raise ValueError(f"Blur type {self.blur_name } not implemented !!")
         return blur_kernel
-    
 
     def _uniform_motion_kernel(self):
         return self.uniform_kernel_generator.step(1)["filter"]
 
-    
     def _motion_kernel(self):
         if self.mode == "train":
             kernel_name = random.choice(self.list_motion_kernel) 
@@ -271,16 +269,10 @@ class physics_models:
         return exp
     
     def blur2A(self, im_size):
-        if self.random_blur:
-            blur_name = random.choice(["gaussian", "uniform", "motion"])
-        else:
-            blur_name = self.blur_name
-            
-        # blur = self.blur_kernel.squeeze()
         if not hasattr(self, "blur"):
-            blur = self._get_kernel(blur_name)
+            self.blur = self._get_kernel()
         else:
-            self.blur_kernel = self.blur
+            pass
         
         if len(self.blur.shape) > 2:
             raise ValueError("The kernel dimension is not correct")
@@ -347,7 +339,8 @@ class HQS_models:
         x:torch.Tensor, 
         x_t:torch.Tensor, 
         rho:float, 
-        t:int
+        t:int,
+        lambda_:float,
     )-> torch.Tensor:
         
         sigma_t = extract_tensor(self.diffusion_scheduler.sigmas, t, x_t.shape)
@@ -359,11 +352,11 @@ class HQS_models:
         FFT_h,_ = self.physic.blur2A(self.im_size)
         FFTx = torch.fft.fft2(x, dim=(-2,-1))
         FFTx_t = torch.fft.fft2(x_t, dim=(-2,-1))
-        _mu = FFTAty / self.physic.sigma_model**2 + FFTx / rho**2 + FFTx_t  / (sigma_t**2 * sqrt_alpha_comprod)
+        _mu = FFTAty / (lambda_*self.physic.sigma_model**2) + FFTx / rho**2 + FFTx_t  / (sigma_t**2 * sqrt_alpha_comprod)
        
         return torch.real(
             torch.fft.ifft2(
-                _mu * self._precision(FFT_h, rho, sigma_t),
+                _mu * self._precision(FFT_h, rho, sigma_t, lambda_),
                 dim = (-2,-1)
             )
         )
@@ -372,11 +365,12 @@ class HQS_models:
         self,
         FFT_h:torch.Tensor, 
         rho:float, 
-        sigma_t:float
+        sigma_t:float,
+        lambda_:float
         ) -> torch.Tensor:
         
         out =  (
-            FFT_h**2 / self.physic.sigma_model**2 
+            FFT_h**2 / (lambda_*self.physic.sigma_model**2) 
             + 1 / sigma_t**2
             + 1 / rho**2 
         )
@@ -389,7 +383,8 @@ class HQS_models:
         x_t:torch.Tensor, 
         t:int, 
         max_iter:int = 3,
-        T_AUG:int = 0
+        T_AUG:int = 0,
+        lambda_:float = 1.0
     ) -> dict:
         B,C = x.shape[:2]
         
@@ -407,9 +402,9 @@ class HQS_models:
                 }
             )
             
-        for ii in range(max_iter):
+        for _ in range(max_iter):
             # prox step
-            z_ = self.proxf_update(y, x, x_t, rho, t)
+            z_ = self.proxf_update(y, x, x_t, rho, t, lambda_)
 
             # noise prediction
             if self.args.pertub:
@@ -575,7 +570,7 @@ class Trainer:
                         x_init = y.clone()
                     if self.args.dpir.use_dpir:
                         y_ = inverse_image_transform(y)
-                        x_init = self.dpir_model.run(y_, self.physic.blur_kernel, iter_num = 1) #y.clone()
+                        x_init = self.dpir_model.run(y_, self.physic.blur, iter_num = 1) #y.clone()
                         x_init = image_transform(x_init)
                     
                     # unfolded model
@@ -666,7 +661,7 @@ class Trainer:
                 self.save_trainable_params(epoch)   
     
     def save_args_yaml(self):
-        yaml_dir = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Config", self.args.date)
+        yaml_dir = bf.join(self.args.path_save, self.args.task, "Config", self.args.date)
         os.makedirs(yaml_dir, exist_ok=True)
         filename = f"lora_model_{self.args.task}.yaml"
         filepath = bf.join(yaml_dir, filename)
@@ -746,7 +741,7 @@ class Trainer:
         
     # - save the checkpoint model   
     def save(self, epoch):
-        checkpoint_dir = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.model_noise}")
+        checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.physic.sigma_model}")
            
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
@@ -771,7 +766,7 @@ class Trainer:
         
     # saving only trainable parameters
     def save_trainable_params(self, epoch):
-        checkpoint_dir = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.model_noise}") 
+        checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.physic.sigma_model}") 
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
         except:
@@ -796,7 +791,7 @@ class Trainer:
             )
     
     def load_trainable_params(self, epoch):
-        checkpoint_dir = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.model_noise}")
+        checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.physic.sigma_model}")
         filename = f"LoRA_model_{self.args.task}_{(epoch):03d}.pt"
         filepath = bf.join(checkpoint_dir, filename)
         trainable_state_dict = torch.load(filepath)
@@ -804,7 +799,7 @@ class Trainer:
         
     # resume training 
     def _resume_model(self, resume_date = None, resume_epoch = None):
-        dir_ = bf.join(self.args.path_save, self.args.noise_schedule_type, self.args.task, "Checkpoints", f"model_noise_{self.args.model_noise}")
+        dir_ = bf.join(self.args.path_save, self.args.task, "Checkpoints")
         
         if self.args.resume_model:
             if resume_date is not None:
@@ -819,6 +814,7 @@ class Trainer:
                     self.logger.info(f"This folder is empty: {resume_date}. We will restart the training!!")
                     return -1
 
+            self.logger.info(f"Resume date ====> {resume_date}")
             self.resume_date = resume_date
             # Filter files that start with 'LoRA_model' and end with '.pt'
             filtered_files = [f for f in os.listdir(checkpoint_dir) if f.startswith("LoRA_model_debur") and f.endswith(".pt")]
@@ -831,6 +827,7 @@ class Trainer:
                 else:
                     filename = f"LoRA_model_{self.args.task}_{(resume_epoch):03d}.pt"
                     file_path = bf.join(checkpoint_dir, filename)
+                self.logger.info(f"Resume epoch ====>> {resume_epoch}")
                     
                 self.resume_epoch=resume_epoch
                 if os.path.exists(file_path):
