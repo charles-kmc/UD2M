@@ -17,6 +17,8 @@ from datasets.datasets import Datasets
 from utils.get_logger import get_loggers
 from utils_lora.lora_parametrisation import LoRa_model
 
+import unfolded_models as um
+import physics as phy
 
 def main():
     # args
@@ -73,8 +75,6 @@ def main():
         device=device, 
         rank = args.rank
     )
-    
-    # making some layers learnable
     for param in model.out.parameters():
         param.requires_grad_(True)
     for name, param in model.named_parameters():
@@ -82,25 +82,49 @@ def main():
             param.requires_grad_(True)
     
     # Diffusion noise
-    diffusion_scheduler = DiffusionScheduler(device=device,noise_schedule_type=args.noise_schedule_type)
-    pyhsic = physics_models(
-        args.physic.kernel_size, 
-        args.physic.blur_name, 
-        random_blur=args.physic.random_blur,
-        device = device,
-        sigma_model = args.physic.sigma_model,
-        transform_y= args.physic.transform_y,
-        mode = args.mode,
+    diffusion_scheduler = um.DiffusionScheduler(device=device,noise_schedule_type=args.noise_schedule_type)
+    
+    # physic
+    if args.task == "deblur":
+        physic = phy.Deblurring(
+            kernel_size=args.physic.kernel_size,
+            blur_name=args.physic.blur_name,
+            random_blur=args.physic.random_blur,
+            device=device,
+            sigma_model=args.physic.sigma_model,
+            transform_y=args.physic.transform_y,
+            mode=args.mode,
+        )
+    elif args.task == "inp":
+        physic = phy.Inpainting(
+            kernel_size=args.physic.kernel_size,
+            blur_name=args.physic.blur_name,
+            random_blur=args.physic.random_blur,
+            device=device,
+            sigma_model=args.physic.sigma_model,
+            transform_y=args.physic.transform_y,
+            mode=args.mode,
+        )
+        
+    # HQS module
+    denoising_timestep = um.GetDenoisingTimestep(device)
+    hqs_module = um.HQS_models(
+        model,
+        physic, 
+        diffusion_scheduler, 
+        denoising_timestep,
+        args
     )
     
     # trainer module
     args.date = date
     max_unfolded_iter = 3
     args.max_unfolded_iter = max_unfolded_iter
-    trainer = Trainer(
+    trainer = um.Trainer(
         model,
         diffusion_scheduler=diffusion_scheduler,
-        physic=pyhsic,
+        physic=physic,
+        hqs_module = hqs_module,
         trainloader=trainloader,
         testloader=testloader,
         logger=logger,

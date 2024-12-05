@@ -22,12 +22,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torchvision.transforms as transforms
-from .unrolledPhysics import UniformMotionBlurGenerator
 
-from utils.utils import Metrics, inverse_image_transform, image_transform
-from utils_lora.lora_parametrisation import LoRa_model, enable_disable_lora
+from .unrolledPhysics import UniformMotionBlurGenerator
+from .diffusion_schedulers import DiffusionScheduler, GetDenoisingTimestep
+from .hqs_modules import HQS_models
 from DPIR.dpir_models import DPIR_deb
 
+from typing import Union, Tuple, List, Dict, Any, Optional
+import physics as phy
+import utils as utils
 
 # extract into tensor       
 def extract_tensor(
@@ -58,135 +61,135 @@ def CosineScheduler(timesteps, beta_max =0.999):
     return np.array(betas)
 
 # diffusion scheduler module        
-class DiffusionScheduler:
-    def __init__(
-        self, 
-        start_beta:float = 0.1*1e-3, 
-        end_beta: float = 20*1e-3, 
-        num_timesteps:int = 1000,
-        dtype = torch.float32,
-        device = "cpu", 
-        fix_timestep = True,
-        noise_schedule_type:str = "linear"
-    ) -> None:
-        self.fix_timestep = fix_timestep
-        self.num_timesteps = num_timesteps
-        if noise_schedule_type == "cosine":
-            betas = CosineScheduler(num_timesteps)
-        elif noise_schedule_type=="linear":
-            betas = LinearScheduler(num_timesteps, beta_start=start_beta, beta_end=end_beta)
-        else:
-            raise NotImplementedError("This noise schedule is not implemented !!!")
+# class DiffusionScheduler:
+#     def __init__(
+#         self, 
+#         start_beta:float = 0.1*1e-3, 
+#         end_beta: float = 20*1e-3, 
+#         num_timesteps:int = 1000,
+#         dtype = torch.float32,
+#         device = "cpu", 
+#         fix_timestep = True,
+#         noise_schedule_type:str = "linear"
+#     ) -> None:
+#         self.fix_timestep = fix_timestep
+#         self.num_timesteps = num_timesteps
+#         if noise_schedule_type == "cosine":
+#             betas = CosineScheduler(num_timesteps)
+#         elif noise_schedule_type=="linear":
+#             betas = LinearScheduler(num_timesteps, beta_start=start_beta, beta_end=end_beta)
+#         else:
+#             raise NotImplementedError("This noise schedule is not implemented !!!")
         
-        self.betas = torch.from_numpy(betas).to(dtype).to(device)
-        self.alphas                  = 1.0 - self.betas
-        self.alphas_cumprod          = torch.from_numpy(np.cumprod(self.alphas.cpu().numpy(), axis=0)).to(device)
-        self.sqrt_alphas_cumprod     = torch.sqrt(self.alphas_cumprod)
-        self.sqrt_1m_alphas_cumprod  = torch.sqrt(1. - self.alphas_cumprod)
-        self.sigmas   = torch.div(self.sqrt_1m_alphas_cumprod, self.sqrt_alphas_cumprod)
+#         self.betas = torch.from_numpy(betas).to(dtype).to(device)
+#         self.alphas                  = 1.0 - self.betas
+#         self.alphas_cumprod          = torch.from_numpy(np.cumprod(self.alphas.cpu().numpy(), axis=0)).to(device)
+#         self.sqrt_alphas_cumprod     = torch.sqrt(self.alphas_cumprod)
+#         self.sqrt_1m_alphas_cumprod  = torch.sqrt(1. - self.alphas_cumprod)
+#         self.sigmas   = torch.div(self.sqrt_1m_alphas_cumprod, self.sqrt_alphas_cumprod)
         
-    def sample_times(self, bzs, device):
-        if self.fix_timestep:
-            t_ = torch.randint(1, self.num_timesteps, (1,))
-            t = (t_ * torch.ones((bzs,))).long().to(device)
-        else:
-            t = torch.randint(
-                1, 
-                self.num_timesteps, 
-                (bzs,), 
-                device=device
-            ).long()
+#     def sample_times(self, bzs, device):
+#         if self.fix_timestep:
+#             t_ = torch.randint(1, self.num_timesteps, (1,))
+#             t = (t_ * torch.ones((bzs,))).long().to(device)
+#         else:
+#             t = torch.randint(
+#                 1, 
+#                 self.num_timesteps, 
+#                 (bzs,), 
+#                 device=device
+#             ).long()
         
-        return t
+#         return t
     
-    def sample_xt(
-        self, 
-        x_start:torch.Tensor, 
-        timesteps:torch.Tensor, 
-        noise:torch.Tensor
-    ) -> torch.Tensor:
+#     def sample_xt(
+#         self, 
+#         x_start:torch.Tensor, 
+#         timesteps:torch.Tensor, 
+#         noise:torch.Tensor
+#     ) -> torch.Tensor:
         
-        if noise is None:
-            noise = torch.randn_like(x_start)
-        assert noise.shape == x_start.shape
-        return (
-            extract_tensor(self.sqrt_alphas_cumprod, timesteps, x_start.shape) * x_start
-            + extract_tensor(self.sqrt_1m_alphas_cumprod, timesteps, x_start.shape)
-            * noise
-        )   
+#         if noise is None:
+#             noise = torch.randn_like(x_start)
+#         assert noise.shape == x_start.shape
+#         return (
+#             extract_tensor(self.sqrt_alphas_cumprod, timesteps, x_start.shape) * x_start
+#             + extract_tensor(self.sqrt_1m_alphas_cumprod, timesteps, x_start.shape)
+#             * noise
+#         )   
     
-    #predict x_start from eps 
-    def predict_xstart_from_eps(self, x_t, t, eps):
-        assert x_t.shape == eps.shape, ValueError(f"x_t and eps have different shape ({x_t.shape} != {eps.shape})")
-        return (
-            (x_t - extract_tensor( self.sqrt_1m_alphas_cumprod, t, x_t.shape ) * eps) / 
-            extract_tensor(self.sqrt_alphas_cumprod, t, x_t.shape )
-        )
+#     #predict x_start from eps 
+#     def predict_xstart_from_eps(self, x_t, t, eps):
+#         assert x_t.shape == eps.shape, ValueError(f"x_t and eps have different shape ({x_t.shape} != {eps.shape})")
+#         return (
+#             (x_t - extract_tensor( self.sqrt_1m_alphas_cumprod, t, x_t.shape ) * eps) / 
+#             extract_tensor(self.sqrt_alphas_cumprod, t, x_t.shape )
+#         )
         
-    # predict eps from x_start
-    def predict_eps_from_xstrat(self, x_t, t, xstart):
-        assert x_t.shape == xstart.shape, ValueError(f"x_t and eps have different shape ({x_t.shape} != {xstart.shape})")
-        return (
-            (x_t - extract_tensor(self.sqrt_alphas_cumprod, t, x_t.shape ) * xstart) / 
-            extract_tensor( self.sqrt_1m_alphas_cumprod, t, x_t.shape )
+#     # predict eps from x_start
+#     def predict_eps_from_xstrat(self, x_t, t, xstart):
+#         assert x_t.shape == xstart.shape, ValueError(f"x_t and eps have different shape ({x_t.shape} != {xstart.shape})")
+#         return (
+#             (x_t - extract_tensor(self.sqrt_alphas_cumprod, t, x_t.shape ) * xstart) / 
+#             extract_tensor( self.sqrt_1m_alphas_cumprod, t, x_t.shape )
             
-        )
+#         )
     
-    # get sequence of timesteps 
-    def get_seq_progress_seq(self, iter_num):
-        seq = np.sqrt(np.linspace(0, self.num_timesteps**2, iter_num))
-        seq = [int(s) for s in list(seq)]
-        seq[-1] = seq[-1] - 1
-        progress_seq = seq[::max(len(seq)//10,1)]
-        if progress_seq[-1] != seq[-1]:
-            progress_seq.append(seq[-1])
-        seq = seq[::-1]
-        progress_seq = progress_seq[::-1]
-        return (seq, progress_seq)
+#     # get sequence of timesteps 
+#     def get_seq_progress_seq(self, iter_num):
+#         seq = np.sqrt(np.linspace(0, self.num_timesteps**2, iter_num))
+#         seq = [int(s) for s in list(seq)]
+#         seq[-1] = seq[-1] - 1
+#         progress_seq = seq[::max(len(seq)//10,1)]
+#         if progress_seq[-1] != seq[-1]:
+#             progress_seq.append(seq[-1])
+#         seq = seq[::-1]
+#         progress_seq = progress_seq[::-1]
+#         return (seq, progress_seq)
 
-# coustomise timesteps for the denoising step  
-class GetDenoisingTimestep:
-    def __init__(self, device, noise_schedule_type = "linear"):
-        self.scheduler = DiffusionScheduler(device=device,noise_schedule_type = noise_schedule_type)
-        self.device = device
+# # coustomise timesteps for the denoising step  
+# class GetDenoisingTimestep:
+#     def __init__(self, device, noise_schedule_type = "linear"):
+#         self.scheduler = DiffusionScheduler(device=device,noise_schedule_type = noise_schedule_type)
+#         self.device = device
     
-    # getting differently the timestep   
-    def get_tz_ty_rho(self, t, sigma_y, x_shape):
-        print(f"sigma y {sigma_y}\n\n")
-        sigma_t = self.scheduler.sigmas.to(self.device)[t]
-        if not torch.is_tensor(sigma_y):
-            sigma_y = torch.tensor(sigma_y).to(self.device)
-        else:
-            sigma_y = sigma_y.to(self.device)
-        ty = self.t_y(sigma_y)
-        a1 = sigma_y / (sigma_y + sigma_t)
-        a2 = sigma_t / (sigma_y + sigma_t)
-        tz = (ty * a1 + t * a2).long()
-        rho = extract_tensor(self.scheduler.sigmas, tz, x_shape)
-        return rho, tz, ty
+#     # getting differently the timestep   
+#     def get_tz_ty_rho(self, t, sigma_y, x_shape):
+#         print(f"sigma y {sigma_y}\n\n")
+#         sigma_t = self.scheduler.sigmas.to(self.device)[t]
+#         if not torch.is_tensor(sigma_y):
+#             sigma_y = torch.tensor(sigma_y).to(self.device)
+#         else:
+#             sigma_y = sigma_y.to(self.device)
+#         ty = self.t_y(sigma_y)
+#         a1 = sigma_y / (sigma_y + sigma_t)
+#         a2 = sigma_t / (sigma_y + sigma_t)
+#         tz = (ty * a1 + t * a2).long()
+#         rho = extract_tensor(self.scheduler.sigmas, tz, x_shape)
+#         return rho, tz, ty
     
-    # get rho and t from sigma_t and sigma_y
-    def get_tz_rho(self, t, sigma_y, x_shape, T_AUG):
-        sigma_t = extract_tensor(self.scheduler.sigmas, t, x_shape) 
-        if not torch.is_tensor(sigma_y):
-            sigma_y = torch.tensor(sigma_y).to(self.device)
-        else:
-            sigma_y = sigma_y.to(self.device)
-        rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2))
-        tz = torch.clamp(
-            self.t_y(rho[0,0,0,0]).cpu() - torch.tensor(T_AUG),
-            1,
-            self.scheduler.num_timesteps
-        )
-        tz = (tz * torch.ones((x_shape[0],))).long().to(self.device)
-        rho_ = extract_tensor(self.scheduler.sigmas, tz, x_shape)
-        ty = self.t_y(sigma_y)
-        return rho_, tz, ty
+#     # get rho and t from sigma_t and sigma_y
+#     def get_tz_rho(self, t, sigma_y, x_shape, T_AUG):
+#         sigma_t = extract_tensor(self.scheduler.sigmas, t, x_shape) 
+#         if not torch.is_tensor(sigma_y):
+#             sigma_y = torch.tensor(sigma_y).to(self.device)
+#         else:
+#             sigma_y = sigma_y.to(self.device)
+#         rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2))
+#         tz = torch.clamp(
+#             self.t_y(rho[0,0,0,0]).cpu() - torch.tensor(T_AUG),
+#             1,
+#             self.scheduler.num_timesteps
+#         )
+#         tz = (tz * torch.ones((x_shape[0],))).long().to(self.device)
+#         rho_ = extract_tensor(self.scheduler.sigmas, tz, x_shape)
+#         ty = self.t_y(sigma_y)
+#         return rho_, tz, ty
     
-    # getting the corresponding timestep from the diffusion process   
-    def t_y(self, sigma_y):
-        t_y = torch.clamp(torch.abs(self.scheduler.sigmas.to(self.device) - sigma_y).argmin(), 1, self.scheduler.num_timesteps)
-        return t_y    
+#     # getting the corresponding timestep from the diffusion process   
+#     def t_y(self, sigma_y):
+#         t_y = torch.clamp(torch.abs(self.scheduler.sigmas.to(self.device) - sigma_y).argmin(), 1, self.scheduler.num_timesteps)
+#         return t_y    
     
 # physic module        
 class physics_models:
@@ -309,7 +312,7 @@ class physics_models:
     # observation y
     def y(self, x:torch.Tensor)->torch.Tensor:
         if not self.transform_y:
-            x0 = inverse_image_transform(x)
+            x0 = utils.inverse_image_transform(x)
         else:
             x0 = x
         self.blur = self._get_kernel()
@@ -317,11 +320,11 @@ class physics_models:
         return out
 
 # Half-Quadratic Splitting module       
-class HQS_models:
+class HQS_modelss:
     def __init__(
         self,
         model, 
-        physic:physics_models, 
+        physic:Union[phy.Deblurring, phy.Inpainting], 
         diffusion_scheduler:DiffusionScheduler, 
         get_denoising_timestep:GetDenoisingTimestep,
         args
@@ -346,35 +349,31 @@ class HQS_models:
         sigma_t = extract_tensor(self.diffusion_scheduler.sigmas, t, x_t.shape)
         sqrt_alpha_comprod = extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t, x_t.shape)
     
-        self.im_size = y.shape[-1]
-        Aty = self.physic.ATx(y)
-        FFTAty = torch.fft.fft2(Aty, dim = (-2,-1))        
-        FFT_h,_ = self.physic.blur2A(self.im_size)
-        FFTx = torch.fft.fft2(x, dim=(-2,-1))
-        FFTx_t = torch.fft.fft2(x_t, dim=(-2,-1))
-        _mu = FFTAty / (lambda_*self.physic.sigma_model**2) + FFTx / rho**2 + FFTx_t  / (sigma_t**2 * sqrt_alpha_comprod)
-       
-        return torch.real(
-            torch.fft.ifft2(
-                _mu * self._precision(FFT_h, rho, sigma_t, lambda_),
-                dim = (-2,-1)
-            )
-        )
+        # self.im_size = y.shape[-1]
+        # Aty = self.physic.ATx(y)
+        # FFTAty = torch.fft.fft2(Aty, dim = (-2,-1))        
+        # FFT_h,_ = self.physic.blur2A(self.im_size)
+        # FFTx = torch.fft.fft2(x, dim=(-2,-1))
+        # FFTx_t = torch.fft.fft2(x_t, dim=(-2,-1))
+        # _mu = FFTAty / (lambda_*self.physic.sigma_model**2) + FFTx / rho**2 + FFTx_t  / (sigma_t**2 * sqrt_alpha_comprod)
+        # estimate_temp = torch.real(torch.fft.ifft2(_mu * self._precision(FFT_h, rho, sigma_t, lambda_),dim = (-2,-1)))
+        estimate_temp = self.physic.mean_estimate(self, x_t, y, x, self.physic.sigma_model, sigma_t, sqrt_alpha_comprod, rho,lambda_)
+        return estimate_temp
         
-    def _precision(
-        self,
-        FFT_h:torch.Tensor, 
-        rho:float, 
-        sigma_t:float,
-        lambda_:float
-        ) -> torch.Tensor:
+    # def _precision(
+    #     self,
+    #     FFT_h:torch.Tensor, 
+    #     rho:float, 
+    #     sigma_t:float,
+    #     lambda_:float
+    #     ) -> torch.Tensor:
         
-        out =  (
-            FFT_h**2 / (lambda_*self.physic.sigma_model**2) 
-            + 1 / sigma_t**2
-            + 1 / rho**2 
-        )
-        return 1 / out
+    #     out =  (
+    #         FFT_h**2 / (lambda_*self.physic.sigma_model**2) 
+    #         + 1 / sigma_t**2
+    #         + 1 / rho**2 
+    #     )
+    #     return 1 / out
     
     def run_unfolded_loop(
         self, 
@@ -421,13 +420,13 @@ class HQS_models:
             
             # estimate of x_start
             x = self.diffusion_scheduler.predict_xstart_from_eps(z, t_denoising, eps)
-            x_pred = inverse_image_transform(x)
+            x_pred = utils.inverse_image_transform(x)
             x_ = torch.clamp(x_pred, 0.0, 1.0)
             
         pred_eps = self.diffusion_scheduler.predict_eps_from_xstrat(x_t, t, x)
         return {
             "xstart_pred":x_, 
-            "aux":inverse_image_transform(z_), 
+            "aux":utils.inverse_image_transform(z_), 
             "eps_pred":pred_eps,
             "eps_z":eps
         }
@@ -438,7 +437,8 @@ class Trainer:
         self,
         model,
         diffusion_scheduler:DiffusionScheduler,
-        physic:physics_models,
+        physic:Union[phy.Deblurring, phy.Inpainting],
+        hqs_module:HQS_models,
         trainloader,
         testloader,
         logger,
@@ -455,6 +455,7 @@ class Trainer:
         self.model = model.to(device)
         self.trainloader = trainloader
         self.testloader = testloader
+        self.hqs_module = hqs_module
         
         self.copy_model = copy.deepcopy(self.model)
         
@@ -467,7 +468,7 @@ class Trainer:
         
         # set training
         self._set_training()
-        self.metrics = Metrics(self.device)
+        self.metrics = utils.Metrics(self.device)
         
     def _set_training(self):
         model_parameters(self.model, self.logger)
@@ -536,7 +537,6 @@ class Trainer:
             # setting training mode
             self.logger.info(f"Epoch ==== >> {epoch}")
             self.model.train()
-            idx = 0
             for ii, batch_0 in enumerate(self.trainloader):
                 # tracking monitor memory
                 process = psutil.Process(os.getpid())
@@ -569,12 +569,12 @@ class Trainer:
                     else:
                         x_init = y.clone()
                     if self.args.dpir.use_dpir:
-                        y_ = inverse_image_transform(y)
+                        y_ = utils.inverse_image_transform(y)
                         x_init = self.dpir_model.run(y_, self.physic.blur, iter_num = 1) #y.clone()
-                        x_init = image_transform(x_init)
+                        x_init = utils.image_transform(x_init)
                     
                     # unfolded model
-                    out = self.hqs_model.run_unfolded_loop( y, x_init, x_t, t, max_iter = self.max_unfolded_iter)
+                    out = self.hqs_module.run_unfolded_loop( y, x_init, x_t, t, max_iter = self.max_unfolded_iter)
                     xstart_pred = out["xstart_pred"]
                     eps_pred = out["eps_pred"]
                     aux = out["aux"]
@@ -603,11 +603,11 @@ class Trainer:
                                 "loss": loss_val,   
                                 "mse": self.metrics.mse_function(
                                             xstart_pred.detach().cpu(), 
-                                            inverse_image_transform(batch_0).detach().cpu()
+                                            utils.inverse_image_transform(batch_0).detach().cpu()
                                         ).item(), 
                                 "psnr": self.metrics.psnr_function(
                                             xstart_pred.detach().cpu(), 
-                                            inverse_image_transform(batch_0).detach().cpu()
+                                            utils.inverse_image_transform(batch_0).detach().cpu()
                                         ).item()
                             }
                         )
@@ -690,7 +690,7 @@ class Trainer:
                         sigmas_tii / (sigmas_tii + self.physic.sigma_model) * x + 
                         self.physic.sigma_model / (sigmas_tii + self.physic.sigma_model) * y
                     )
-                    out_val = self.hqs_model.run_unfolded_loop( y, x_init, x, tii, max_iter = self.max_unfolded_iter)
+                    out_val = self.hqs_module.run_unfolded_loop( y, x_init, x, tii, max_iter = self.max_unfolded_iter)
                     x0 = out_val["xstart_pred"]
                     eps = out_val["eps_pred"]
                     z0 = out_val["aux"]
@@ -706,7 +706,7 @@ class Trainer:
                         x = x0
         
                     # transforming pixels from [-1,1] ---> [0,1]    
-                    x_0 = inverse_image_transform(x)
+                    x_0 = utils.inverse_image_transform(x)
                     
                     # save the process
                     if self.args.save_progressive and (seq[ii] in progress_seq):
