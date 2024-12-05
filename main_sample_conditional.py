@@ -41,17 +41,32 @@ from metrics.sliced_wasserstein_distance.evaluate_swd import eval_swd
 from metrics.metrics import Metrics
 from metrics.fid_batch.fid_evaluation import Fid_evatuation
 
+def linear_indices(num_iter, lambda_min=0.3,lambda_max=0.6):
+    seq = np.sqrt(np.linspace(0, num_iter**2, num_iter))
+    seq = [int(s) for s in list(seq)]
+    seq[-1] = seq[-1] - 1
+    seq = np.abs(np.array(seq) - num_iter)
+    seq[0] -=1
+    seq[-1] -=1
+    
+    if num_iter>1:
+        lambd = np.round(np.linspace(lambda_min, lambda_max, num_iter),2)
+    else:
+        lambd = np.array([0.32])
+    lambd = lambd.reshape(1,-1)
+    return lambd, seq
+
 max_iter = 100
 ddpm_param = 1
 ckpt_epoch = 840
-run_name = "_sampling_histo"
-LAMBDA = [0.32] #np.arange(0.26,0.36, 0.02)
-stochastic_model = True
+run_name = "_sampling_decreasing_lambda_free_noise_model"
+LAMBDA, INDICES = linear_indices(max_iter)
+stochastic_model = False
 stochastic_rate = 0.05
 SOLVER_TYPES =  ["ddim"]
 LORA = True
 MAX_UNFOLDED_ITER = [3]
-NUM_TIMESTEPS = [100, 300, 500, 700, 1000]
+NUM_TIMESTEPS = [100, 500]
 eta = 0.0 
 T_AUG = 10
 ZETA = [0.6] #op 0.4 or 0.6
@@ -152,12 +167,12 @@ def main(
                 
                 # stochastic model setting
                 target_lora_layer = ["qkv", "proj_out", "output_blocks.2.0.out_layers.3"]
+                args.stochastic_model = stochastic_model
                 if stochastic_model:
                     orig_params = {}
                     for name, param in model.named_parameters():
                         if name.endswith(tuple(target_lora_layer)):
                             orig_params[name] = param.data.clone()
-                    args.stochastic_model = stochastic_model
                     args.orig_params = orig_params
                     args.target_lora_layer = target_lora_layer
                     
@@ -210,7 +225,7 @@ def main(
                 
                 args.stochastic_rate = stochastic_rate
                 
-                root_dir_results = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, solver_type, use_lora, f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timesteps}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{lambda_}")
+                root_dir_results = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, solver_type, use_lora, f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timesteps}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{lambda_[0]}")
                 
                 if args.evaluation.coverage or args.evaluation.metrics:
                     save_metric_path = os.path.join(root_dir_results, "metrics_results")
@@ -249,7 +264,7 @@ def main(
                         shape = x.squeeze().shape
                         shapes=(max_iter-1,) + shape
                         data = torch.zeros(shapes, dtype = x.dtype)
-                      
+                    print(f"Timesteps: {num_timesteps}")  
                     for it in range(max_iter):
                         start_time = time.time()
                         out = diffsampler.sampler(
@@ -260,7 +275,7 @@ def main(
                             zeta=zeta,
                             x_true = x,
                             track = max_iter>1,
-                            lambda_ = lambda_
+                            lambda_ = lambda_[INDICES[it]]
                         )
                         # collapsed time
                         collapsed_time = time.time() - start_time           
@@ -424,8 +439,8 @@ if __name__ == "__main__":
 
     for solver in SOLVER_TYPES:
         for steps in NUM_TIMESTEPS:
-            for bambda_ in LAMBDA:
-                args = main(steps, solver, ckpt_epoch = ckpt_epoch, max_iter=max_iter, lambda_ = bambda_)
+            for lambda_ in LAMBDA:
+                args = main(steps, solver, ckpt_epoch = ckpt_epoch, max_iter=max_iter, lambda_ = lambda_)
     args.step = steps
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -512,7 +527,7 @@ if __name__ == "__main__":
             plt.title(f"{lab} versus ssim")
             plt.savefig(os.path.join(save_metric_path, f"ssim_results.png")) #_eta_{eta}_zeta{zeta}
             plt.close("all")
-    
+            
     # evaluation 
     if False:   
         kargs = DotDict(

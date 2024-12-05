@@ -45,13 +45,9 @@ def Fid_evatuation(dir_results, device, mmse_sample = True, last_sample = True, 
         fid_last = fid(batch_dir_ref, batch_dir_last) 
         out["fid_last"]= fid_last
         shutil.rmtree(batch_dir_last)
-   
     print("fid computed")
-    
-
     shutil.rmtree(batch_dir_ref)
 
-    
     return out
 
 

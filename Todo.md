@@ -1,5 +1,6 @@
 ## TODO
 
+
 - Test FFHQ model on out-of-distribution samples (e.g. CelebA)
 
 - Apply to other physics operators:
@@ -12,4 +13,4 @@
 - Possible speedup by relaxing training/inference on small $\sigma_t$
 
 - Improve the model to have a better coverage results.
-- Checking distribution shift on a subpopulation from FFHQ.
+- Checking distribution shift on a subpopulation from FFHQ - CLIP.
