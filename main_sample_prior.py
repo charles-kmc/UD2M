@@ -3,24 +3,28 @@ import datetime
 import torch
 from torch.utils.data import DataLoader
 
-from unfolded_models.unfolded_model import DiffusionScheduler,get_rgb_from_tensor
-from unfolded_models.runner_inference_proir import Sampler_prior
 from args_unfolded_model import args_unfolded
-from models.load_frozen_model import load_frozen_model
-from datasets.datasets import Datasets
-from utils.utils import inverse_image_transform, save_images, delete
+from models.load_model import load_frozen_model
+from datasets.datasets import GetDatasets
+import utils as utils
+import runners as runners
+import unfolded_models as unfolded_models
+
+from configs.args_parse import configs
 
 max_iter = 1
 SOLVER_TYPES =  ["ddim"]
 NUM_TIMESTEPS = [50, 100, 300, 400, 600, 700, 1000]#[20, 50, 100, 150, 200, 250, 350, 500, 600, 700, 800, 900, 1000]
 eta = 0.0 
-ZETA = [0.2] ##[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+ZETA = [0.2] #[0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 date_eval = datetime.datetime.now().strftime("%d-%m-%Y")
 
 def main(num_timesteps, solver_type, ddpm_param = 1):
     with torch.no_grad():
         # args
         args = args_unfolded()
+        args.task = configs().task
+        
         args.ddpm_param = ddpm_param
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
         args.solver_type = solver_type
@@ -47,7 +51,7 @@ def main(num_timesteps, solver_type, ddpm_param = 1):
                     )
             # Test dataset
             dir_test = "/users/cmk2000/sharedscratch/Datasets/testsets/imageffhq"
-            datasets = Datasets(dir_test, args.im_size, dataset_name=args.dataset_name)
+            datasets = GetDatasets(dir_test, args.im_size, dataset_name=args.dataset_name)
             testset = DataLoader(datasets, batch_size=1, shuffle=False)
             
             # model
@@ -55,8 +59,8 @@ def main(num_timesteps, solver_type, ddpm_param = 1):
             model, _ = load_frozen_model(args.model.model_name, pretrained_model_path, device)
                             
             #  diffusion scheduler and sampler module
-            diffusion = DiffusionScheduler(device=device)
-            diffusion_sampler = Sampler_prior(diffusion, model,device, args)
+            diffusion = unfolded_models.DiffusionScheduler(device=device)
+            diffusion_sampler = runners.Unconditional_sampler(diffusion, model,device, args)
 
             # directories
             if solver_type == "ddim":
@@ -77,24 +81,24 @@ def main(num_timesteps, solver_type, ddpm_param = 1):
                 if ii > 100:
                     continue
                 im = im.to(device)
-                x = inverse_image_transform(im)
+                x = utils.inverse_image_transform(im)
                 im_name = f"{(ii):05d}"
                 
                 # reverse diffusion model
                 out = diffusion_sampler.sampler(x.shape, num_timesteps = num_timesteps, eta=eta, zeta=zeta)
 
                 if args.use_wandb and ii%20 == 0:
-                    im_wdb = wandb.Image(get_rgb_from_tensor(x), caption=f"true image", file_type="png")
-                    x0_wdb = wandb.Image(get_rgb_from_tensor(out["xstart_pred"]), caption=f"sample", file_type="png")
+                    im_wdb = wandb.Image(utils.get_rgb_from_tensor(x), caption=f"true image", file_type="png")
+                    x0_wdb = wandb.Image(utils.get_rgb_from_tensor(out["xstart_pred"]), caption=f"sample", file_type="png")
                     image_wdb = wandb.Image(out["progress_img"], caption=f"progress sequence for im {im_name}", file_type="png")
                     xy = [im_wdb, x0_wdb]
                     wandb.log({"blurred and predict":xy, "pregressive":image_wdb})
-                    delete([image_wdb, xy, x0_wdb, im_wdb])
+                    utils.delete([image_wdb, xy, x0_wdb, im_wdb])
                 
                 # save images
-                save_images(ref_path, x, im_name)
-                save_images(sample_path, out["xstart_pred"], im_name)
-                delete([out])
+                utils.save_images(ref_path, x, im_name)
+                utils.save_images(sample_path, out["xstart_pred"], im_name)
+                utils.delete([out])
             
             wandb.finish()    
 

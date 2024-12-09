@@ -157,7 +157,7 @@ class Deblurring:
         FFT_h,_ = self.blur2A(im_size)
         FFTx = torch.fft.fft2(z, dim=(-2,-1))
         FFTx_t = torch.fft.fft2(x_t, dim=(-2,-1))
-        
+        rho = rho * 1
         temp = FFTAty / (lambda_*sigma_model**2) + FFTx / rho**2 + FFTx_t  / (sigma_t**2 * sqrt_alpha_comprod)
         prec_temp = self._precision(FFT_h, sigma_model, rho, sigma_t, lambda_)
         mean_vector = torch.real(torch.fft.ifft2(temp * prec_temp, dim = (-2,-1)))
@@ -181,7 +181,6 @@ class Inpainting:
         mask_type:str = "random",
         device:str = "cpu",
         sigma_model:float= 0.05, 
-        pixelwise=True, 
         box_proportion = None, 
         index_ii = None, 
         index_jj = None,
@@ -198,7 +197,6 @@ class Inpainting:
         self.mask_rate = mask_rate
         self.mode = mode
         self.mask_type = mask_type
-        self.pixelwise = pixelwise
         self.box_pro = box_proportion if box_proportion is not None else 0.3
         self.box_size = int(box_proportion * im_size)
         self.Mask = self.get_mask(index_ii=index_ii, index_jj=index_jj)
@@ -208,10 +206,7 @@ class Inpainting:
         mask = mask.squeeze()
         if self.mask_type == "random":
             aux = torch.rand_like(mask)
-            if self.pixelwise:
-                mask[:, aux[0, :, :] > self.mask_rate] = 0
-            else:
-                mask[aux > self.mask_rate] = 0
+            mask[aux > self.mask_rate] = 0
         elif self.mask_type == "box" and self.box_size is not None:
             box = torch.zeros(self.box_size, self.box_size).to(self.device)
             if index_ii is None or index_jj is None:
@@ -227,13 +222,14 @@ class Inpainting:
         self, 
         sigma_model:float, 
         sigma_t:torch.Tensor, 
-        sqrt_alpha_comprod:torch.Tensor, 
         rho:torch.Tensor,
         lambda_:float
     )->torch.Tensor:
         # cf. Sherman-Morrison-Woodbury formula
-        para_temp2 = (rho**2 * sigma_t**2 * sqrt_alpha_comprod) / (sigma_t**2 * sqrt_alpha_comprod + rho**2)
-        return para_temp2 * ( torch.ones_like(self.Mask) - para_temp2 * self.Mask / (lambda_*sigma_model**2 + para_temp2))
+        para_temp2 = (rho**2 * sigma_t**2 ) / (sigma_t**2  + rho**2)
+        prec_temp2 = para_temp2 * (torch.ones_like(self.Mask) - para_temp2 * self.Mask / (lambda_*sigma_model**2 + para_temp2))
+        prec_temp28 = 1 / (self.Mask / (lambda_*sigma_model**2) +  1 / rho**2 +  1 / sigma_t**2)
+        return  prec_temp2
 
     # ---- mean vector op ----
     def mean_estimate(self, 
@@ -246,20 +242,18 @@ class Inpainting:
         rho:torch.Tensor,
         lambda_:float
     )->torch.Tensor:
-        
         assert x_t.shape == z.shape == y.shape, "x_t, y and z should have the same shape"
-        
         # ---- Precision  operator ----
-        inv_precision_matrix = lambda x: self.precision(sigma_model, sigma_t, sqrt_alpha_comprod, rho, lambda_) * x
+        inv_precision_matrix = lambda x: self.precision(sigma_model, sigma_t, rho, lambda_) * x
 
         # ---- Solving the linear system Ax = b ----
         temp = self.Mask * y / (lambda_*sigma_model**2) +  z / rho**2 +  x_t / (sigma_t**2 * sqrt_alpha_comprod) 
         mean_vector = inv_precision_matrix(temp)
+        mean_vector[:,:,self.Mask.to(torch.bool)] = y[:,:,self.Mask.to(torch.bool)]
         return mean_vector      
 
     # ---- Inpainting operator ----
     def Ax(self, x:torch.Tensor)->torch.Tensor:
-        assert self.Mask.dim() == x.dim()
         Mask = self.Mask
         return x * Mask
     
@@ -271,7 +265,8 @@ class Inpainting:
             x0 = inverse_image_transform(x)
         else:
             x0 = x
-        out = self.Ax(x0) + self.sigma_model * torch.randn_like(x0)
+        x0_ = x0 + self.sigma_model * torch.randn_like(x0)
+        out = self.Ax(x0_)
         return out
  
 

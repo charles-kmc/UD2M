@@ -1,43 +1,27 @@
 import os
 import copy
 import time
-import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import psutil
 import datetime
-import flags
+import argparse
 import scipy.io as sio
 import torch
 from torch.utils.data import DataLoader
 
-from unfolded_models.unfolded_model import (
-    HQS_models, 
-    physics_models, 
-    DiffusionScheduler,
-    GetDenoisingTimestep,
-    get_rgb_from_tensor,
-)
-from unfolded_models.runner_inference_cmd import (
-    load_trainable_params,
-    DDIM_SAMPLER,
-    load_yaml,
-)
 from args_unfolded_model import args_unfolded
-from models.load_frozen_model import load_frozen_model
-from datasets.datasets import Datasets
-from utils_lora.lora_parametrisation import LoRa_model
-from utils.utils import ( 
-    inverse_image_transform, 
-    image_transform,
-    DotDict,
-    welford,
-    save_images,
-    delete,
-)
+from models.load_model import load_frozen_model
+from datasets.datasets import GetDatasets
+
+import utils as utils
+import unfolded_models as ums
+import physics as phy
+import runners as runners
+import configs as params_configs
+from configs.args_parse import configs
+
 from metrics.coverage.coverage_function import coverage_eval
-from metrics.sliced_wasserstein_distance.evaluate_swd import eval_swd
 from metrics.metrics import Metrics
 from metrics.fid_batch.fid_evaluation import Fid_evatuation
 
@@ -56,7 +40,7 @@ def linear_indices(num_iter, lambda_min=0.3,lambda_max=0.6):
     lambd = lambd.reshape(1,-1)
     return lambd, seq
 
-max_iter = 100
+max_iter = 1
 ddpm_param = 1
 ckpt_epoch = 840
 run_name = "_sampling_decreasing_lambda_free_noise_model"
@@ -66,9 +50,9 @@ stochastic_rate = 0.05
 SOLVER_TYPES =  ["ddim"]
 LORA = True
 MAX_UNFOLDED_ITER = [3]
-NUM_TIMESTEPS = [100, 500]
+NUM_TIMESTEPS = [100, 500, 1000]
 eta = 0.0 
-T_AUG = 10
+T_AUG = 5
 ZETA = [0.6] #op 0.4 or 0.6
 date_eval = datetime.datetime.now().strftime("%d-%m-%Y")
 
@@ -86,13 +70,21 @@ def main(
     with torch.no_grad():
         # args
         args = args_unfolded()
+        args.mode = "inference"
+        config = configs(args.mode)
+        args.task = config.task
+        if args.mode == "inference":
+            ckpt_epoch = config.ckpt_epoch
+            ckpt_date = config.ckpt_date
         args.lora = LORA
-        args.evaluation.coverage = True
+        args.evaluation.coverage = False
         args.ddpm_param = ddpm_param
+        
         # parameters
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
         args.solver_type = solver_type
         args.eta = eta
+        
         for idx in range(len(ZETA)):
             zeta = ZETA[idx]
             args.zeta = zeta
@@ -104,7 +96,7 @@ def main(
                 args.eval_date = date_eval
                 args.save_wandb_img = False                
                 
-                if args.dpir.use_dpir:
+                if args.dpir.use_dpir and args.task!="inp":
                     init = f"init_model_{args.dpir.model_name}"
                 else:
                     init = f"init_xty_{args.init_xt_y}"
@@ -122,7 +114,7 @@ def main(
                         raise ValueError(f"Solver {solver_type} do not exists.")
                     wandb.init(
                             # set the wandb project where this run will be logged
-                            project="Sampling Unfolded Conditional Diffusion Models",
+                            project=f"Sampling Unfolded Conditional Diffusion Models {args.task}",
                             dir = dir_w,
                             config={
                                 "model": "Deep Unfolding",
@@ -135,7 +127,7 @@ def main(
                         )
                 # data
                 dir_test = "/users/cmk2000/sharedscratch/Datasets/testsets/imageffhq"
-                datasets = Datasets(dir_test, args.im_size, dataset_name=args.dataset_name)
+                datasets = GetDatasets(dir_test, args.im_size, dataset_name=args.dataset_name)
                 testset = DataLoader(datasets, batch_size=1, shuffle=False, )
                 
                 # model
@@ -149,21 +141,21 @@ def main(
 
                 target_lora = ["qkv", "proj_out"]
                 if LORA:
-                    LoRa_model(
+                    utils.LoRa_model(
                         model, 
                         target_layer = target_lora, 
                         device=device, 
                         rank = args.rank
                     )
-                    uu = {}
-                    for name, param in model.named_parameters():
-                        if name.endswith("output_blocks.2.0.out_layers.3"):
-                            uu[name] = param.data.clone()                                 
-                    load_trainable_params(model, args.epoch, args)
+                    # uu = {}
+                    # for name, param in model.named_parameters():
+                    #     if name.endswith("output_blocks.2.0.out_layers.3"):
+                    #         uu[name] = param.data.clone()                                 
+                    runners.load_trainable_params(model, args.epoch, args)
                     
-                    for name, param in model.named_parameters():
-                        if name.endswith("output_blocks.2.0.out_layers.3"):
-                            param.data = uu[name]
+                    # for name, param in model.named_parameters():
+                    #     if name.endswith("output_blocks.2.0.out_layers.3"):
+                    #         param.data = uu[name]
                 
                 # stochastic model setting
                 target_lora_layer = ["qkv", "proj_out", "output_blocks.2.0.out_layers.3"]
@@ -176,32 +168,47 @@ def main(
                     args.orig_params = orig_params
                     args.target_lora_layer = target_lora_layer
                     
-                # physics
-                physics = physics_models(
-                    args.physic.kernel_size, 
-                    args.physic.blur_name, 
-                    device = device,
-                    sigma_model = args.physic.sigma_model,
-                    transform_y= args.physic.transform_y,
-                    random_blur=args.physic.random_blur,
-                    mode = "test",
-                )
-                # HQS model
-                denoising_timestep = GetDenoisingTimestep(device)
-                diffusion = DiffusionScheduler(device=device)
-                hqs_model = HQS_models(
+                # physic
+                if args.task == "deblur":
+                    physic = phy.Deblurring(
+                        kernel_size=args.physic.deblur.kernel_size,
+                        blur_name=args.physic.deblur.blur_name,
+                        random_blur=args.physic.deblur.random_blur,
+                        device=device,
+                        sigma_model=args.physic.sigma_model,
+                        transform_y=args.physic.transform_y,
+                        mode=args.mode,
+                    )
+                elif args.task == "inp":
+                    physic = phy.Inpainting(
+                        mask_rate=args.physic.inp.mask_rate,
+                        im_size=args.im_size,
+                        mask_type=args.physic.inp.mask_type,
+                        box_proportion = args.physic.inp.box_proportion,
+                        index_ii = args.physic.inp.index_ii,
+                        index_jj = args.physic.inp.index_jj,
+                        device=device,
+                        sigma_model=args.physic.sigma_model,
+                        transform_y=args.physic.transform_y,
+                        mode=args.mode,
+                    )
+                    
+                # HQS module
+                denoising_timestep = ums.GetDenoisingTimestep(device)
+                diffusion_scheduler = ums.DiffusionScheduler(device=device)
+                hqs_module = ums.HQS_models(
                     model,
-                    physics, 
-                    diffusion, 
+                    physic, 
+                    diffusion_scheduler, 
                     denoising_timestep,
                     args
                 )
-                # sampler
                 
-                diffsampler = DDIM_SAMPLER(
-                    hqs_model, 
-                    physics, 
-                    diffusion, 
+                # sampler
+                diffsampler = runners.Conditional_sampler(
+                    hqs_module, 
+                    physic, 
+                    diffusion_scheduler, 
                     device, 
                     args,
                     max_unfolded_iter = max_unfolded_iter
@@ -255,8 +262,8 @@ def main(
                         
                     # obs
                     im = im.to(device)
-                    y = physics.y(im)
-                    x = inverse_image_transform(im)
+                    y = physic.y(im)
+                    x = utils.inverse_image_transform(im)
                     im_name = f"{(ii):05d}"
                     
                     # coverage 
@@ -264,7 +271,8 @@ def main(
                         shape = x.squeeze().shape
                         shapes=(max_iter-1,) + shape
                         data = torch.zeros(shapes, dtype = x.dtype)
-                    print(f"Timesteps: {num_timesteps}")  
+
+                    x_true = None
                     for it in range(max_iter):
                         start_time = time.time()
                         out = diffsampler.sampler(
@@ -273,7 +281,7 @@ def main(
                             num_timesteps = num_timesteps, 
                             eta=eta, 
                             zeta=zeta,
-                            x_true = x,
+                            x_true = x_true,
                             track = max_iter>1,
                             lambda_ = lambda_[INDICES[it]]
                         )
@@ -281,7 +289,7 @@ def main(
                         collapsed_time = time.time() - start_time           
                         # sample
                         if it ==0:
-                            posterior = welford(out["xstart_pred"])
+                            posterior = utils.welford(out["xstart_pred"])
                         if it>0:
                             # posterior
                             posterior.update(out["xstart_pred"])
@@ -298,14 +306,17 @@ def main(
                     else:
                         X_posterior_mean = out["xstart_pred"]
                         X_posterior_var = out["xstart_pred"]
-                    delete([posterior])
+                    utils.delete([posterior])
                     
                     # psnrs 
-                    fig = plt.figure()
-                    plt.plot(range(len(out["psnrs"])), out["psnrs"], label = f"psnr {im_name}")
-                    plt.xlabel("T")
-                    plt.ylabel("psnr")
-                    plt.savefig(os.path.join(metric_path, f"psnr_progress_{im_name}.png"))
+                    try:
+                        fig = plt.figure()
+                        plt.plot(range(len(out["psnrs"])), out["psnrs"], label = f"psnr {im_name}")
+                        plt.xlabel("T")
+                        plt.ylabel("psnr")
+                        plt.savefig(os.path.join(metric_path, f"psnr_progress_{im_name}.png"))
+                    except:
+                        pass
                         
                     if args.use_wandb:
                         psnr_val = metrics.psnr_function(out["xstart_pred"], x)
@@ -313,32 +324,32 @@ def main(
                         
                     if args.use_wandb and ii%20 == 0:
                         im_wdb = wandb.Image(
-                            get_rgb_from_tensor(x), 
+                            utils.get_rgb_from_tensor(x), 
                             caption=f"true image", 
                             file_type="png"
                         )
                         x0_wdb = wandb.Image(
-                            get_rgb_from_tensor(out["xstart_pred"]), 
+                            utils.get_rgb_from_tensor(out["xstart_pred"]), 
                             caption=f"sample psnr/mse ({metrics.psnr_function(out["xstart_pred"], x):.2f},{metrics.lpips_function(out["xstart_pred"], x):.2f}))", 
                             file_type="png"
                         )
                         xmmse_wdb = wandb.Image(
-                            get_rgb_from_tensor(X_posterior_mean), 
+                            utils.get_rgb_from_tensor(X_posterior_mean), 
                             caption=f"x_mmse psnr/lpips ({metrics.psnr_function(X_posterior_mean, x):.2f},{metrics.lpips_function(X_posterior_mean, x):.2f})", 
                             file_type="png"
                         )
                         xvar_wdb = wandb.Image(
-                            get_rgb_from_tensor(X_posterior_var.sqrt() / X_posterior_var.sqrt().max()), 
+                            utils.get_rgb_from_tensor(X_posterior_var.sqrt() / X_posterior_var.sqrt().max()), 
                             caption=f"standard deviation", 
                             file_type="png"
                         )
                         z0_wdb = wandb.Image(
-                            get_rgb_from_tensor(out["aux"]), 
+                            utils.get_rgb_from_tensor(out["aux"]), 
                             caption=f"z_est psnr/mse ({metrics.psnr_function(out["aux"], x):.2f},{metrics.lpips_function(out["aux"], x):.2f})", 
                             file_type="png"
                         )
                         y_wdb = wandb.Image(
-                            get_rgb_from_tensor(inverse_image_transform(y)), 
+                            utils.get_rgb_from_tensor(utils.inverse_image_transform(y)), 
                             caption=f"observation", 
                             file_type="png"
                         )
@@ -347,11 +358,11 @@ def main(
                         # progression
                         image_wdb = wandb.Image(out["progress_img"], caption=f"progress sequence for im {im_name}", file_type="png")
                         wandb.log({"pregressive":image_wdb})
-                        delete([image_wdb, xy, xmmse_wdb, z0_wdb, y_wdb, x0_wdb, im_wdb, xvar_wdb])
+                        utils.delete([image_wdb, xy, xmmse_wdb, z0_wdb, y_wdb, x0_wdb, im_wdb, xvar_wdb])
                     
                     # coverage
                     if args.evaluation.coverage:
-                        op_coverage = DotDict()
+                        op_coverage = utils.DotDict()
                         op_coverage.inside_interval = []; op_coverage.num_dist_greater = []
                         op_coverage.im_num = [ii]; op_coverage.truexdist_list = []; op_coverage.quantilelist_list = []
                         op_coverage.save_dir = save_metric_path
@@ -364,7 +375,7 @@ def main(
                         out_coverage = coverage_eval(x.detach().cpu(), op_coverage)
                     
                     last_sample = data[-1].to(device) if args.evaluation.coverage else out["xstart_pred"]
-                    delete([data, op_coverage]) if args.evaluation.coverage else None
+                    utils.delete([data, op_coverage]) if args.evaluation.coverage else None
                     
                     if args.evaluation.coverage:
                         sampledist = out_coverage["sampledist"]
@@ -385,15 +396,15 @@ def main(
                     # sliced wasserstein distance
                     if args.evaluation.swd:    
                         # save images for fid and cmmd evaluation
-                        save_images(ref_path, x, im_name)
-                        save_images(mmse_path, X_posterior_mean, im_name)
+                        utils.save_images(ref_path, x, im_name)
+                        utils.save_images(mmse_path, X_posterior_mean, im_name)
                         std = torch.sqrt(X_posterior_var)
                         err = torch.abs(X_posterior_mean-x)
                         norm = max(std.max(), err.max())
-                        save_images(var_path, std/norm, im_name)
-                        save_images(var_path, err /norm, im_name+"_residual")
-                        save_images(y_path, inverse_image_transform(y), im_name)
-                        save_images(last_path, last_sample, im_name)
+                        utils.save_images(var_path, std/norm, im_name)
+                        utils.save_images(var_path, err /norm, im_name+"_residual")
+                        utils.save_images(y_path, utils.inverse_image_transform(y), im_name)
+                        utils.save_images(last_path, last_sample, im_name)
                         
                         results[f"{ii}_var"] = X_posterior_var.cpu().squeeze().numpy()
                         results[f"{ii}_mmse"] = X_posterior_mean.cpu().squeeze().numpy()
@@ -431,7 +442,7 @@ def main(
                         s_mse += mse_temp
                         s_ssim += ssim_temp
                         count += 1
-                    delete([X_posterior_mean,out])
+                    utils.delete([X_posterior_mean,out])
                 
                 wandb.finish()   
     return args 
@@ -453,80 +464,80 @@ if __name__ == "__main__":
     vec_ssim_mmse = []
     vec_lpips_mmse = []
     vec_fid_last = []
-    
-    for num_timestep in NUM_TIMESTEPS:
-        for lambda_ in LAMBDA:
-            root_dir = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{lambda_}")
-            save_metric_path = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", "metrics_evaluated")
-            root_dir_csv = os.path.join(root_dir, "metrics_results")
-            # FID
-            out= Fid_evatuation(root_dir, device)
-            vec_fid_mmse.append(out["fid_mmse"])
-            vec_fid_last.append(out["fid_last"])
-            dic_results[f"fid mmse_timesteps{lambda_}"] = [out["fid_mmse"]]
-            dic_results[f"fid last_timesteps{lambda_}"] = [out["fid_last"]]
+    if 0:
+        for num_timestep in NUM_TIMESTEPS:
+            for lambda_ in LAMBDA:
+                root_dir = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{lambda_}")
+                save_metric_path = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", "metrics_evaluated")
+                root_dir_csv = os.path.join(root_dir, "metrics_results")
+                # FID
+                out= Fid_evatuation(root_dir, device)
+                vec_fid_mmse.append(out["fid_mmse"])
+                vec_fid_last.append(out["fid_last"])
+                dic_results[f"fid mmse_timesteps{lambda_}"] = [out["fid_mmse"]]
+                dic_results[f"fid last_timesteps{lambda_}"] = [out["fid_last"]]
+                
+                # other metrics: PSNR, SSIM, LPIPs
+                data = pd.read_csv(os.path.join(root_dir_csv, "metrics_results.csv"))
+                mean_psnr = data["psnr"].mean()
+                mean_lpips = data["lpips"].mean()
+                mean_ssim = data["ssim"].mean()
+                dic_results[f"psnr mmse_timesteps{lambda_}"] = [mean_psnr]
+                dic_results[f"lpips mmse_timesteps{lambda_}"] = [mean_lpips]
+                dic_results[f"ssim mmse_timesteps{lambda_}"] = [mean_ssim]
+                vec_lpips_mmse.append(mean_lpips)
+                vec_psnr_mmse.append(mean_psnr)
+                vec_ssim_mmse.append(mean_ssim)
             
-            # other metrics: PSNR, SSIM, LPIPs
-            data = pd.read_csv(os.path.join(root_dir_csv, "metrics_results.csv"))
-            mean_psnr = data["psnr"].mean()
-            mean_lpips = data["lpips"].mean()
-            mean_ssim = data["ssim"].mean()
-            dic_results[f"psnr mmse_timesteps{lambda_}"] = [mean_psnr]
-            dic_results[f"lpips mmse_timesteps{lambda_}"] = [mean_lpips]
-            dic_results[f"ssim mmse_timesteps{lambda_}"] = [mean_ssim]
-            vec_lpips_mmse.append(mean_lpips)
-            vec_psnr_mmse.append(mean_psnr)
-            vec_ssim_mmse.append(mean_ssim)
-        
-        # save data in a csv file 
-        lab ="lambda"
-        os.makedirs(save_metric_path, exist_ok=True)
-        fid_pd = pd.DataFrame(dic_results)
-        save_dir_metrics = os.path.join(save_metric_path, f'fid_psnr_lpips_ssim_results.csv') #_eta_{eta}_zeta_{zeta}
-        fid_pd.to_csv(save_dir_metrics, mode='a', header=not os.path.exists(save_dir_metrics))
-        
-        # plot the results
-        xaxis = LAMBDA
-        if len(xaxis) >1:
-            plot = plt.figure()
-            plt.plot(np.array(xaxis), np.array(vec_fid_mmse), "b.", label = "FID - mmse")
-            plt.plot(np.array(xaxis), np.array(vec_fid_last), "b.", label = "FID - last")
-            plt.xlabel(f"{lab}")
-            plt.ylabel("FID")
-            plt.title(f"{lab} versus FID")
-            plt.legend()
-            plt.savefig(os.path.join(save_metric_path, f"fid_results.png"))
-            plt.close("all")
+            # save data in a csv file 
+            lab ="lambda"
+            os.makedirs(save_metric_path, exist_ok=True)
+            fid_pd = pd.DataFrame(dic_results)
+            save_dir_metrics = os.path.join(save_metric_path, f'fid_psnr_lpips_ssim_results.csv') #_eta_{eta}_zeta_{zeta}
+            fid_pd.to_csv(save_dir_metrics, mode='a', header=not os.path.exists(save_dir_metrics))
             
             # plot the results
-            plot = plt.figure()
-            plt.plot(np.array(xaxis), np.array(vec_lpips_mmse), "b.", label = "lpips")
-            plt.legend()
-            plt.xlabel(f"{lab}")
-            plt.ylabel("LPIPs")
-            plt.title(f"{lab} versus lpips")
-            plt.savefig(os.path.join(save_metric_path, f"lpips_results.png")) # _eta_{eta}_zeta{zeta}
-            plt.close("all")
-            
-            # plot the results
-            plot = plt.figure()
-            plt.plot(np.array(xaxis), np.array(vec_psnr_mmse), "b.", label = "psnr")
-            plt.legend()
-            plt.xlabel(f"{lab}")
-            plt.ylabel("PSNR")
-            plt.title("zeta versus psnr")
-            plt.savefig(os.path.join(save_metric_path, f"psnr_results.png")) # _eta_{eta}_zeta{zeta}
-            plt.close("all")
-            
-            # plot the results
-            plot = plt.figure()
-            plt.plot(np.array(xaxis), np.array(vec_ssim_mmse), "b.", label = "ssim")
-            plt.legend()
-            plt.xlabel(f"{lab}")
-            plt.ylabel("SSIM")
-            plt.title(f"{lab} versus ssim")
-            plt.savefig(os.path.join(save_metric_path, f"ssim_results.png")) #_eta_{eta}_zeta{zeta}
-            plt.close("all")
+            xaxis = LAMBDA
+            if len(xaxis) >1:
+                plot = plt.figure()
+                plt.plot(np.array(xaxis), np.array(vec_fid_mmse), "b.", label = "FID - mmse")
+                plt.plot(np.array(xaxis), np.array(vec_fid_last), "b.", label = "FID - last")
+                plt.xlabel(f"{lab}")
+                plt.ylabel("FID")
+                plt.title(f"{lab} versus FID")
+                plt.legend()
+                plt.savefig(os.path.join(save_metric_path, f"fid_results.png"))
+                plt.close("all")
+                
+                # plot the results
+                plot = plt.figure()
+                plt.plot(np.array(xaxis), np.array(vec_lpips_mmse), "b.", label = "lpips")
+                plt.legend()
+                plt.xlabel(f"{lab}")
+                plt.ylabel("LPIPs")
+                plt.title(f"{lab} versus lpips")
+                plt.savefig(os.path.join(save_metric_path, f"lpips_results.png")) # _eta_{eta}_zeta{zeta}
+                plt.close("all")
+                
+                # plot the results
+                plot = plt.figure()
+                plt.plot(np.array(xaxis), np.array(vec_psnr_mmse), "b.", label = "psnr")
+                plt.legend()
+                plt.xlabel(f"{lab}")
+                plt.ylabel("PSNR")
+                plt.title("zeta versus psnr")
+                plt.savefig(os.path.join(save_metric_path, f"psnr_results.png")) # _eta_{eta}_zeta{zeta}
+                plt.close("all")
+                
+                # plot the results
+                plot = plt.figure()
+                plt.plot(np.array(xaxis), np.array(vec_ssim_mmse), "b.", label = "ssim")
+                plt.legend()
+                plt.xlabel(f"{lab}")
+                plt.ylabel("SSIM")
+                plt.title(f"{lab} versus ssim")
+                plt.savefig(os.path.join(save_metric_path, f"ssim_results.png")) #_eta_{eta}_zeta{zeta}
+                plt.close("all")
             
     # evaluation 
     if False:   

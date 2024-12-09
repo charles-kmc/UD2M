@@ -163,3 +163,17 @@ def delete(var:list):
         for x in var:
             del x
         torch.cuda.empty_cache()
+
+# ---  
+def get_rgb_from_tensor(x):
+    x0_np = x.detach().cpu().numpy()       #[0,1]
+    x0_np = np.squeeze(x0_np)
+    if x0_np.ndim == 3:
+        x0_np = np.transpose(x0_np, (1, 2, 0))
+    return x0_np
+
+# ---
+def get_batch_rgb_from_batch_tensor(x):
+    L = [get_rgb_from_tensor(xi) for xi in x]
+    out= cv2.hconcat(L)*255.
+    return out

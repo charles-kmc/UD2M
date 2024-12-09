@@ -2,12 +2,13 @@
 from utils.utils import DotDict
 def args_unfolded():
     main_args = {
+        "lambda_":0.1,
+        "task":"inp", # inp, deblur
         "noise_schedule_type":"linear",
         "ddpm_param":1,
-        "task":"debur",
         "resume_epoch": 0,
-        "resume_model": True,
-        "learning_rate":3e-7,#3e-5,
+        "resume_model": False,
+        "learning_rate":3e-5,#3e-5,
         "weight_decay":1e-2,
         "rank":10,
         "seed":46,
@@ -36,10 +37,23 @@ def args_unfolded():
         "transform_y": True,
         "random_blur": False,
     }
+    inp = {
+        "mask_rate":0.5,
+        "mask_type":"random",
+        "box_proportion":0.3,
+        "index_ii":None,
+        "index_jj":None,
+    }
+    deblur = {
+        "kernel_size": 25,
+        "blur_name":"gaussian",
+        "random_blur": False,
+    }
+    
     dpir = {
         "pretrained_pth": "/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo",
         "model_name": "drunet_color", #"ircnn_color, drunet_color",
-        "use_dpir":False,
+        "use_dpir":True,
     }
     evaluation = {
         "save_images":True,
@@ -56,7 +70,14 @@ def args_unfolded():
     }
     args = DotDict(main_args)
     args.physic = DotDict(pyhsic)
+    args.physic.inp = DotDict(inp) 
+    args.physic.deblur = DotDict(deblur) 
     args.dpir = DotDict(dpir)
     args.evaluation = DotDict(evaluation)
     args.model = DotDict(model)
+    if args.task == "inp":
+        args.dpir.use_dpir = False
+        args.lambda_ = 1000
+    if args.task == "deblur":
+        args.lambda_ = 0.3
     return args

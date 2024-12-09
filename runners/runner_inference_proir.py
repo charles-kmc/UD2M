@@ -1,17 +1,14 @@
 import torch 
-import numpy as np
 import cv2
-import blobfile as bf
-from utils.utils import inverse_image_transform, image_transform, delete
-from .unfolded_model import (
-    get_rgb_from_tensor,
-    DiffusionScheduler,
-)
 
-class Sampler_prior:
+from .runners_utils import DiffusionSolver
+import unfolded_models as ums
+import utils as utils
+
+class Unconditional_sampler:
     def __init__(
         self, 
-        diffusion:DiffusionScheduler,
+        diffusion:ums.DiffusionScheduler,
         model,
         device,
         args,
@@ -45,7 +42,7 @@ class Sampler_prior:
                 t_i = seq[ii]
                 print(t_i)
                 out_val = self.sampling_prior(x, torch.tensor([t_i]).to(self.device))
-                x0 = image_transform(out_val["xstart_pred"])
+                x0 = utils.image_transform(out_val["xstart_pred"])
                 
                 # sample from the predicted noise
                 if seq[ii] != seq[-1] and ii < len(seq)-1: 
@@ -59,9 +56,9 @@ class Sampler_prior:
                     x = x0
                 # save the process
                 if self.args.save_progressive and (seq[ii] in progress_seq):
-                    x_show = get_rgb_from_tensor(inverse_image_transform(x))      #[0,1]
+                    x_show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x))      #[0,1]
                     progress_img.append(x_show)
-                    delete([x_show])
+                    utils.delete([x_show])
             
             if self.args.save_progressive:   
                 img_total = cv2.hconcat(progress_img)
@@ -75,45 +72,7 @@ class Sampler_prior:
         
         # estimate of x_start
         x = self.diffusion.predict_xstart_from_eps(xt, t, pred_eps)
-        x_pred = inverse_image_transform(x)
+        x_pred = utils.inverse_image_transform(x)
         x0 = torch.clamp(x_pred, 0.0, 1.0)
     
         return {"xstart_pred":x0, "aux":x0, "eps_pred":pred_eps}
-
-    
-class DiffusionSolver:
-    def __init__(self, seq, diffusion:DiffusionScheduler):
-        self.seq = seq
-        self.diffusion = diffusion
-    
-    # DDIM solver   
-    def ddim_solver(self, x0, eps, ii, eta, zeta):
-        t_i = self.seq[ii]
-        t_im1 = self.seq[ii+1]
-        beta_t = self.diffusion.betas[self.seq[ii]]
-        eta_sigma = eta * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] / self.diffusion.sqrt_1m_alphas_cumprod[t_i] * torch.sqrt(beta_t)
-        x = self.diffusion.sqrt_alphas_cumprod[t_im1] * x0 \
-            + np.sqrt(1-zeta) * (torch.sqrt(self.diffusion.sqrt_1m_alphas_cumprod[t_im1]**2 - eta_sigma**2) * eps + eta_sigma * torch.randn_like(x0)) \
-                + np.sqrt(zeta) * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] * torch.randn_like(x0)
-        return x
-    
-    # DDPM solver
-    def ddpm_solver(self, x, eps, ii, ddpm_param = 1):
-        t_i = self.seq[ii]
-        t_im1 = self.seq[ii+1]
-        eta_sigma = self.diffusion.sqrt_1m_alphas_cumprod[t_im1] / self.diffusion.sqrt_1m_alphas_cumprod[t_i] * torch.sqrt(self.diffusion.betas[t_i])
-        alpha_t = 1 - self.diffusion.betas[t_i]
-        x = (1 / alpha_t.sqrt()) * ( x - (ddpm_param*self.diffusion.betas[t_i]).sqrt() * eps ) + (ddpm_param*eta_sigma**2 ).sqrt() * torch.randn_like(x)
-        return x
-
-def load_trainable_params(model, epoch, args):
-    checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", args.date)
-    filename = f"LoRA_model_{args.task}_{(epoch):03d}.pt"
-    filepath = bf.join(checkpoint_dir, filename)
-    
-    trainable_state_dict = torch.load(filepath)
-    model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)               
-    
-    return model
-   
-

@@ -2,27 +2,21 @@ import os
 import copy
 import datetime
 import torch
-import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 
-from unfolded_models.unfolded_model import (
-    Trainer, 
-    HQS_models, 
-    physics_models, 
-    DiffusionScheduler,
-)
 from args_unfolded_model import args_unfolded
-from models.load_frozen_model import load_frozen_model
-from datasets.datasets import Datasets
-from utils.get_logger import get_loggers
-from utils_lora.lora_parametrisation import LoRa_model
+from models.load_model import load_frozen_model
+from datasets.datasets import GetDatasets
+from configs.args_parse import configs
 
 import unfolded_models as um
 import physics as phy
+import utils as utils
 
 def main():
     # args
     args = args_unfolded()
+    args.task = configs().task
     
     # logger 
     date = datetime.datetime.now().strftime("%d-%m-%Y")
@@ -30,14 +24,14 @@ def main():
     script_path = script_dir.rsplit("/", 1)[0]
     log_dir = os.path.join(script_path, "logs", "Logger_CDM", date)
     os.makedirs(log_dir, exist_ok=True)
-    logger = get_loggers(log_dir, f"log_unfolded.log")
+    logger = utils.get_loggers(log_dir, f"log_unfolded.log")
     
     # device 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
     # datasets
     prop = 0.2
-    datasets = Datasets(
+    datasets = GetDatasets(
         args.dataset_path, 
         args.im_size, 
         dataset_name=args.dataset_name
@@ -69,7 +63,7 @@ def main():
     
     # LoRA model 
     model = copy.deepcopy(frozen_model)
-    LoRa_model(
+    utils.LoRa_model(
         model, 
         target_layer = ["qkv", "proj_out"], 
         device=device, 
@@ -87,9 +81,9 @@ def main():
     # physic
     if args.task == "deblur":
         physic = phy.Deblurring(
-            kernel_size=args.physic.kernel_size,
-            blur_name=args.physic.blur_name,
-            random_blur=args.physic.random_blur,
+            kernel_size=args.physic.deblur.kernel_size,
+            blur_name=args.physic.deblur.blur_name,
+            random_blur=args.physic.deblur.random_blur,
             device=device,
             sigma_model=args.physic.sigma_model,
             transform_y=args.physic.transform_y,
@@ -97,9 +91,12 @@ def main():
         )
     elif args.task == "inp":
         physic = phy.Inpainting(
-            kernel_size=args.physic.kernel_size,
-            blur_name=args.physic.blur_name,
-            random_blur=args.physic.random_blur,
+            mask_rate=args.physic.inp.mask_rate,
+            im_size=args.im_size,
+            mask_type=args.physic.inp.mask_type,
+            box_proportion = args.physic.inp.box_proportion,
+            index_ii = args.physic.inp.index_ii,
+            index_jj = args.physic.inp.index_jj,
             device=device,
             sigma_model=args.physic.sigma_model,
             transform_y=args.physic.transform_y,

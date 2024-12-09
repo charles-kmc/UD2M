@@ -61,16 +61,10 @@ class DiffusionScheduler:
     def sample_times(self, bzs, device):
         if self.fix_timestep:
             t_ = torch.randint(1, self.num_timesteps, (1,))
-            t = (t_ * torch.ones((bzs,))).long().to(device)
+            timestep = (t_ * torch.ones((bzs,))).long().to(device)
         else:
-            t = torch.randint(
-                1, 
-                self.num_timesteps, 
-                (bzs,), 
-                device=device
-            ).long()
-        
-        return t
+            timestep = torch.randint(1, self.num_timesteps, (bzs,), device=device).long()
+        return timestep
     
     def sample_xt(
         self, 
@@ -78,7 +72,6 @@ class DiffusionScheduler:
         timesteps:torch.Tensor, 
         noise:torch.Tensor
     ) -> torch.Tensor:
-        
         if noise is None:
             noise = torch.randn_like(x_start)
         assert noise.shape == x_start.shape
@@ -138,13 +131,19 @@ class GetDenoisingTimestep:
         return rho, tz, ty
     
     # get rho and t from sigma_t and sigma_y
-    def get_tz_rho(self, t, sigma_y, x_shape, T_AUG):
+    def get_tz_rho(self, t, sigma_y, x_shape, T_AUG, task="inp"):
         sigma_t = extract_tensor(self.scheduler.sigmas, t, x_shape) 
         if not torch.is_tensor(sigma_y):
             sigma_y = torch.tensor(sigma_y).to(self.device)
         else:
             sigma_y = sigma_y.to(self.device)
-        rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2))
+        if task == "inp":
+            sp = 8
+        elif sp == "deblur":
+            sp = 1
+        else:
+            sp = 1
+        rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2)) * sp
         tz = torch.clamp(
             self.t_y(rho[0,0,0,0]).cpu() - torch.tensor(T_AUG),
             1,

@@ -16,7 +16,6 @@ class HQS_models:
         get_denoising_timestep:GetDenoisingTimestep,
         args
     ) -> None:
-        
         self.model = model
         self.diffusion_scheduler = diffusion_scheduler
         self.physic = physic
@@ -34,7 +33,7 @@ class HQS_models:
     )-> torch.Tensor:
         sigma_t = extract_tensor(self.diffusion_scheduler.sigmas, t, x_t.shape)
         sqrt_alpha_comprod = extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t, x_t.shape)
-        estimate_temp = self.physic.mean_estimate(self, x_t, y, x, self.physic.sigma_model, sigma_t, sqrt_alpha_comprod, rho,lambda_)
+        estimate_temp = self.physic.mean_estimate(x_t, y, x, self.physic.sigma_model, sigma_t, sqrt_alpha_comprod, rho,lambda_)
         return estimate_temp
     
     def run_unfolded_loop(
@@ -50,7 +49,7 @@ class HQS_models:
         B,C = x.shape[:2]
         
         # get denoising timestep
-        rho, t_denoising, ty = self.get_denoising_timestep.get_tz_rho(t, self.physic.sigma_model, x_t.shape, T_AUG)
+        rho, t_denoising, ty = self.get_denoising_timestep.get_tz_rho(t, self.physic.sigma_model, x_t.shape, T_AUG, task = self.args.task)
         
         # --- initialisation
         x = x / extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t_denoising, x.shape)

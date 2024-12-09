@@ -5,14 +5,15 @@ from torch.utils.data import DataLoader, random_split
 import torchvision.transforms as transforms 
 import torch
 from degradation_model.utils_deblurs import DeblurringModel
-from utils.utils import inverse_image_transform, image_transform
+# from utils.utils import inverse_image_transform, image_transform
+import utils as utils
 
-class Datasets(object):
+class GetDatasets:
     def __init__(
                 self, 
                 dataset_dir, 
                 im_size, 
-                dataset_name = "ImageNet",
+                dataset_name = "FFHQ",
                 transform = None, 
                 clip_min = -1.0, 
                 clip_max = 1.0,                 
@@ -58,7 +59,7 @@ class Datasets(object):
         # apply transform
         if self.transform:
             image = self.transform(image)
-        image = image_transform(image)
+        image = utils.image_transform(image)
         return image
         
 
@@ -73,7 +74,7 @@ def get_data_loader(
                 ):
     assert prop <= 1, f"proportion {prop} should between 0 and 1!!"
     
-    dataset = Datasets(dataset_path, im_size)
+    dataset = GetDatasets(dataset_path, im_size)
     
     # Define the split sizes
     train_size = int(prop * len(dataset))

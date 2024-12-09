@@ -2,30 +2,20 @@ import torch
 import numpy as np
 import cv2
 import wandb
-import yaml
-import blobfile as bf
+from typing import Union
 
-from utils.utils import Metrics, inverse_image_transform, image_transform, delete
+from .runners_utils import DiffusionSolver
 from DPIR.dpir_models import DPIR_deb
-from args_unfolded_model import args_unfolded
-from models.load_frozen_model import load_frozen_model
-from utils_lora.lora_parametrisation import LoRa_model
-from datasets.datasets import Datasets
-from .unfolded_model import (
-    extract_tensor,
-    get_rgb_from_tensor,
-    DiffusionScheduler,
-    physics_models, 
-    HQS_models,
-    GetDenoisingTimestep,
-)
+import unfolded_models as ums
+import physics as phy
+import utils as utils
 
-class DDIM_SAMPLER:
+class Conditional_sampler:
     def __init__(
         self, 
-        hqs_model:HQS_models, 
-        physics:physics_models, 
-        diffusion:DiffusionScheduler,
+        hqs_model:ums.HQS_models, 
+        physics:Union[phy.Deblurring,phy.Inpainting], 
+        diffusion:ums.DiffusionScheduler,
         device,
         args,
         max_unfolded_iter:int = 3,
@@ -48,7 +38,7 @@ class DDIM_SAMPLER:
         )
         
         # metric
-        self.metrics = Metrics(self.device)
+        self.metrics = utils.Metrics(self.device)
     
     def sampler(
         self, 
@@ -57,7 +47,7 @@ class DDIM_SAMPLER:
         num_timesteps:int = 100, 
         eta:float=0., 
         zeta:float=1.,
-        x_true:bool = None,
+        x_true:torch.Tensor = None,
         track:bool = False,
         lambda_:int = 1
     ):
@@ -81,9 +71,9 @@ class DDIM_SAMPLER:
             # initilisation
             x = torch.randn_like(y)
             if self.args.dpir.use_dpir:
-                y_01 = inverse_image_transform(y)
+                y_01 = utils.inverse_image_transform(y)
                 x0 = self.dpir_model.run(y_01, self.physics.blur, iter_num = 1) #y.clone()
-                x0 = image_transform(x0)
+                x0 = utils.image_transform(x0)
             else:
                 x0 = y.clone()
             progress_img = []
@@ -95,11 +85,11 @@ class DDIM_SAMPLER:
                 t_i = seq[ii]
                 if self.classic_sampling:
                     out_val = self.sampling_prior(x, torch.tensor(t_i).to(self.device))
-                    x0 = image_transform(out_val["xstart_pred"])
+                    x0 = utils.image_transform(out_val["xstart_pred"])
                 else:
                     # unfolding: xstrat_pred, eps_pred, auxiliary variable
                     out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter, lambda_= lambda_)
-                    x0 = image_transform(out_val["xstart_pred"])
+                    x0 = utils.image_transform(out_val["xstart_pred"])
                 
                 if x_true is not None:
                     psnrs.append(self.metrics.psnr_function(x_true, out_val["xstart_pred"]).cpu().numpy())
@@ -119,87 +109,32 @@ class DDIM_SAMPLER:
     
                 # save the process
                 if self.args.save_progressive and (seq[ii] in progress_seq):
-                    x_show = get_rgb_from_tensor(inverse_image_transform(x))      #[0,1]
+                    x_show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x))      #[0,1]
                     progress_img.append(x_show)
-                    delete([x_show])
+                    utils.delete([x_show])
             
             if self.args.save_progressive:   
                 img_total = cv2.hconcat(progress_img)
                 if self.args.use_wandb and self.args.save_wandb_img:
                     image_wdb = wandb.Image(img_total, caption=f"progress sequence for im {im_name}", file_type="png")
                     wandb.log({"pregressive":image_wdb})
-                    delete([progress_img])
+                    utils.delete([progress_img])
         
         out_val["progress_img"] = img_total
         if x_true is not None:
             out_val["psnrs"] = psnrs
         return out_val
-    
+        
     def sampling_prior(self, xt, t):
-        B,C = xt.shapr[:2]
-        pred_eps = self.hqs_model.model(xt, t)
+        B,C = xt.shape[:2]
+        pred_eps = self.model(xt, t)
         pred_eps, _ = torch.split(pred_eps, C, dim=1) if pred_eps.shape == (B, C * 2, *xt.shape[2:]) else (pred_eps, pred_eps)
         
         # estimate of x_start
         x = self.diffusion.predict_xstart_from_eps(xt, t, pred_eps)
-        x_pred = inverse_image_transform(x)
+        x_pred = utils.inverse_image_transform(x)
         x0 = torch.clamp(x_pred, 0.0, 1.0)
     
-        return {
-            "xstart_pred":x0, 
-            "aux":x0, 
-            "eps_pred":pred_eps,
-        }
+        return {"xstart_pred":x0, "aux":x0, "eps_pred":pred_eps}
 
-        pass
-class DiffusionSolver:
-    def __init__(
-        self, 
-        seq, 
-        diffusion:DiffusionScheduler, 
-    ):
-        self.seq = seq
-        self.diffusion = diffusion
-    
-    # DDIM solver   
-    def ddim_solver(self, x0, eps, ii, eta, zeta):
-        t_i = self.seq[ii]
-        t_im1 = self.seq[ii+1]
-        beta_t = self.diffusion.betas[self.seq[ii]]
-        eta_sigma = eta * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] / self.diffusion.sqrt_1m_alphas_cumprod[t_i] * torch.sqrt(beta_t)
-        x = self.diffusion.sqrt_alphas_cumprod[t_im1] * x0 \
-            + np.sqrt(1-zeta) * (torch.sqrt(self.diffusion.sqrt_1m_alphas_cumprod[t_im1]**2 - eta_sigma**2) * eps + eta_sigma * torch.randn_like(x0)) \
-                + np.sqrt(zeta) * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] * torch.randn_like(x0)
-        return x
-    
-    # DDPM solver
-    def ddpm_solver(self, x, eps, ii, ddpm_param = 1):
-        t_i = self.seq[ii]
-        t_im1 = self.seq[ii+1]
-        eta_sigma = self.diffusion.sqrt_1m_alphas_cumprod[t_im1] / self.diffusion.sqrt_1m_alphas_cumprod[t_i] * torch.sqrt(self.diffusion.betas[t_i])
-        alpha_t = 1 - self.diffusion.betas[t_i]
-        x = (1 / alpha_t.sqrt()) * ( x - (ddpm_param*self.diffusion.betas[t_i]).sqrt() * eps ) + (ddpm_param*eta_sigma**2 ).sqrt() * torch.randn_like(x)
-        
-        return x
-        
-# load lara weights                
-def load_trainable_params(model, epoch, args):
-    checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", args.date, f"model_noise_{args.physic.sigma_model}")
-    filename = f"LoRA_model_{args.task}_{(epoch):03d}.pt"
-    filepath = bf.join(checkpoint_dir, filename)
-    
-    trainable_state_dict = torch.load(filepath)
-    model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)               
-    
-    return model
-
-# load yaml file 
-def load_yaml(save_checkpoint_dir, epoch, date, task):
-    dir_ = bf.join(save_checkpoint_dir, date)
-    filename = f"LoRA_model_{task}_{(epoch):03d}.yaml"
-    filepath = bf.join(dir_, filename)
-    with open(filepath, 'r') as f:
-        args = yaml.safe_load(f)
-    
-    return args
-
+       
