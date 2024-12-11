@@ -32,21 +32,19 @@ def args_unfolded():
     }
     pyhsic = {
         "kernel_size": 25,
-        "blur_name":"gaussian",
+        "operator_name":"gaussian",
+        "random_blur": False,
         "sigma_model":0.05,
         "transform_y": True,
-        "random_blur": False,
     }
     inp = {
         "mask_rate":0.5,
-        "mask_type":"random",
+        "operator_name":"random",
         "box_proportion":0.3,
         "index_ii":None,
         "index_jj":None,
     }
     deblur = {
-        "kernel_size": 25,
-        "blur_name":"gaussian",
         "random_blur": False,
     }
     
@@ -78,6 +76,7 @@ def args_unfolded():
     if args.task == "inp":
         args.dpir.use_dpir = False
         args.lambda_ = 1000
+        args.physic.kernel_size = args.im_size
     if args.task == "deblur":
         args.lambda_ = 0.3
     return args

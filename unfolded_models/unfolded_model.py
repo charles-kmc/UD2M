@@ -141,8 +141,7 @@ class Trainer:
                         "dir": dir_w,
                         "pertub":self.args.pertub,
                         "max_unfolded_iter":self.args.max_unfolded_iter,
-                        "random blur":self.args.physic.random_blur,
-                        "blur name": self.args.physic.blur_name if not self.args.physic.random_blur else None
+                        "Operator name": self.args.physic.operator_name
                     },
                     name = f"{formatted_time}_Cons_{self.args.use_consistancy}_{init}_pertub_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}_max_iter_unfold_{self.args.max_unfolded_iter}",
                     
@@ -322,7 +321,7 @@ class Trainer:
     def save_args_yaml(self):
         yaml_dir = bf.join(self.args.path_save, self.args.task, "Config", self.args.date)
         os.makedirs(yaml_dir, exist_ok=True)
-        filename = f"lora_model_{self.args.task}.yaml"
+        filename = f"lora_model_{self.args.task}_{self.args.physic.operator_name}.yaml"
         filepath = bf.join(yaml_dir, filename)
         with open(filepath, 'w') as f:
             yaml.dump(self.args, f)        
@@ -401,7 +400,6 @@ class Trainer:
     # - save the checkpoint model   
     def save(self, epoch):
         checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.physic.sigma_model}")
-           
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
         except:
@@ -409,7 +407,7 @@ class Trainer:
             
         if self.accelerator.is_main_process:
             self.logger.info(f"Saving checkpoint {epoch}...")
-            filename = f"{self.args.task}_model_{(epoch):03d}.pt"
+            filename = f"{self.args.task}_{self.args.physic.operator_name}_model_{(epoch):03d}.pt"
             
             filepath = bf.join(checkpoint_dir, filename)
             with bf.BlobFile(filepath, "wb") as f:
@@ -436,7 +434,7 @@ class Trainer:
         
         if self.accelerator.is_main_process:
             self.logger.info(f"Saving checkpoint {epoch}...")
-            filename = f"LoRA_model_{self.args.task}_{(epoch):03d}.pt"
+            filename = f"LoRA_model_{self.args.task}_{self.args.physic.operator_name}_{(epoch):03d}.pt"
             
             filepath = bf.join(checkpoint_dir, filename)
             with bf.BlobFile(filepath, "wb") as f:
@@ -451,7 +449,7 @@ class Trainer:
     
     def load_trainable_params(self, epoch):
         checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.physic.sigma_model}")
-        filename = f"LoRA_model_{self.args.task}_{(epoch):03d}.pt"
+        filename = f"LoRA_model_{self.args.task}_{self.args.physic.operator_name}_{(epoch):03d}.pt"
         filepath = bf.join(checkpoint_dir, filename)
         trainable_state_dict = torch.load(filepath)
         self.copy_model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)

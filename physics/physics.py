@@ -12,8 +12,7 @@ class Deblurring:
     def __init__(
         self, 
         kernel_size:int, 
-        blur_name:str, 
-        random_blur: bool = False,
+        operator_name:str, 
         device:str = "cpu",
         sigma_model:float= 0.05, 
         dtype = torch.float32, 
@@ -27,8 +26,7 @@ class Deblurring:
         self.sigma_model = 2 * sigma_model if self.transform_y else sigma_model
         self.dtype = dtype
         self.kernel_size = kernel_size
-        self.blur_name = blur_name
-        self.random_blur = random_blur
+        self.operator_name = operator_name
         self.mode = mode
         self.uniform_kernel_generator = UniformMotionBlurGenerator(kernel_size=(kernel_size,kernel_size))
         
@@ -47,16 +45,16 @@ class Deblurring:
             ])
         
     def _get_kernel(self):
-        if self.blur_name == "gaussian":
+        if self.operator_name == "gaussian":
             blur_kernel = self._gaussian_kernel(self.kernel_size).to(self.device)
-        elif self.blur_name  == "uniform":
+        elif self.operator_name  == "uniform":
             blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
-        elif self.blur_name  == "motion":
+        elif self.operator_name  == "motion":
             blur_kernel = self._motion_kernel(self.kernel_size).to(self.device)
-        elif self.blur_name == "uniform_motion":
+        elif self.operator_name == "uniform_motion":
             blur_kernel = self._uniform_motion_kernel().to(self.device)
         else:
-            raise ValueError(f"Blur type {self.blur_name } not implemented !!")
+            raise ValueError(f"Blur type {self.operator_name } not implemented !!")
         return blur_kernel
 
     def _uniform_motion_kernel(self):
@@ -178,7 +176,7 @@ class Inpainting:
         self, 
         mask_rate: float,
         im_size:int,
-        mask_type:str = "random",
+        operator_name:str = "random",
         device:str = "cpu",
         sigma_model:float= 0.05, 
         box_proportion = None, 
@@ -196,7 +194,7 @@ class Inpainting:
         self.dtype = dtype
         self.mask_rate = mask_rate
         self.mode = mode
-        self.mask_type = mask_type
+        self.operator_name = operator_name
         self.box_pro = box_proportion if box_proportion is not None else 0.3
         self.box_size = int(box_proportion * im_size)
         self.Mask = self.get_mask(index_ii=index_ii, index_jj=index_jj)
@@ -204,17 +202,17 @@ class Inpainting:
     def get_mask(self, index_ii=None, index_jj=None):
         mask = torch.ones((self.im_size,self.im_size), device=self.device)
         mask = mask.squeeze()
-        if self.mask_type == "random":
+        if self.operator_name == "random":
             aux = torch.rand_like(mask)
             mask[aux > self.mask_rate] = 0
-        elif self.mask_type == "box" and self.box_size is not None:
+        elif self.operator_name == "box" and self.box_size is not None:
             box = torch.zeros(self.box_size, self.box_size).to(self.device)
             if index_ii is None or index_jj is None:
                 index_ii = torch.randint(0, mask.shape[-2] - self.box_size , (1,)).item()
                 index_jj = torch.randint(0, mask.shape[-1] - self.box_size , (1,)).item()
             mask[..., index_ii:self.box_size+index_ii, index_jj:self.box_size+index_jj] = box
         else:
-            raise ValueError("mask_type not supported")
+            raise ValueError("operator_name not supported")
         return mask.reshape(self.im_size, self.im_size)
         
     # ---- Precision matrix op ----

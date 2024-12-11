@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import datetime
-import argparse
 import scipy.io as sio
 import torch
 from torch.utils.data import DataLoader
@@ -18,7 +17,6 @@ import utils as utils
 import unfolded_models as ums
 import physics as phy
 import runners as runners
-import configs as params_configs
 from configs.args_parse import configs
 
 from metrics.coverage.coverage_function import coverage_eval
@@ -173,7 +171,6 @@ def main(
                     physic = phy.Deblurring(
                         kernel_size=args.physic.deblur.kernel_size,
                         blur_name=args.physic.deblur.blur_name,
-                        random_blur=args.physic.deblur.random_blur,
                         device=device,
                         sigma_model=args.physic.sigma_model,
                         transform_y=args.physic.transform_y,
@@ -192,6 +189,8 @@ def main(
                         transform_y=args.physic.transform_y,
                         mode=args.mode,
                     )
+                else:
+                    raise NotImplementedError
                     
                 # HQS module
                 denoising_timestep = ums.GetDenoisingTimestep(device)
