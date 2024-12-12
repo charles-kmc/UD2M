@@ -8,10 +8,6 @@ from .blur_functions import UniformMotionBlurGenerator
 from utils.utils import inverse_image_transform
 from deepinv.physics.generator import MotionBlurGenerator
 
-generator = MotionBlurGenerator((25,25), num_channels=1)
-blur = generator.step(sigma=0.4, l=1.)  # dict_keys(['filter'])
-print(blur['filter'].shape)
-
 # physic module        
 class Deblurring:
     def __init__(
@@ -55,7 +51,7 @@ class Deblurring:
         elif self.operator_name  == "uniform":
             blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
         elif self.operator_name  == "motion":
-            blur_kernel = self._motion_kernel(self.kernel_size).to(self.device)
+            blur_kernel = self._motion_kernel().to(self.device)
         elif self.operator_name == "uniform_motion":
             blur_kernel = self._uniform_motion_kernel().to(self.device)
         else:

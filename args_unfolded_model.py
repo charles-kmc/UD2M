@@ -49,7 +49,7 @@ def args_unfolded():
     dpir = {
         "pretrained_pth": "/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo",
         "model_name": "drunet_color", #"ircnn_color, drunet_color",
-        "use_dpir":True,
+        "use_dpir":False,
     }
     evaluation = {
         "save_images":True,

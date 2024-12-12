@@ -4,6 +4,7 @@ def configs(mode="train"):
     parser = argparse.ArgumentParser(description=globals()["__doc__"])
     parser.add_argument("--task", type=str, required=True, help="Task we are solving")
     parser.add_argument("--operator_name", type=str, required=True, help="Type of operator used!!")
+    parser.add_argument("--lambda_", type=float, default=0.3, help="parameter controlling data consistency step!!")
     if mode == "inference":
         parser.add_argument("--ckpt_epoch", type=int, required=True, help="Epoch where the model is resumed")
         parser.add_argument("--ckpt_date", type=str, required=True, help="Date when the checkpoint was save")
@@ -11,9 +12,6 @@ def configs(mode="train"):
     
     if config.task == "inp":
         config.use_dpir = False
-        config.lambda_ = 1000
-    if config.task == "deblur":
-        config.lambda_ = 0.3
     return config
 
 
