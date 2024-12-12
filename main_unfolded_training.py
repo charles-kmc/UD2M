@@ -16,8 +16,12 @@ import utils as utils
 def main():
     # args
     args = args_unfolded()
-    args.task = configs().task
-    
+    config = configs()
+    args.task = config.task
+    args.physic.operator_name = config.operator_name
+    if config.task == "inp":
+        args.dpir.use_dpir = config.use_dpir
+    args.lambda_ = config.lambda_
     # logger 
     date = datetime.datetime.now().strftime("%d-%m-%Y")
     script_dir = os.path.dirname(__file__)
@@ -81,9 +85,8 @@ def main():
     # physic
     if args.task == "deblur":
         physic = phy.Deblurring(
-            kernel_size=args.physic.deblur.kernel_size,
-            blur_name=args.physic.deblur.blur_name,
-            random_blur=args.physic.deblur.random_blur,
+            kernel_size=args.physic.kernel_size,
+            operator_name=args.physic.operator_name,
             device=device,
             sigma_model=args.physic.sigma_model,
             transform_y=args.physic.transform_y,

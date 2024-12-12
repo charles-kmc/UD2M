@@ -6,6 +6,11 @@ import torch
 import torchvision.transforms as transforms
 from .blur_functions import UniformMotionBlurGenerator
 from utils.utils import inverse_image_transform
+from deepinv.physics.generator import MotionBlurGenerator
+
+generator = MotionBlurGenerator((25,25), num_channels=1)
+blur = generator.step(sigma=0.4, l=1.)  # dict_keys(['filter'])
+print(blur['filter'].shape)
 
 # physic module        
 class Deblurring:
@@ -28,7 +33,7 @@ class Deblurring:
         self.kernel_size = kernel_size
         self.operator_name = operator_name
         self.mode = mode
-        self.uniform_kernel_generator = UniformMotionBlurGenerator(kernel_size=(kernel_size,kernel_size))
+        self.uniform_kernel_generator = MotionBlurGenerator((kernel_size,kernel_size), num_channels=1)#UniformMotionBlurGenerator(kernel_size=(kernel_size,kernel_size))
         
         # motion kernel
         if mode == "train":
@@ -58,7 +63,8 @@ class Deblurring:
         return blur_kernel
 
     def _uniform_motion_kernel(self):
-        return self.uniform_kernel_generator.step(1)["filter"]
+        return self.uniform_kernel_generator.step(sigma=0.8, l=0.5)
+        # return self.uniform_kernel_generator.step(1)["filter"].squeeze()
 
     def _motion_kernel(self):
         if self.mode == "train":
@@ -104,7 +110,7 @@ class Deblurring:
     # forward operator
     def Ax(self, x):
         im_size = x.shape[-1]
-        FFT_h, h = self.blur2A(im_size)
+        FFT_h, _ = self.blur2A(im_size)
         FFT_x = torch.fft.fft2(x, dim = (-2,-1))
         ax = torch.real(
             torch.fft.ifft2(FFT_h * FFT_x, dim = (-2,-1))

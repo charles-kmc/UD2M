@@ -71,9 +71,13 @@ def main(
         args.mode = "inference"
         config = configs(args.mode)
         args.task = config.task
+        args.physic.operator_name = config.operator_name
         if args.mode == "inference":
             ckpt_epoch = config.ckpt_epoch
             ckpt_date = config.ckpt_date
+        if config.task == "inp":
+            args.dpir.use_dpir = config.use_dpir
+        args.lambda_ = config.lambda_
         args.lora = LORA
         args.evaluation.coverage = False
         args.ddpm_param = ddpm_param

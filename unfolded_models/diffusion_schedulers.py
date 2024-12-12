@@ -139,7 +139,7 @@ class GetDenoisingTimestep:
             sigma_y = sigma_y.to(self.device)
         if task == "inp":
             sp = 8
-        elif sp == "deblur":
+        elif task == "deblur":
             sp = 1
         else:
             sp = 1

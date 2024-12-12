@@ -2,8 +2,6 @@
 from utils.utils import DotDict
 def args_unfolded():
     main_args = {
-        "lambda_":0.1,
-        "task":"inp", # inp, deblur
         "noise_schedule_type":"linear",
         "ddpm_param":1,
         "resume_epoch": 0,
@@ -32,14 +30,14 @@ def args_unfolded():
     }
     pyhsic = {
         "kernel_size": 25,
-        "operator_name":"gaussian",
+        # "operator_name":"gaussian",
         "random_blur": False,
         "sigma_model":0.05,
         "transform_y": True,
     }
     inp = {
         "mask_rate":0.5,
-        "operator_name":"random",
+        # "operator_name":"random",
         "box_proportion":0.3,
         "index_ii":None,
         "index_jj":None,
@@ -73,10 +71,5 @@ def args_unfolded():
     args.dpir = DotDict(dpir)
     args.evaluation = DotDict(evaluation)
     args.model = DotDict(model)
-    if args.task == "inp":
-        args.dpir.use_dpir = False
-        args.lambda_ = 1000
-        args.physic.kernel_size = args.im_size
-    if args.task == "deblur":
-        args.lambda_ = 0.3
+    
     return args
