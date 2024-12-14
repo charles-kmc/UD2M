@@ -4,30 +4,22 @@ from PIL import Image
 
 import torch
 import torchvision.transforms as transforms
-from .blur_functions import UniformMotionBlurGenerator
+from .blur_functions import gaussian_kernel, uniform_kernel, uniform_motion_kernel
 from utils.utils import inverse_image_transform
 from deepinv.physics.generator import MotionBlurGenerator
 
-# physic module        
-class Deblurring:
+# physic module  
+class Kernels:
     def __init__(
-        self, 
-        kernel_size:int, 
-        operator_name:str, 
-        device:str = "cpu",
-        sigma_model:float= 0.05, 
-        dtype = torch.float32, 
-        transform_y:bool = False,
+        self,
+        operator_name,
+        kernel_size,
+        device,
         path_motion_kernel:str = "/users/cmk2000/sharedscratch/Datasets/blur-kernels/kernels",
-        mode = "test",
-    ) -> None:
-        # parameters
-        self.transform_y = transform_y
-        self.device = device
-        self.sigma_model = 2 * sigma_model if self.transform_y else sigma_model
-        self.dtype = dtype
-        self.kernel_size = kernel_size
+        mode = "test"):
         self.operator_name = operator_name
+        self.kernel_size = kernel_size
+        self.device = device
         self.mode = mode
         self.uniform_kernel_generator = MotionBlurGenerator((kernel_size,kernel_size), num_channels=1)#UniformMotionBlurGenerator(kernel_size=(kernel_size,kernel_size))
         
@@ -38,31 +30,30 @@ class Deblurring:
         else:
             self.path_motion_kernel_val = os.path.join(path_motion_kernel, "validation_set")
             self.list_motion_kernel = os.listdir(self.path_motion_kernel_val)
-        
-        # defined transforms 
-        self.transforms_kernel = transforms.Compose([
-                transforms.Resize((self.kernel_size, self.kernel_size)),
-                transforms.ToTensor()
-            ])
-        
-    def _get_kernel(self):
+ 
+    def get_blur(self):
         if self.operator_name == "gaussian":
-            blur_kernel = self._gaussian_kernel(self.kernel_size).to(self.device)
+            blur_kernel = gaussian_kernel(self.kernel_size).to(self.device)
         elif self.operator_name  == "uniform":
-            blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
+            blur_kernel = uniform_kernel(self.kernel_size).to(self.device)
         elif self.operator_name  == "motion":
             blur_kernel = self._motion_kernel().to(self.device)
         elif self.operator_name == "uniform_motion":
-            blur_kernel = self._uniform_motion_kernel().to(self.device)
+            blur_kernel = uniform_motion_kernel(self.kernel_size).to(self.device)
         else:
             raise ValueError(f"Blur type {self.operator_name } not implemented !!")
         return blur_kernel
 
     def _uniform_motion_kernel(self):
-        return self.uniform_kernel_generator.step(sigma=0.8, l=0.5)
+        return self.uniform_kernel_generator.step(sigma=0.5, l=0.5)["filter"].squeeze()
         # return self.uniform_kernel_generator.step(1)["filter"].squeeze()
 
     def _motion_kernel(self):
+        # defined transforms 
+        transforms_kernel = transforms.Compose([
+                transforms.Resize((self.kernel_size, self.kernel_size)),
+                transforms.ToTensor()
+            ])
         if self.mode == "train":
             kernel_name = random.choice(self.list_motion_kernel) 
             kernel = Image.open(os.path.join(self.path_motion_kernel_train, kernel_name)) 
@@ -70,9 +61,9 @@ class Deblurring:
             kernel_name = self.list_motion_kernel[7]  
             kernel = Image.open(os.path.join(self.path_motion_kernel_val, kernel_name))
             
-        kernel_ = self.transforms_kernel(kernel)[0,...].squeeze()
-        kernel_ /= kernel_.sum()
-        return kernel_
+        kernel_torch = transforms_kernel(kernel)[0,...].squeeze()
+        kernel_torch /= kernel_torch.sum()
+        return kernel_torch
     
     def _gaussian_kernel(self, kernel_size, std = 3.0):
         c = int((kernel_size - 1)/2)
@@ -85,13 +76,23 @@ class Deblurring:
     def _uniform_kernel(self, kernel_size):
         exp = torch.ones(kernel_size, kernel_size).to(self.dtype)
         exp /= torch.sum(exp)
-        return exp
-    
+        return exp  
+        
+class Deblurring:
+    def __init__(
+        self, 
+        sigma_model:float= 0.05, 
+        device:str = "cpu",
+        dtype = torch.float32, 
+        transform_y:bool = False,
+    ) -> None:
+        # parameters
+        self.transform_y = transform_y
+        self.device = device
+        self.sigma_model = 2 * sigma_model if self.transform_y else sigma_model
+        self.dtype = dtype
+
     def blur2A(self, im_size):
-        if not hasattr(self, "blur"):
-            self.blur = self._get_kernel()
-        else:
-            pass
         if len(self.blur.shape) > 2:
             raise ValueError("The kernel dimension is not correct")
         device = self.blur.device
@@ -133,7 +134,7 @@ class Deblurring:
         sigma_t:float,
         lambda_:float
     ) -> torch.Tensor:
-        out =  FFT_h**2 / (lambda_*sigma_model**2) + 1 / sigma_t**2 + 1 / rho**2 
+        out =  FFT_h**2 / (lambda_*sigma_model**2) + 1 / (sigma_t**2) + 1 / rho**2 
         return 1 / out
     
     # mean estimate
@@ -157,19 +158,18 @@ class Deblurring:
         FFT_h,_ = self.blur2A(im_size)
         FFTx = torch.fft.fft2(z, dim=(-2,-1))
         FFTx_t = torch.fft.fft2(x_t, dim=(-2,-1))
-        rho = rho * 1
         temp = FFTAty / (lambda_*sigma_model**2) + FFTx / rho**2 + FFTx_t  / (sigma_t**2 * sqrt_alpha_comprod)
         prec_temp = self._precision(FFT_h, sigma_model, rho, sigma_t, lambda_)
         mean_vector = torch.real(torch.fft.ifft2(temp * prec_temp, dim = (-2,-1)))
         return mean_vector
     
     # observation y
-    def y(self, x:torch.Tensor)->torch.Tensor:
+    def y(self, x:torch.Tensor, blur:torch.Tensor)->torch.Tensor:
+        self.blur = blur
         if not self.transform_y:
             x0 = inverse_image_transform(x)
         else:
             x0 = x
-        self.blur = self._get_kernel()
         out = self.Ax(x0) + self.sigma_model * torch.randn_like(x0)
         return out
 

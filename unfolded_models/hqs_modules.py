@@ -71,7 +71,7 @@ class HQS_models:
                 noise = torch.randn_like(z_)
                 val = 1 * torch.ones_like(t_denoising).long()
                 max_val = 1000 * torch.ones_like(t_denoising).long()
-                tu = torch.clamp(t_denoising, val, max_val)
+                tu = torch.clamp(t_denoising-3, val, max_val)
                 z = self.diffusion_scheduler.sample_xt(z_, tu, noise=noise)
             else:
                 z = z_.clone()

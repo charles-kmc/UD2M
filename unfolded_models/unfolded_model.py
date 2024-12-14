@@ -59,6 +59,7 @@ class Trainer:
         model,
         diffusion_scheduler:DiffusionScheduler,
         physic:Union[phy.Deblurring, phy.Inpainting],
+        kernels:phy.Kernels,
         hqs_module:HQS_models,
         trainloader,
         testloader,
@@ -72,6 +73,7 @@ class Trainer:
         self.logger = logger
         self.diffusion_scheduler = diffusion_scheduler
         self.physic = physic
+        self.kernels = kernels
         self.max_unfolded_iter = max_unfolded_iter
         self.model = model.to(device)
         self.trainloader = trainloader
@@ -129,7 +131,7 @@ class Trainer:
             dir_w = "/users/cmk2000/sharedscratch/Results/wandb"
             wandb.init(
                     # set the wandb project where this run will be logged
-                    project=f"Training Unfolded Conditional Diffusion Models {self.args.task}",
+                    project=f"Training Unfolded Conditional Diffusion Models {self.args.task} {self.args.physic.operator_name}",
                     dir = dir_w,
                     config={
                         "consistency":self.args.use_consistancy,
@@ -143,7 +145,7 @@ class Trainer:
                         "max_unfolded_iter":self.args.max_unfolded_iter,
                         "Operator name": self.args.physic.operator_name
                     },
-                    name = f"{formatted_time}_Cons_{self.args.use_consistancy}_{init}_pertub_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}_max_iter_unfold_{self.args.max_unfolded_iter}",
+                    name = f"{formatted_time}_Cons_{self.args.use_consistancy}_{init}_pertub_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}_max_iter_unfold_{self.args.max_unfolded_iter}_lambda_{self.args.lambda_}",
                     
                 )
             
@@ -175,23 +177,19 @@ class Trainer:
                     x_t = self.diffusion_scheduler.sample_xt(batch_0, t, noise=noise_target)
                     
                     # observation y 
-                    y = self.physic.y(batch_0)
-                    
-                    # unfolding: xstrat_pred, eps_pred, auxiliary variable
-                    sigmas_t = extract_tensor(self.diffusion_scheduler.sigmas, t, y.shape)
-                   
-                    # initialisation unfolded model
-                    if self.args.init_xt_y:
-                        x_init = (
-                            sigmas_t**2 / (sigmas_t**2 + self.physic.sigma_model**2) * x_t + 
-                            self.physic.sigma_model**2 / (sigmas_t**2 + self.physic.sigma_model**2) * y
-                        )
+                    if self.args.task == "deblur":
+                        blur = self.kernels.get_blur()
+                        y = self.physic.y(batch_0, blur)
                     else:
-                        x_init = y.clone()
-                    if self.args.dpir.use_dpir:
+                        y = self.physic.y(batch_0)
+                                       
+                    # initialisation unfolded model
+                    if self.args.dpir.use_dpir and self.args.task == "deblur":
                         y_ = utils.inverse_image_transform(y)
                         x_init = self.dpir_model.run(y_, self.physic.blur, iter_num = 1) #y.clone()
                         x_init = utils.image_transform(x_init)
+                    else:
+                        x_init = y.clone()
                     
                     # unfolded model
                     out = self.hqs_module.run_unfolded_loop( y, x_init, x_t, t, max_iter = self.max_unfolded_iter, lambda_ = self.args.lambda_)

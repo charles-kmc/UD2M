@@ -67,9 +67,10 @@ def main():
     
     # LoRA model 
     model = copy.deepcopy(frozen_model)
+    target_modules = ["qkv", "proj_out"]
     utils.LoRa_model(
         model, 
-        target_layer = ["qkv", "proj_out"], 
+        target_layer =target_modules, 
         device=device, 
         rank = args.rank
     )
@@ -84,14 +85,18 @@ def main():
     
     # physic
     if args.task == "deblur":
-        physic = phy.Deblurring(
-            kernel_size=args.physic.kernel_size,
+        kernels = phy.Kernels(
             operator_name=args.physic.operator_name,
+            kernel_size=args.physic.kernel_size,
             device=device,
-            sigma_model=args.physic.sigma_model,
-            transform_y=args.physic.transform_y,
-            mode=args.mode,
+            mode = args.mode
         )
+        physic = phy.Deblurring(
+            sigma_model=args.physic.sigma_model,
+            device=device,
+            transform_y=args.physic.transform_y,
+        )
+        physics = utils.DotDict({"kernels": kernels, "physic": physic})
     elif args.task == "inp":
         physic = phy.Inpainting(
             mask_rate=args.physic.inp.mask_rate,
@@ -105,6 +110,7 @@ def main():
             transform_y=args.physic.transform_y,
             mode=args.mode,
         )
+        physics = utils.DotDict({"kernels": None, "physic": physic})
         
     # HQS module
     denoising_timestep = um.GetDenoisingTimestep(device)
@@ -123,7 +129,8 @@ def main():
     trainer = um.Trainer(
         model,
         diffusion_scheduler=diffusion_scheduler,
-        physic=physic,
+        physic=physics.physic,
+        kernels=kernels,
         hqs_module = hqs_module,
         trainloader=trainloader,
         testloader=testloader,

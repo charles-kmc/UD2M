@@ -3,9 +3,14 @@ import numpy as np
 from deepinv.physics.generator import MotionBlurGenerator
 from .motionblur import Kernel
 
-def motion_kernel(kernel_size:int, sigma:float = 0.3, l:float = 0.5)->torch.Tensor:
+def uniform_motion_kernel_me(kernel_size:int, sigma:float = 0.3, l:float = 0.5)->torch.Tensor:
     generator = MotionBlurGenerator((kernel_size,kernel_size), num_channels=1) 
     kernel = generator.step(sigma, l)
+    return kernel["filter"].squeeze()
+
+def uniform_motion_kernel(kernel_size:int, batch_size:int = 1)->torch.Tensor:
+    generator = UniformMotionBlurGenerator((kernel_size,kernel_size)) 
+    kernel = generator.step(batch_size)
     return kernel["filter"].squeeze()
     
 def gaussian_kernel(kernel_size:int, dtype:torch.dtype, std:int = 3.0):

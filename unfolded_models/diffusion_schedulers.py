@@ -145,14 +145,14 @@ class GetDenoisingTimestep:
             sp = 1
         rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2)) * sp
         tz = torch.clamp(
-            self.t_y(rho[0,0,0,0]).cpu() - torch.tensor(T_AUG),
+            self.t_y(rho[0,0,0,0]).cpu() + torch.tensor(T_AUG),
             1,
             self.scheduler.num_timesteps
         )
         tz = (tz * torch.ones((x_shape[0],))).long().to(self.device)
-        rho_ = extract_tensor(self.scheduler.sigmas, tz, x_shape)
+        rho_param = extract_tensor(self.scheduler.sigmas, tz, x_shape)
         ty = self.t_y(sigma_y)
-        return rho_, tz, ty
+        return rho_param, tz, ty
     
     # getting the corresponding timestep from the diffusion process   
     def t_y(self, sigma_y):
