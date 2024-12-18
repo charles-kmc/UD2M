@@ -45,6 +45,10 @@ class Kernels:
         return blur_kernel
 
     def _uniform_motion_kernel(self):
+        if self.mode == "inference":
+            torch.random.manual_seed(1675)
+        else:
+            pass
         return self.uniform_kernel_generator.step(sigma=0.5, l=0.5)["filter"].squeeze()
         # return self.uniform_kernel_generator.step(1)["filter"].squeeze()
 
@@ -226,9 +230,10 @@ class Inpainting:
         lambda_:float
     )->torch.Tensor:
         # cf. Sherman-Morrison-Woodbury formula
-        para_temp2 = (rho**2 * sigma_t**2 ) / (sigma_t**2  + rho**2)
-        prec_temp2 = para_temp2 * (torch.ones_like(self.Mask) - para_temp2 * self.Mask / (lambda_*sigma_model**2 + para_temp2))
-        prec_temp28 = 1 / (self.Mask / (lambda_*sigma_model**2) +  1 / rho**2 +  1 / sigma_t**2)
+        para_temp1 = (rho**2 * sigma_t**2 ) / (sigma_t**2  + rho**2)
+        para_temp2 = lambda_*sigma_model**2 if sigma_model!=0 else 1
+        prec_temp2 = para_temp1 * (torch.ones_like(self.Mask) - para_temp1 * self.Mask / (para_temp2 + para_temp1))
+        # prec_temp2 = 1 / (self.Mask / para_temp2 +  1 / rho**2 +  1 / sigma_t**2)
         return  prec_temp2
 
     # ---- mean vector op ----
@@ -245,11 +250,12 @@ class Inpainting:
         assert x_t.shape == z.shape == y.shape, "x_t, y and z should have the same shape"
         # ---- Precision  operator ----
         inv_precision_matrix = lambda x: self.precision(sigma_model, sigma_t, rho, lambda_) * x
-
+        para_temp = lambda_*sigma_model**2 if sigma_model!=0 else 1
+        
         # ---- Solving the linear system Ax = b ----
-        temp = self.Mask * y / (lambda_*sigma_model**2) +  z / rho**2 +  x_t / (sigma_t**2 * sqrt_alpha_comprod) 
+        temp = self.Mask * y / para_temp +  z / rho**2 +  x_t / (sigma_t**2 * sqrt_alpha_comprod) 
         mean_vector = inv_precision_matrix(temp)
-        mean_vector[:,:,self.Mask.to(torch.bool)] = y[:,:,self.Mask.to(torch.bool)]
+        # mean_vector[:,:,self.Mask.to(torch.bool)] = y[:,:,self.Mask.to(torch.bool)]#+0.4*mean_vector[:,:,self.Mask.to(torch.bool)] 
         return mean_vector      
 
     # ---- Inpainting operator ----

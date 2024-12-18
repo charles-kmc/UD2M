@@ -14,7 +14,6 @@ import blobfile as bf
 from utils.utils import Metrics, inverse_image_transform, image_transform, delete
 from DPIR.dpir_models import DPIR_deb
 from args_unfolded_model import args_unfolded
-from models.load_frozen_model import load_frozen_model
 from utils_lora.lora_parametrisation import LoRa_model
 from datasets.datasets import Datasets
 from .unfolded_model import (

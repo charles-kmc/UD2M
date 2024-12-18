@@ -88,7 +88,11 @@ class Conditional_sampler:
                     x0 = utils.image_transform(out_val["xstart_pred"])
                 else:
                     # unfolding: xstrat_pred, eps_pred, auxiliary variable
-                    out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter, lambda_= lambda_)
+                    max_unfolded_iter = self.max_unfolded_iter
+                    if self.args.physic.operator_name=="uniform_motion" and ii >= len(seq)-2:
+                        lambda_ = 0.5
+                        max_unfolded_iter=1
+                    out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = max_unfolded_iter, lambda_= lambda_)
                     x0 = utils.image_transform(out_val["xstart_pred"])
                 
                 if x_true is not None:

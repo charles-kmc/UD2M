@@ -1,2 +1,2 @@
-from .load_model import load_frozen_model,create_FineTuning_model
+from .load_model import load_frozen_model,load_trainable_params
 from .utils_model import create_gaussian_diffusion, create_model_and_diffusion, create_LoRa_model

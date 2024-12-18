@@ -3,45 +3,48 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
-
 from metrics.fid_batch.fid_evaluation import Fid_evatuation
 
-# ZETA = [0.0, 0.01, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 1.0]
-ZETA = [0.2]
-TIMESTEPS = [20, 50, 100, 150, 200, 250, 350, 500, 600, 700]
-def main(eta, T_AUG):
-    date = "29-10-2024"
-    epoch = 600
-    max_iter =1
-    # timesteps = 100
-    task = "debur"
-    max_unfolded_iter = 3
-    
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+ZETA = [0.6]
+TIMESTEPS = [100, 500, 1000]
+def main(T_AUG):
     dic_results = {}
     vec_psnr_mmse = []
     vec_ssim_mmse = []
     vec_lpips_mmse = []
-    for zeta in ZETA:
-        for timesteps in TIMESTEPS:
-            root_dir_csv = f"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/{task}/Results/{date}/ddpm/Max_iter_{max_iter}/unroll_iter_{max_unfolded_iter}/timesteps_{timesteps}/Epoch_{epoch}/T_AUG_{T_AUG}/ddpm_param_3/metrics_results" #zeta_{zeta}/eta_{eta}
-            save_metric_path = os.path.join(f"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/{task}/Results/{date}/ddpm/Max_iter_{max_iter}/unroll_iter_{max_unfolded_iter}", "metrics_results_calib_timesteps")
-            data = pd.read_csv(os.path.join(root_dir_csv, "swd_results.csv"))
-            mean_psnr = data["psnr mean"].mean()
-            mean_lpips = data["lpips mean"].mean()
-            mean_ssim = data["ssim mean"].mean()
-            dic_results[f"psnr mmse_timesteps{timesteps}"] = [mean_psnr]
-            dic_results[f"lpips mmse_timesteps{timesteps}"] = [mean_lpips]
-            dic_results[f"ssim mmse_timesteps{timesteps}"] = [mean_ssim]
-            vec_lpips_mmse.append(mean_lpips)
-            vec_psnr_mmse.append(mean_psnr)
-            vec_ssim_mmse.append(mean_ssim)
+    for timesteps in TIMESTEPS:
+        dic_results[f"T"] = [timesteps]
+        root_dir = f"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/inp/Results_sampling_decreasing_lambda_free_noise_model/18-12-2024/ddim/lora/Max_iter_1/unroll_iter_3/timesteps_{timesteps}/Epoch_300/T_AUG_0/zeta_0.6/eta_0.0/stochastic_0.05/lambda_0.003"
+        save_metric_path = f"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp/inp/Results_sampling_decreasing_lambda_free_noise_model/18-12-2024/ddim/lora/Max_iter_1/unroll_iter_3"
+        
+        # FID
+        out = Fid_evatuation(root_dir, device, mmse_sample=True, last_sample=True)
+        dic_results[f"fid mmse"] = [out["fid_mmse"]]
+        dic_results[f"fid last"] = [out["fid_last"]]
+        
+        data = pd.read_csv(os.path.join(root_dir, "metrics_results","metrics_results.csv"))
+        mean_psnr = data["psnr"].mean()
+        mean_lpips = data["lpips"].mean()
+        mean_ssim = data["ssim"].mean()
+        mean_psnr_l = data["psnr last"].mean()
+        mean_lpips_l = data["lpips last"].mean()
+        mean_ssim_l = data["ssim last"].mean()
+        dic_results[f"psnr mmse"] = [mean_psnr]
+        dic_results[f"lpips mmse"] = [mean_lpips]
+        dic_results[f"ssim mmse"] = [mean_ssim]
+        dic_results[f"psnr sample"] = [mean_psnr_l]
+        dic_results[f"lpips sample"] = [mean_lpips_l]
+        dic_results[f"ssim sample"] = [mean_ssim_l]
+        vec_lpips_mmse.append(mean_lpips)
+        vec_psnr_mmse.append(mean_psnr)
+        vec_ssim_mmse.append(mean_ssim)
     
-    # save data in a csv file 
-    os.makedirs(save_metric_path, exist_ok=True)
-    fid_pd = pd.DataFrame(dic_results)
-    save_dir_ssim_psnr_lpips = os.path.join(save_metric_path, f'metrics_psnr_ssim_lpips_results_T_AUG_{T_AUG}.csv') #_eta_{eta}_zeta{zeta}
-    fid_pd.to_csv(save_dir_ssim_psnr_lpips, mode='a', header=not os.path.exists(save_dir_ssim_psnr_lpips))
+        # save data in a csv file 
+        os.makedirs(save_metric_path, exist_ok=True)
+        fid_pd = pd.DataFrame(dic_results)
+        save_dir_ssim_psnr_lpips = os.path.join(save_metric_path, f'metrics_psnr_ssim_lpips_results.csv') #_eta_{eta}_zeta{zeta}
+        fid_pd.to_csv(save_dir_ssim_psnr_lpips, mode='a', header=not os.path.exists(save_dir_ssim_psnr_lpips))
     
     # plot the results
     plot = plt.figure()
@@ -74,6 +77,5 @@ def main(eta, T_AUG):
     plt.close("all")
     
 if __name__ == "__main__":
-    eta = 0.0
-    T_AUG = 4
-    main(eta, T_AUG)
+    T_AUG = 5
+    main(T_AUG)

@@ -3,6 +3,7 @@ import copy
 import time
 import numpy as np
 import pandas as pd
+import blobfile as bf
 import matplotlib.pyplot as plt
 import datetime
 import scipy.io as sio
@@ -23,6 +24,7 @@ from metrics.coverage.coverage_function import coverage_eval
 from metrics.metrics import Metrics
 from metrics.fid_batch.fid_evaluation import Fid_evatuation
 
+
 def linear_indices(num_iter, lambda_min=0.3,lambda_max=0.6):
     seq = np.sqrt(np.linspace(0, num_iter**2, num_iter))
     seq = [int(s) for s in list(seq)]
@@ -42,7 +44,7 @@ max_iter = 1
 ddpm_param = 1
 ckpt_epoch = 840
 run_name = "_sampling_decreasing_lambda_free_noise_model"
-LAMBDA, INDICES = linear_indices(max_iter)
+# LAMBDA, INDICES = linear_indices(max_iter)
 stochastic_model = False
 stochastic_rate = 0.05
 SOLVER_TYPES =  ["ddim"]
@@ -50,7 +52,7 @@ LORA = True
 MAX_UNFOLDED_ITER = [3]
 NUM_TIMESTEPS = [100, 500, 1000]
 eta = 0.0 
-T_AUG = 5
+T_AUG = 0
 ZETA = [0.6] #op 0.4 or 0.6
 date_eval = datetime.datetime.now().strftime("%d-%m-%Y")
 
@@ -59,20 +61,19 @@ def main(
     solver_type:str, 
     ddpm_param:float = 1.,
     date_eval:str = date_eval, 
-    ckpt_epoch:int = 720, 
     max_iter:int = 1, 
-    eta:float=0.0,
-    ckpt_date:str = "17-11-2024",
-    lambda_:float = 1
+    eta:float=0.0
 ):
     with torch.no_grad():
         # args
+        mode = "inference"
         args = args_unfolded()
-        args.mode = "inference"
+        args.mode = mode
         config = configs(args.mode)
         args.task = config.task
         args.physic.operator_name = config.operator_name
-        if args.mode == "inference":
+        args.physic.sigma_model = config.sigma_model
+        if args.mode == mode:
             ckpt_epoch = config.ckpt_epoch
             ckpt_date = config.ckpt_date
         if config.task == "inp":
@@ -81,18 +82,26 @@ def main(
         args.lora = LORA
         args.evaluation.coverage = False
         args.ddpm_param = ddpm_param
-        
-        # parameters
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
         args.solver_type = solver_type
         args.eta = eta
+        if args.task == "deblur":
+            args.dpir.use_dpir = True
+        
+        # lora dir and name
+        args.lora_checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", ckpt_date, f"model_noise_{args.physic.sigma_model}") 
+        if args.task == "deblur" and args.physic.operator_name == "gaussian":
+            args.lora_checkpoint_name = f"LoRA_model_{args.task}_{(ckpt_epoch):03d}.pt"            
+        else:
+            args.lora_checkpoint_name = f"LoRA_model_{args.task}_{args.physic.operator_name}_{(ckpt_epoch):03d}.pt"            
+            
+        # parameters
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
         
         for idx in range(len(ZETA)):
             zeta = ZETA[idx]
             args.zeta = zeta
             for max_unfolded_iter in MAX_UNFOLDED_ITER:
                 args.max_unfolded_iter = max_unfolded_iter
-                args.mode = "eval"
                 args.date = ckpt_date
                 args.epoch = ckpt_epoch
                 args.eval_date = date_eval
@@ -116,7 +125,7 @@ def main(
                         raise ValueError(f"Solver {solver_type} do not exists.")
                     wandb.init(
                             # set the wandb project where this run will be logged
-                            project=f"Sampling Unfolded Conditional Diffusion Models {args.task}",
+                            project=f"Sampling Unfolded Conditional Diffusion Models {args.task}_{args.physic.operator_name}",
                             dir = dir_w,
                             config={
                                 "model": "Deep Unfolding",
@@ -128,7 +137,7 @@ def main(
                             name = f"{formatted_time}{run_name}_Stochastic_{solver_type}_num_steps_{num_timesteps}_unfolded_iter_{args.max_unfolded_iter}_{init}_max_iter_{max_iter}_task_{args.task}_rank_{args.rank}_{solver_params_title}_epoch_{args.epoch}_T_AUG_{T_AUG}",
                         )
                 # data
-                dir_test = "/users/cmk2000/sharedscratch/Datasets/testsets/imageffhq"
+                dir_test = "/users/cmk2000/sharedscratch/Datasets/testsets/imageffhq" #/users/cmk2000/sharedscratch/Datasets/testsets/ffhq or imageffhq
                 datasets = GetDatasets(dir_test, args.im_size, dataset_name=args.dataset_name)
                 testset = DataLoader(datasets, batch_size=1, shuffle=False, )
                 
@@ -148,17 +157,9 @@ def main(
                         target_layer = target_lora, 
                         device=device, 
                         rank = args.rank
-                    )
-                    # uu = {}
-                    # for name, param in model.named_parameters():
-                    #     if name.endswith("output_blocks.2.0.out_layers.3"):
-                    #         uu[name] = param.data.clone()                                 
-                    runners.load_trainable_params(model, args.epoch, args)
+                    )             
+                    runners.load_trainable_params(model, args)
                     
-                    # for name, param in model.named_parameters():
-                    #     if name.endswith("output_blocks.2.0.out_layers.3"):
-                    #         param.data = uu[name]
-                
                 # stochastic model setting
                 target_lora_layer = ["qkv", "proj_out", "output_blocks.2.0.out_layers.3"]
                 args.stochastic_model = stochastic_model
@@ -169,22 +170,28 @@ def main(
                             orig_params[name] = param.data.clone()
                     args.orig_params = orig_params
                     args.target_lora_layer = target_lora_layer
-                    
+                
+                # Diffusion noise
+                diffusion_scheduler = ums.DiffusionScheduler(device=device,noise_schedule_type=args.noise_schedule_type)
+       
                 # physic
                 if args.task == "deblur":
-                    physic = phy.Deblurring(
-                        kernel_size=args.physic.deblur.kernel_size,
-                        blur_name=args.physic.deblur.blur_name,
+                    kernels = phy.Kernels(
+                        operator_name=args.physic.operator_name,
+                        kernel_size=args.physic.kernel_size,
                         device=device,
+                        mode = args.mode
+                    )
+                    physic = phy.Deblurring(
                         sigma_model=args.physic.sigma_model,
+                        device=device,
                         transform_y=args.physic.transform_y,
-                        mode=args.mode,
                     )
                 elif args.task == "inp":
                     physic = phy.Inpainting(
                         mask_rate=args.physic.inp.mask_rate,
                         im_size=args.im_size,
-                        mask_type=args.physic.inp.mask_type,
+                        operator_name=args.physic.operator_name,
                         box_proportion = args.physic.inp.box_proportion,
                         index_ii = args.physic.inp.index_ii,
                         index_jj = args.physic.inp.index_jj,
@@ -193,12 +200,9 @@ def main(
                         transform_y=args.physic.transform_y,
                         mode=args.mode,
                     )
-                else:
-                    raise NotImplementedError
                     
                 # HQS module
                 denoising_timestep = ums.GetDenoisingTimestep(device)
-                diffusion_scheduler = ums.DiffusionScheduler(device=device)
                 hqs_module = ums.HQS_models(
                     model,
                     physic, 
@@ -206,7 +210,7 @@ def main(
                     denoising_timestep,
                     args
                 )
-                
+                    
                 # sampler
                 diffsampler = runners.Conditional_sampler(
                     hqs_module, 
@@ -235,7 +239,7 @@ def main(
                 
                 args.stochastic_rate = stochastic_rate
                 
-                root_dir_results = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, solver_type, use_lora, f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timesteps}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{lambda_[0]}")
+                root_dir_results = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, solver_type, use_lora, f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timesteps}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{args.lambda_}")
                 
                 if args.evaluation.coverage or args.evaluation.metrics:
                     save_metric_path = os.path.join(root_dir_results, "metrics_results")
@@ -251,23 +255,31 @@ def main(
                     for dir_ in [ref_path, mmse_path, y_path, last_path, var_path,metric_path]:
                         os.makedirs(dir_, exist_ok=True)
                 
+                # Evaluations
                 s_psnr = 0
                 s_mse = 0
                 s_ssim = 0
                 s_lpips = 0
                 count = 0   
-                
-                results = {}  
+                results = {} 
+                if args.task == "deblur":
+                    blur = kernels.get_blur()
                 # loop over testset 
                 for ii, im in enumerate(testset):
-                    if ii>0:
+                    if ii>100:
                         continue
                         
-                    # obs
-                    im = im.to(device)
-                    y = physic.y(im)
-                    x = utils.inverse_image_transform(im)
+                    # True image
                     im_name = f"{(ii):05d}"
+                    im = im.to(device)
+                    x = utils.inverse_image_transform(im)
+                    x_true = None
+                    
+                    # observation y 
+                    if args.task == "deblur":
+                        y = physic.y(im, blur)
+                    else:
+                        y = physic.y(im)
                     
                     # coverage 
                     if args.evaluation.coverage:
@@ -275,7 +287,6 @@ def main(
                         shapes=(max_iter-1,) + shape
                         data = torch.zeros(shapes, dtype = x.dtype)
 
-                    x_true = None
                     for it in range(max_iter):
                         start_time = time.time()
                         out = diffsampler.sampler(
@@ -286,7 +297,7 @@ def main(
                             zeta=zeta,
                             x_true = x_true,
                             track = max_iter>1,
-                            lambda_ = lambda_[INDICES[it]]
+                            lambda_ = args.lambda_
                         )
                         # collapsed time
                         collapsed_time = time.time() - start_time           
@@ -447,14 +458,13 @@ def main(
                         count += 1
                     utils.delete([X_posterior_mean,out])
                 
-                wandb.finish()   
+                wandb.finish()  
     return args 
 if __name__ == "__main__":
 
     for solver in SOLVER_TYPES:
         for steps in NUM_TIMESTEPS:
-            for lambda_ in LAMBDA:
-                args = main(steps, solver, ckpt_epoch = ckpt_epoch, max_iter=max_iter, lambda_ = lambda_)
+            args = main(steps, solver, max_iter=max_iter)
     args.step = steps
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -469,7 +479,7 @@ if __name__ == "__main__":
     vec_fid_last = []
     if 0:
         for num_timestep in NUM_TIMESTEPS:
-            for lambda_ in LAMBDA:
+            for lambda_ in [args.lambda_]:
                 root_dir = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{lambda_}")
                 save_metric_path = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", "metrics_evaluated")
                 root_dir_csv = os.path.join(root_dir, "metrics_results")
@@ -493,54 +503,57 @@ if __name__ == "__main__":
                 vec_ssim_mmse.append(mean_ssim)
             
             # save data in a csv file 
-            lab ="lambda"
+            lab ="T"
             os.makedirs(save_metric_path, exist_ok=True)
             fid_pd = pd.DataFrame(dic_results)
             save_dir_metrics = os.path.join(save_metric_path, f'fid_psnr_lpips_ssim_results.csv') #_eta_{eta}_zeta_{zeta}
             fid_pd.to_csv(save_dir_metrics, mode='a', header=not os.path.exists(save_dir_metrics))
             
             # plot the results
-            xaxis = LAMBDA
-            if len(xaxis) >1:
-                plot = plt.figure()
-                plt.plot(np.array(xaxis), np.array(vec_fid_mmse), "b.", label = "FID - mmse")
-                plt.plot(np.array(xaxis), np.array(vec_fid_last), "b.", label = "FID - last")
-                plt.xlabel(f"{lab}")
-                plt.ylabel("FID")
-                plt.title(f"{lab} versus FID")
-                plt.legend()
-                plt.savefig(os.path.join(save_metric_path, f"fid_results.png"))
-                plt.close("all")
-                
-                # plot the results
-                plot = plt.figure()
-                plt.plot(np.array(xaxis), np.array(vec_lpips_mmse), "b.", label = "lpips")
-                plt.legend()
-                plt.xlabel(f"{lab}")
-                plt.ylabel("LPIPs")
-                plt.title(f"{lab} versus lpips")
-                plt.savefig(os.path.join(save_metric_path, f"lpips_results.png")) # _eta_{eta}_zeta{zeta}
-                plt.close("all")
-                
-                # plot the results
-                plot = plt.figure()
-                plt.plot(np.array(xaxis), np.array(vec_psnr_mmse), "b.", label = "psnr")
-                plt.legend()
-                plt.xlabel(f"{lab}")
-                plt.ylabel("PSNR")
-                plt.title("zeta versus psnr")
-                plt.savefig(os.path.join(save_metric_path, f"psnr_results.png")) # _eta_{eta}_zeta{zeta}
-                plt.close("all")
-                
-                # plot the results
-                plot = plt.figure()
-                plt.plot(np.array(xaxis), np.array(vec_ssim_mmse), "b.", label = "ssim")
-                plt.legend()
-                plt.xlabel(f"{lab}")
-                plt.ylabel("SSIM")
-                plt.title(f"{lab} versus ssim")
-                plt.savefig(os.path.join(save_metric_path, f"ssim_results.png")) #_eta_{eta}_zeta{zeta}
-                plt.close("all")
+            try:
+                xaxis = NUM_TIMESTEPS
+                if len(xaxis) >1:
+                    plot = plt.figure()
+                    plt.plot(np.array(xaxis), np.array(vec_fid_mmse), "b.", label = "FID - mmse")
+                    plt.plot(np.array(xaxis), np.array(vec_fid_last), "b.", label = "FID - last")
+                    plt.xlabel(f"{lab}")
+                    plt.ylabel("FID")
+                    plt.title(f"{lab} versus FID")
+                    plt.legend()
+                    plt.savefig(os.path.join(save_metric_path, f"fid_results.png"))
+                    plt.close("all")
+                    
+                    # plot the results
+                    plot = plt.figure()
+                    plt.plot(np.array(xaxis), np.array(vec_lpips_mmse), "b.", label = "lpips")
+                    plt.legend()
+                    plt.xlabel(f"{lab}")
+                    plt.ylabel("LPIPs")
+                    plt.title(f"{lab} versus lpips")
+                    plt.savefig(os.path.join(save_metric_path, f"lpips_results.png")) # _eta_{eta}_zeta{zeta}
+                    plt.close("all")
+                    
+                    # plot the results
+                    plot = plt.figure()
+                    plt.plot(np.array(xaxis), np.array(vec_psnr_mmse), "b.", label = "psnr")
+                    plt.legend()
+                    plt.xlabel(f"{lab}")
+                    plt.ylabel("PSNR")
+                    plt.title("zeta versus psnr")
+                    plt.savefig(os.path.join(save_metric_path, f"psnr_results.png")) # _eta_{eta}_zeta{zeta}
+                    plt.close("all")
+                    
+                    # plot the results
+                    plot = plt.figure()
+                    plt.plot(np.array(xaxis), np.array(vec_ssim_mmse), "b.", label = "ssim")
+                    plt.legend()
+                    plt.xlabel(f"{lab}")
+                    plt.ylabel("SSIM")
+                    plt.title(f"{lab} versus ssim")
+                    plt.savefig(os.path.join(save_metric_path, f"ssim_results.png")) #_eta_{eta}_zeta{zeta}
+                    plt.close("all")
+            except:
+                pass
             
     # evaluation 
     if False:   

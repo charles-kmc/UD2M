@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-
+import torch
+import blobfile as bf
 from guided_diffusion import dist_util
 from utils import utils_model
 from guided_diffusion.script_util import (
@@ -7,10 +8,8 @@ from guided_diffusion.script_util import (
     create_model_and_diffusion,
     args_to_dict,
 )
-from models.model import FineTuningDiffusionModel
 
 def load_frozen_model(model_name, model_checkpoint_path, device):
-    
     # load model
     model_config = dict(
             model_checkpoint_path=model_checkpoint_path,
@@ -42,22 +41,16 @@ def load_frozen_model(model_name, model_checkpoint_path, device):
     model = model.to(device)
     return model, diffusion
 
-def create_FineTuning_model(
-                lora_model,
-                image_size,
-                in_channels, 
-                model_channels, 
-                out_channels,
-                device
-                ):
-  
-    model = FineTuningDiffusionModel(
-                                image_size, 
-                                in_channels, 
-                                model_channels, 
-                                out_channels, 
-                                device, 
-                                frozen_model = lora_model
-                            )     
-    
+# load lora weights                
+def load_trainable_params(model, args):
+    """_summary_"""
+    lora_checkpoint_dir = args.lora_checkpoint_dir
+    lora_checkpoint_name = args.lora_checkpoint_name
+    filepath = bf.join(lora_checkpoint_dir, lora_checkpoint_name)
+    trainable_state_dict = torch.load(filepath)
+    model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)  
+    # set model to eval mode
+    model.eval()
+    for _k, v in model.named_parameters():
+        v.requires_grad = False             
     return model

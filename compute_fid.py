@@ -44,8 +44,9 @@ def main_metrics(args, solver, axis_vec = ZETA, val = TIMESTEPS, val_name = "T",
         save_metric_path = save_metric_path1
         # FID
         out = Fid_evatuation(root_dir, device, mmse_sample=True, last_sample=True)
-        vec_fid_mmse.append(out["fid_last"])
-        dic_results[f"fid mmse_vec_{axis_name}_{axis}"] = [out["fid_last"]]
+        vec_fid_mmse.append(out["fid_mmse"])
+        dic_results[f"fid mmse_vec_{axis_name}_{axis}"] = [out["fid_mmse"]]
+        dic_results[f"fid last_vec_{axis_name}_{axis}"] = [out["fid_last"]]
         
         print(f"fid_last = {out['fid_last']}")
         print(f"fid_mmse = {out['fid_mmse']}")

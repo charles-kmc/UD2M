@@ -15,6 +15,7 @@ import utils as utils
 
 def main():
     # args
+    date = datetime.datetime.now().strftime("%d-%m-%Y")
     args = args_unfolded()
     config = configs()
     args.task = config.task
@@ -22,8 +23,10 @@ def main():
     if config.task == "inp":
         args.dpir.use_dpir = config.use_dpir
     args.lambda_ = config.lambda_
+    args.date = date
+    args.max_unfolded_iter = 3
+    
     # logger 
-    date = datetime.datetime.now().strftime("%d-%m-%Y")
     script_dir = os.path.dirname(__file__)
     script_path = script_dir.rsplit("/", 1)[0]
     log_dir = os.path.join(script_path, "logs", "Logger_CDM", date)
@@ -101,7 +104,7 @@ def main():
         physic = phy.Inpainting(
             mask_rate=args.physic.inp.mask_rate,
             im_size=args.im_size,
-            mask_type=args.physic.inp.mask_type,
+            operator_name=args.physic.operator_name,
             box_proportion = args.physic.inp.box_proportion,
             index_ii = args.physic.inp.index_ii,
             index_jj = args.physic.inp.index_jj,
@@ -123,9 +126,7 @@ def main():
     )
     
     # trainer module
-    args.date = date
-    max_unfolded_iter = 3
-    args.max_unfolded_iter = max_unfolded_iter
+    
     trainer = um.Trainer(
         model,
         diffusion_scheduler=diffusion_scheduler,
@@ -137,7 +138,7 @@ def main():
         logger=logger,
         device=device,
         args=args,
-        max_unfolded_iter=max_unfolded_iter
+        max_unfolded_iter=args.max_unfolded_iter
     )
     
     # training loop

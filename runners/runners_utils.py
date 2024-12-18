@@ -7,7 +7,7 @@ import unfolded_models as ums
 import utils as utils
 
 class DiffusionSolver:
-    def __init__(self, seq, diffusion:ums.DiffusionScheduler, ):
+    def __init__(self, seq, diffusion:ums.DiffusionScheduler):
         self.seq = seq
         self.diffusion = diffusion
     
@@ -33,15 +33,19 @@ class DiffusionSolver:
         return x
         
 # load lara weights                
-def load_trainable_params(model, epoch, args):
-    checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", args.date, f"model_noise_{args.physic.sigma_model}")
-    filename = f"LoRA_model_{args.task}_{(epoch):03d}.pt"
-    filepath = bf.join(checkpoint_dir, filename)
-    
+def load_trainable_params(model, args):
+    """_summary_"""
+    lora_checkpoint_dir = args.lora_checkpoint_dir
+    lora_checkpoint_name = args.lora_checkpoint_name
+    filepath = bf.join(lora_checkpoint_dir, lora_checkpoint_name)
     trainable_state_dict = torch.load(filepath)
-    model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)               
-    
+    model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)  
+    # set model to eval mode
+    model.eval()
+    for _k, v in model.named_parameters():
+        v.requires_grad = False             
     return model
+
 
 # load yaml file 
 def load_yaml(save_checkpoint_dir, epoch, date, task):
