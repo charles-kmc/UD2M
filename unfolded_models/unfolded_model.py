@@ -11,7 +11,9 @@ import blobfile as bf
 import datetime
 import copy
 import yaml
+import itertools
 
+from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity 
 from accelerate import Accelerator
 from torch.optim import AdamW
 import torch
@@ -24,6 +26,8 @@ from DPIR.dpir_models import DPIR_deb
 from typing import Union, Tuple, List, Dict, Any, Optional
 import physics as phy
 import utils as utils
+
+import WGAN as wgan
 
 # extract into tensor       
 def extract_tensor(
@@ -58,7 +62,7 @@ class Trainer:
         self,
         model,
         diffusion_scheduler:DiffusionScheduler,
-        physic:Union[phy.Deblurring, phy.Inpainting],
+        physic:Union[phy.Deblurring, phy.Inpainting,phy.SuperResolution],
         kernels:phy.Kernels,
         hqs_module:HQS_models,
         trainloader,
@@ -82,31 +86,50 @@ class Trainer:
         
         self.copy_model = copy.deepcopy(self.model)
         
-        # set seed
+        # ---> Discriminator 
+        discriminator = wgan.Discriminator(self.args.im_size).to(device)
+        discriminator.apply(wgan.weights_init_normal)
+        self.discriminator = discriminator.to(device)
+        
+        # ---> set seed
         self._seed(self.args.seed)
         
-        # Accelerator: DDP
+        # ---> Accelerator: DDP
         self.accelerator = Accelerator()
         self.device =  self.accelerator.device
         
-        # set training
+        # ---> set training
         self._set_training()
         self.metrics = utils.Metrics(self.device)
         
     def _set_training(self):
         model_parameters(self.model, self.logger)
         self.model_params_learnable = list(filter(lambda p: p.requires_grad, self.model.parameters()))
+        
+        
+        # ---> Optimizers
+        b1 = 0.5
+        b2 = 0.999
         self.optimizer = AdamW(self.model_params_learnable, lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
+        self.optimizer_D = torch.optim.Adam(self.discriminator.parameters(), lr=self.args.learning_rate, betas=(b1, b2))
+        self.optimizer_info = torch.optim.Adam(
+            itertools.chain(self.model_params_learnable, self.discriminator.parameters()), lr=self.args.learning_rate, betas=(b1, b2))
+        
+        # ---> Scheduler
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(100 * 0.2), gamma=0.1)
-        self.model, self.optimizer, self.trainloader, self.testloader, self.scheduler = self.accelerator.prepare(
+        
+        # ---> accelerator
+        self.model, self.optimizer, self.optimizer_D, self.optimizer_info, self.trainloader, self.testloader, self.scheduler = self.accelerator.prepare(
             self.model, 
             self.optimizer, 
+            self.optimizer_D,
+            self.optimizer_info,
             self.trainloader,
             self.testloader, 
             self.scheduler, 
         )
         
-        # HQS model
+        # ---> HQS model
         self.denoising_timestep = GetDenoisingTimestep(self.device)
         self.hqs_model = HQS_models(
             self.model,
@@ -116,9 +139,22 @@ class Trainer:
             self.args
         )
         
-        # DPIR model
+        # ---> Losses 
+        self.adversarial_loss = torch.nn.MSELoss().to(self.device)
+        self.categorical_loss = torch.nn.CrossEntropyLoss().to(self.device)
+        self.continuous_loss = torch.nn.MSELoss().to(self.device)
+        # Loss weights
+        self.lambda_cat = 1
+        self.lambda_con = 0.1
+        
+        # ---> DPIR model
         self.dpir_model = DPIR_deb(device = self.device, model_name = self.args.dpir.model_name, pretrained_pth=self.args.dpir.pretrained_pth)
-    
+
+        # ---> lpips loss
+        self.loss_fn_vgg = LearnedPerceptualImagePatchSimilarity(net_type='squeeze').to(self.device)
+        
+        
+        
     def training(self, epochs):
         """_summary_
         """
@@ -129,6 +165,7 @@ class Trainer:
         if self.args.use_wandb:
             formatted_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             dir_w = "/users/cmk2000/sharedscratch/Results/wandb"
+            os.makedirs(dir_w, exist_ok=True)
             wandb.init(
                     # set the wandb project where this run will be logged
                     project=f"Training Unfolded Conditional Diffusion Models {self.args.task} {self.args.physic.operator_name}",
@@ -145,7 +182,7 @@ class Trainer:
                         "max_unfolded_iter":self.args.max_unfolded_iter,
                         "Operator name": self.args.physic.operator_name
                     },
-                    name = f"{formatted_time}_Cons_{self.args.use_consistancy}_{init}_pertub_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}_max_iter_unfold_{self.args.max_unfolded_iter}_lambda_{self.args.lambda_}",
+                    name = f"{formatted_time}_Cons_{self.args.use_consistancy}_{init}_pertub_{self.args.pertub}_task_{self.args.task}_lr_{self.args.learning_rate}_rank_{self.args.rank}_max_iter_unfold_{self.args.max_unfolded_iter}_lambda_sig{self.args.lambda_}",
                     
                 )
             
@@ -169,47 +206,94 @@ class Trainer:
                 # start epoch run
                 t_start = time.time()
                 self.logger.info(f"Epoch ==== >> {epoch}\t|\t batch ==== >> {ii}\n") 
-                with self.accelerator.accumulate(self.model):    
-                    # sample noisy x_t
-                    B = batch_0.shape[0]
+                with self.accelerator.accumulate(self.model):  
+                    
+                    
+                    B,C = batch_0.shape[:2]
+                    
+                    # ---> Adversarial ground truths
+                    valid = torch.Tensor(B, 1).fill_(1.0).to(self.device).requires_grad_(False)
+                    fake = torch.Tensor(B, 1).fill_(0.0).to(self.device).requires_grad_(False)
+
+                    # ----------------------------#
+                    #  Finetuning Diffusion model #
+                    # ----------------------------#
+                    # ---> sample noisy x_t
                     t = self.diffusion_scheduler.sample_times(B, self.device)
                     noise_target = torch.randn_like(batch_0)
                     x_t = self.diffusion_scheduler.sample_xt(batch_0, t, noise=noise_target)
                     
-                    # observation y 
+                    # ---> observation y 
                     if self.args.task == "deblur":
                         blur = self.kernels.get_blur()
                         y = self.physic.y(batch_0, blur)
-                    else:
+                    elif self.args.task=="sr":
+                        blur = self.kernels.get_blur()
+                        y = self.physic.y(batch_0, blur, self.args.physic.sr.sf)
+                    elif self.task=="inp":
                         y = self.physic.y(batch_0)
                                        
-                    # initialisation unfolded model
+                    # ---> initialisation unfolded model
                     if self.args.dpir.use_dpir and self.args.task == "deblur":
                         y_ = utils.inverse_image_transform(y)
-                        x_init = self.dpir_model.run(y_, self.physic.blur, iter_num = 1) #y.clone()
+                        x_init = self.dpir_model.run(y_, blur, iter_num = 1) #y.clone()
                         x_init = utils.image_transform(x_init)
                     else:
-                        x_init = y.clone()
-                    
-                    # unfolded model
-                    out = self.hqs_module.run_unfolded_loop( y, x_init, x_t, t, max_iter = self.max_unfolded_iter, lambda_ = self.args.lambda_)
+                        if self.args.task=="sr":
+                            # utils.enable_disable_lora(self.model, enabled = False)
+                            with torch.no_grad():
+                                y_ = self.physic.upsample(utils.inverse_image_transform(y))
+                                x_init = self.dpir_model.run(y_, blur, iter_num = 1) #y.clone()
+                                x_init = utils.image_transform(y_)
+                            # utils.enable_disable_lora(self.model, enabled = True)
+                        else:
+                            x_init = y.clone()
+ 
+                    # ---> unfolded model
+                    obs = {"x_t":x_t, "y":y}
+                    if not self.args.task=="inp":
+                        obs["blur"] = blur
+                    out = self.hqs_module.run_unfolded_loop( obs, x_init, t, max_iter = self.max_unfolded_iter, lambda_sig = self.args.lambda_)
                     xstart_pred = out["xstart_pred"]
                     eps_pred = out["eps_pred"]
                     aux = out["aux"]
                     
-                    # save args
+                    # ---> save args
                     if epoch ==0 and ii == 0:
                         self.save_args_yaml()
                     
-                    # loss
-                    loss = nn.MSELoss()(eps_pred, noise_target).mean()
+                    # ---> loss
+                    loss = nn.MSELoss()(eps_pred, noise_target).mean() #nn.MSELoss()(xstart_pred, utils.inverse_image_transform(batch_0)).mean()
             
-                    # updating learnable parameters and setting gradient to zero
+                    # ---> updating learnable parameters and setting gradient to zero
                     self.accelerator.backward(loss)        
-                    self.optimizer.step()
-                    self.scheduler.step() 
+                    self.optimizer.step() 
                     self.model.zero_grad()
-            
+                    
+                    # ----------------------#
+                    #  Train Discriminator  #
+                    # ----------------------#
+                    if self.args.adversarial:
+                        self.optimizer_D.zero_grad()
+                    
+                        # ---> Loss for real images
+                        real_pred = self.discriminator(utils.inverse_image_transform(batch_0))
+                        d_real_loss = self.adversarial_loss(real_pred, valid)
+
+                        # ---> Loss for fake images
+                        fake_pred = self.discriminator(xstart_pred.detach())
+                        d_fake_loss = self.adversarial_loss(fake_pred, fake)
+
+                        # ---> Total discriminator loss
+                        d_loss = (d_real_loss + d_fake_loss) / 2
+
+                        d_loss.backward()
+                        self.optimizer_D.step()
+                    
+                    # ---> update scheduler    
+                    self.scheduler.step()
+
+
                 with torch.no_grad():
                     loss_val = loss.clone().detach().cpu().mean().item()
                     self.logger.info(f"Loss: {loss_val}")            
@@ -231,16 +315,18 @@ class Trainer:
                         )
                         
                         # 
+                        sigma_t = extract_tensor(self.diffusion_scheduler.sigmas, t, x_t.shape).ravel()[0]
+                        sqrt_alphas_cumprod_t = extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t, x_t.shape).ravel()[0]
                         if ii%100 == 0:
                             if self.args.use_wandb:
                                 xstart_pred_wdb = wandb.Image(
                                         utils.get_batch_rgb_from_batch_tensor(xstart_pred), 
-                                        caption=f"x0_hat Epoch: {ii}", 
+                                        caption=f"x0_hat Epoch: {ii} sigma_t: {sigma_t}\t alpha: {sqrt_alphas_cumprod_t}\t 1 / sigima^2 alpha: {1 / (sigma_t**2*sqrt_alphas_cumprod_t)}\tt:{t.ravel()[0]}", 
                                         file_type="png"
                                     )
                                 batch_wdb = wandb.Image(
                                         utils.get_batch_rgb_from_batch_tensor(batch_0), 
-                                        caption=f"x0 Epoch: {ii}", 
+                                        caption=f"x0 Epoch: {ii} ", 
                                         file_type="png"
                                     )
                                 ys_wdb = wandb.Image(
@@ -251,6 +337,11 @@ class Trainer:
                                 xt_wdb = wandb.Image(
                                         utils.get_batch_rgb_from_batch_tensor(x_t), 
                                         caption=f"xt Epoch: {ii}", 
+                                        file_type="png"
+                                    )
+                                z_input_wdb = wandb.Image(
+                                        utils.get_batch_rgb_from_batch_tensor(out["z_input"]), 
+                                        caption=f"z_input", 
                                         file_type="png"
                                     )
                                 aux_wdb = wandb.Image(
@@ -266,6 +357,7 @@ class Trainer:
                                         "xt":xt_wdb, 
                                         "x predict": xstart_pred_wdb, 
                                         "Auxiliary":aux_wdb,
+                                        "z_input_wdb":z_input_wdb,
                                     }
                                 )
                     end_time = time.time()  
@@ -424,8 +516,10 @@ class Trainer:
         checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.physic.sigma_model}") 
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
+            unwrap_discriminator = self.accelerator.unwrap_model(self.discriminator)
         except:
             unwrap_model = self.model
+            unwrap_discriminator = self.discriminator
         
         # state dict 
         trainable_lora_state_dict = {name: param for name, param in unwrap_model.named_parameters() if param.requires_grad}  
@@ -433,24 +527,38 @@ class Trainer:
         if self.accelerator.is_main_process:
             self.logger.info(f"Saving checkpoint {epoch}...")
             filename = f"LoRA_model_{self.args.task}_{self.args.physic.operator_name}_{(epoch):03d}.pt"
+            if self.args.task=="sr":
+                filename = f"LoRA_model_{self.args.task}_factor_{self.args.physic.sr.sf}_{(epoch):03d}.pt"
+                
             
             filepath = bf.join(checkpoint_dir, filename)
             with bf.BlobFile(filepath, "wb") as f:
-                torch.save({
+                torch.save(
+                    {
                         'model_state_dict': trainable_lora_state_dict,
                         'optimizer_state_dict': self.optimizer.state_dict(),
                         'scheduler_state_dict': self.scheduler.state_dict(),  
-                        "epoch":epoch,
+                        'discriminator_state_dict': self.discriminator.state_dict(),  
+                        "epoch":epoch
                     }, 
-                f
-            )
+                    f
+                )
+            
     
     def load_trainable_params(self, epoch):
         checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.physic.sigma_model}")
-        filename = f"LoRA_model_{self.args.task}_{self.args.physic.operator_name}_{(epoch):03d}.pt"
+        if self.task=="sr":
+            filename = f"LoRA_model_{self.args.task}_{self.args.physic.sr.sf}_{(epoch):03d}.pt"
+        else:  
+            filename = f"LoRA_model_{self.args.task}_{self.args.physic.operator_name}_{(epoch):03d}.pt"
         filepath = bf.join(checkpoint_dir, filename)
         trainable_state_dict = torch.load(filepath)
         self.copy_model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)
+        
+        if trainable_state_dict["model_state_dict"] is not None:
+            if hasattr(self, "discriminator"):
+                self.discriminator.load_state_dict(trainable_state_dict["discriminator_state_dict"], strict=False)
+                
         
     # resume training 
     def _resume_model(self, resume_date = None, resume_epoch = None):

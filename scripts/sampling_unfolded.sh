@@ -55,7 +55,7 @@ mkdir -p "$RESULTS_DIR1"
 #  Application launch commands
 #-------------------------------
 # Running python scripts
-python3 main_sample_conditional.py > "$RESULTS_DIR"_out_sample_dif.output 2> "$RESULTS_DIR"_err_sample_dif.error
+python3 main_sample_conditional.py --task "deblur" --operator_name "gaussian" --lambda_ 0.32 --ckpt_epoch 900  --sigma_model 0.05  --ckpt_date 01-11-2024 > "$RESULTS_DIR"_out_sample_dif.output 2> "$RESULTS_DIR"_err_sample_dif.error
 
 # Final message
 echo "Finish!!"

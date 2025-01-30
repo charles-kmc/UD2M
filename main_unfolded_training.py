@@ -20,11 +20,14 @@ def main():
     config = configs()
     args.task = config.task
     args.physic.operator_name = config.operator_name
+    
     if config.task == "inp":
         args.dpir.use_dpir = config.use_dpir
     args.lambda_ = config.lambda_
     args.date = date
     args.max_unfolded_iter = 3
+    # if config.task=="sr":
+    #     args.physic.kernel_size = 7
     
     # logger 
     script_dir = os.path.dirname(__file__)
@@ -41,7 +44,7 @@ def main():
     datasets = GetDatasets(
         args.dataset_path, 
         args.im_size, 
-        dataset_name=args.dataset_name
+        dataset_name=args.dataset_name,
     )
     train_size = int(prop * len(datasets))
     test_size = len(datasets) - train_size
@@ -77,14 +80,17 @@ def main():
         device=device, 
         rank = args.rank
     )
-    for param in model.out.parameters():
-        param.requires_grad_(True)
-    for name, param in model.named_parameters():
-        if "output_blocks.2.0.out_layers.3" in name:
-            param.requires_grad_(True)
+    # for param in model.out.parameters():
+    #     param.requires_grad_(True)
+    # for name, param in model.named_parameters():
+    #     if "output_blocks.2.0.out_layers.3" in name:
+    #         param.requires_grad_(True)
     
     # Diffusion noise
-    diffusion_scheduler = um.DiffusionScheduler(device=device,noise_schedule_type=args.noise_schedule_type)
+    diffusion_scheduler = um.DiffusionScheduler(
+        device=device,
+        noise_schedule_type=args.noise_schedule_type 
+    )
     
     # physic
     if args.task == "deblur":
@@ -97,7 +103,7 @@ def main():
         physic = phy.Deblurring(
             sigma_model=args.physic.sigma_model,
             device=device,
-            transform_y=args.physic.transform_y,
+            scale_image=args.physic.transform_y,
         )
         physics = utils.DotDict({"kernels": kernels, "physic": physic})
     elif args.task == "inp":
@@ -110,10 +116,25 @@ def main():
             index_jj = args.physic.inp.index_jj,
             device=device,
             sigma_model=args.physic.sigma_model,
-            transform_y=args.physic.transform_y,
+            scale_image=args.physic.transform_y,
             mode=args.mode,
         )
         physics = utils.DotDict({"kernels": None, "physic": physic})
+    elif args.task == "sr":
+        physic = phy.SuperResolution(
+            im_size=args.im_size,
+            sigma_model=args.physic.sigma_model,
+            device=device,
+            scale_image=args.physic.transform_y,
+            mode = args.mode,
+        )
+        kernels = phy.Kernels(
+            operator_name=args.physic.operator_name,
+            kernel_size=args.physic.kernel_size,
+            device=device,
+            mode = args.mode
+        )
+        physics = utils.DotDict({"kernels": kernels, "physic": physic})
         
     # HQS module
     denoising_timestep = um.GetDenoisingTimestep(device)
@@ -126,12 +147,11 @@ def main():
     )
     
     # trainer module
-    
     trainer = um.Trainer(
         model,
         diffusion_scheduler=diffusion_scheduler,
         physic=physics.physic,
-        kernels=kernels,
+        kernels=physics.kernels,
         hqs_module = hqs_module,
         trainloader=trainloader,
         testloader=testloader,
@@ -142,7 +162,7 @@ def main():
     )
     
     # training loop
-    trainer.training(epochs=10000)
+    trainer.training(epochs=1000)
     
 if __name__ == "__main__":
     main()

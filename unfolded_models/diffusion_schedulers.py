@@ -123,7 +123,7 @@ class GetDenoisingTimestep:
             sigma_y = torch.tensor(sigma_y).to(self.device)
         else:
             sigma_y = sigma_y.to(self.device)
-        ty = self.t_y(sigma_y)
+        ty = self._noise_step(sigma_y)
         a1 = sigma_y / (sigma_y + sigma_t)
         a2 = sigma_t / (sigma_y + sigma_t)
         tz = (ty * a1 + t * a2).long()
@@ -131,7 +131,7 @@ class GetDenoisingTimestep:
         return rho, tz, ty
     
     # get rho and t from sigma_t and sigma_y
-    def get_tz_rho(self, t, sigma_y, x_shape, T_AUG, task="inp"):
+    def get_z_timesteps(self, t, sigma_y, x_shape, T_AUG, task="inp"):
         sigma_t = extract_tensor(self.scheduler.sigmas, t, x_shape) 
         if not torch.is_tensor(sigma_y):
             sigma_y = torch.tensor(sigma_y).to(self.device)
@@ -143,19 +143,21 @@ class GetDenoisingTimestep:
             sp = 1
         else:
             sp = 1
-        rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2)) * sp
+        
+        rho=sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2)) * sp
+        
         tz = torch.clamp(
-            self.t_y(rho[0,0,0,0]).cpu() + torch.tensor(T_AUG),
+            self._noise_step(rho.ravel()[0]).cpu() + torch.tensor(T_AUG),
             1,
             self.scheduler.num_timesteps
         )
         tz = (tz * torch.ones((x_shape[0],))).long().to(self.device)
         rho_param = extract_tensor(self.scheduler.sigmas, tz, x_shape)
-        ty = self.t_y(sigma_y)
+        ty = self._noise_step(sigma_y)
         return rho_param, tz, ty
     
     # getting the corresponding timestep from the diffusion process   
-    def t_y(self, sigma_y):
-        t_y = torch.clamp(torch.abs(self.scheduler.sigmas.to(self.device) - sigma_y).argmin(), 1, self.scheduler.num_timesteps)
-        return t_y    
+    def _noise_step(self, sigma):
+        t_ = torch.clamp(torch.abs(self.scheduler.sigmas.to(self.device) - sigma).argmin(), 1, self.scheduler.num_timesteps)
+        return t_    
   

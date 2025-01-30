@@ -14,3 +14,5 @@
 
 - Improve the model to have a better coverage results.
 - Checking distribution shift on a subpopulation from FFHQ - CLIP.
+
+- Check motion deblurring, particularly how we compute H^T

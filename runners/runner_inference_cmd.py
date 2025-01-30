@@ -14,7 +14,7 @@ class Conditional_sampler:
     def __init__(
         self, 
         hqs_model:ums.HQS_models, 
-        physics:Union[phy.Deblurring,phy.Inpainting], 
+        physics:Union[phy.Deblurring,phy.Inpainting,phy.SuperResolution], 
         diffusion:ums.DiffusionScheduler,
         device,
         args,
@@ -69,13 +69,23 @@ class Conditional_sampler:
                             param.data = orig_params[name] + noise
             
             # initilisation
-            x = torch.randn_like(y)
-            if self.args.dpir.use_dpir:
+            
+            if self.args.dpir.use_dpir and self.args.task=="deblur":
                 y_01 = utils.inverse_image_transform(y)
                 x0 = self.dpir_model.run(y_01, self.physics.blur, iter_num = 1) #y.clone()
                 x0 = utils.image_transform(x0)
+            elif  self.args.task=="sr":
+                if self.args.dpir.use_dpir:
+                    y_ = self.physics.upsample(utils.inverse_image_transform(y))
+                    # y_ = self.dpir_model.run(y_, self.physics.blur, iter_num = 1) #y.clone()
+                    x0 = utils.image_transform(y_)
+                else:
+                    y_ = self.physics.upsample(utils.inverse_image_transform(y))
+                    x0 = utils.image_transform(y_)
             else:
                 x0 = y.clone()
+                
+            x = torch.randn_like(x0)
             progress_img = []
             
             # reverse process
@@ -89,10 +99,14 @@ class Conditional_sampler:
                 else:
                     # unfolding: xstrat_pred, eps_pred, auxiliary variable
                     max_unfolded_iter = self.max_unfolded_iter
-                    if self.args.physic.operator_name=="uniform_motion" and ii >= len(seq)-2:
-                        lambda_ = 0.5
+                    if self.args.physic.operator_name=="uniform_motion" and ii>=len(seq)-2:
+                        lambda_=0.3
                         max_unfolded_iter=1
-                    out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = max_unfolded_iter, lambda_= lambda_)
+                    
+                    obs = {"x_t":x, "y":y}
+                    if not self.args.task=="inp":
+                        obs["blur"] = self.physics.blur
+                    out_val = self.hqs_model.run_unfolded_loop(obs, x0, torch.tensor(t_i).to(self.device), max_iter = max_unfolded_iter, lambda_sig= lambda_)
                     x0 = utils.image_transform(out_val["xstart_pred"])
                 
                 if x_true is not None:

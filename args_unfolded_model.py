@@ -6,8 +6,8 @@ def args_unfolded():
         "ddpm_param":1,
         "resume_epoch": 0,
         "resume_model": False,
-        "learning_rate":3e-5,#3e-5,
-        "weight_decay":1e-2,
+        "learning_rate":3e-3,#3e-5,
+        "weight_decay":1e-1,
         "rank":10,
         "seed":46,
         "save_checkpoint_range":30,
@@ -26,7 +26,9 @@ def args_unfolded():
         "dataset_path":"/users/cmk2000/sharedscratch/Datasets/ffhq_dataset",
         # "save_checkpoint_dir":"/users/cmk2000/sharedscratch/Pretrained-Checkpoints/Conditional-diffusion_model_for_ivp",
         "save_checkpoint_dir":"/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model_for_ivp",
-        "path_save": "/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp"
+        "path_save": "/users/cmk2000/sharedscratch/CKM/Conditional-diffusion_model-for_ivp",
+        
+        "adversarial":1,
     }
     pyhsic = {
         "kernel_size": 25,
@@ -45,11 +47,14 @@ def args_unfolded():
     deblur = {
         "random_blur": False,
     }
+    sr = {
+        "sf":4
+    }
     
     dpir = {
         "pretrained_pth": "/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo",
         "model_name": "drunet_color", #"ircnn_color, drunet_color",
-        "use_dpir":True,
+        "use_dpir":False,
     }
     evaluation = {
         "save_images":True,
@@ -68,6 +73,7 @@ def args_unfolded():
     args.physic = DotDict(pyhsic)
     args.physic.inp = DotDict(inp) 
     args.physic.deblur = DotDict(deblur) 
+    args.physic.sr = DotDict(sr) 
     args.dpir = DotDict(dpir)
     args.evaluation = DotDict(evaluation)
     args.model = DotDict(model)

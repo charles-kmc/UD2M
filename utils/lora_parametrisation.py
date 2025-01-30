@@ -60,17 +60,14 @@ def layer_parametrisation(layer, device, rank = 2):
     )
 
 def apply_lora_parametrization(model, target_layer, rank, device):
-    
     for name, layer in model.named_modules():
     #    Check if the layer name ends with "qkv" or "proj_out"
         if name.endswith(tuple(target_layer)):
             P.register_parametrization(layer, "weight", layer_parametrisation(layer,  device, rank=rank))           
 
 def LoRa_model(model, target_layer, device, rank = 2):
-    
     # Apply LoRA parametrization to input blocks
     apply_lora_parametrization(model, target_layer, rank, device)
-    
     print(f'Number of Layers frozen: {num_frozen_layers(model)}')
     total_parameters_non_lora, total_parameters_lora = total_parameters(model)
     print(f"Total trainable parameters of the model: {total_parameters_non_lora} (non-LoRa) vs {total_parameters_lora} (LoRa) Ratio: {(total_parameters_lora/total_parameters_non_lora)*100:.2f}% of the original model")
@@ -86,9 +83,23 @@ def total_parameters(model):
     return n_frozen, n_lora
 
 def enable_disable_lora(model, enabled = True):
-    for name, layer in model.named_parameters():
+    for name, _ in model.named_parameters():
         if "lora_" in name:
-            layer.parametrizations["weight"][0].enabled = enabled  
+            layer_name = name.split(".parametrizations")[0]
+            submodule = model
+            for part in layer_name.split("."):
+                submodule = getattr(submodule, part, None)
+                if submodule is None:
+                    break            
+            if submodule and hasattr(submodule, "parametrizations"):
+                if "weight" in submodule.parametrizations:
+                    parametrization_list = submodule.parametrizations["weight"]
+                    for p in parametrization_list:
+                        if hasattr(p, "enabled"):
+                            p.enabled = enabled
+                            print(f"Set enabled to {enabled} for {name}")
+                    
+                    
                     
 # number of frozen layers
 def num_frozen_layers(model):

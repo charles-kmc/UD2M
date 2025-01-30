@@ -55,7 +55,7 @@ mkdir -p "$RESULTS_DIR1"
 #  Application launch commands
 #-------------------------------
 # Running python scripts
-python3 main_unfolded_training.py --task "deblur" --operator_name "uniform_motion" --lambda 0.7 > "$RESULTS_DIR"_out_train_dif.output 2> "$RESULTS_DIR"_err_train_dif.error
+python3 main_unfolded_training.py --task "deblur" --operator_name "uniform_motion" --lambda_ 0.7 > "$RESULTS_DIR"_out_train_dif.output 2> "$RESULTS_DIR"_err_train_dif.error
 
 # Final message
 echo "Finish!!"

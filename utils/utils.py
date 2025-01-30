@@ -177,3 +177,4 @@ def get_batch_rgb_from_batch_tensor(x):
     L = [get_rgb_from_tensor(xi) for xi in x]
     out= cv2.hconcat(L)*255.
     return out
+

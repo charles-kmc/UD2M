@@ -39,21 +39,20 @@ def linear_indices(num_iter, lambda_min=0.3,lambda_max=0.6):
         lambd = np.array([0.32])
     lambd = lambd.reshape(1,-1)
     return lambd, seq
-
+max_images = 0
 max_iter = 1
 ddpm_param = 1
-ckpt_epoch = 840
-run_name = "_sampling_decreasing_lambda_free_noise_model"
+run_name = "_sr_sampling"
 # LAMBDA, INDICES = linear_indices(max_iter)
 stochastic_model = False
 stochastic_rate = 0.05
-SOLVER_TYPES =  ["ddim"]
+SOLVER_TYPES =  ["huen"]
 LORA = True
 MAX_UNFOLDED_ITER = [3]
-NUM_TIMESTEPS = [100, 500, 1000]
-eta = 0.0 
+NUM_TIMESTEPS = [100]#[50, 100, 200, 300, 500, 700, 800, 1000]
+eta =1.0   # sr=0.8
 T_AUG = 0
-ZETA = [0.6] #op 0.4 or 0.6
+ZETA = [0.6]#[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]#[0.1] #op 0.4 or 0.6 sr = 0.9
 date_eval = datetime.datetime.now().strftime("%d-%m-%Y")
 
 def main(
@@ -84,15 +83,17 @@ def main(
         args.ddpm_param = ddpm_param
         args.solver_type = solver_type
         args.eta = eta
-        if args.task == "deblur":
-            args.dpir.use_dpir = True
         
         # lora dir and name
         args.lora_checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", ckpt_date, f"model_noise_{args.physic.sigma_model}") 
         if args.task == "deblur" and args.physic.operator_name == "gaussian":
             args.lora_checkpoint_name = f"LoRA_model_{args.task}_{(ckpt_epoch):03d}.pt"            
         else:
-            args.lora_checkpoint_name = f"LoRA_model_{args.task}_{args.physic.operator_name}_{(ckpt_epoch):03d}.pt"            
+            args.lora_checkpoint_name = f"LoRA_model_{args.task}_{args.physic.operator_name}_{(ckpt_epoch):03d}.pt"   
+        
+        if args.task=="sr":
+            sr_f = 1#args.physic.sr.sf
+            args.lora_checkpoint_name = f"LoRA_model_{args.task}_factor_{sr_f}_{(ckpt_epoch):03d}.pt"
             
         # parameters
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
@@ -121,6 +122,8 @@ def main(
                         solver_params_title = f"eta{args.eta}_zeta_{args.zeta}"
                     elif solver_type == "ddpm":
                         solver_params_title = f"param_{args.ddpm_param}"
+                    elif solver_type=="huen":
+                        solver_params_title = f"huen"
                     else:
                         raise ValueError(f"Solver {solver_type} do not exists.")
                     wandb.init(
@@ -134,7 +137,7 @@ def main(
                                 "dir": dir_w,
                                 "pertub":args.pertub,
                             },
-                            name = f"{formatted_time}{run_name}_Stochastic_{solver_type}_num_steps_{num_timesteps}_unfolded_iter_{args.max_unfolded_iter}_{init}_max_iter_{max_iter}_task_{args.task}_rank_{args.rank}_{solver_params_title}_epoch_{args.epoch}_T_AUG_{T_AUG}",
+                            name = f"{formatted_time}{run_name}_{solver_type}_num_steps_{num_timesteps}_unfolded_iter_{args.max_unfolded_iter}_{init}_max_iter_{max_iter}_task_{args.task}_rank_{args.rank}_{solver_params_title}_epoch_{args.epoch}_T_AUG_{T_AUG}",
                         )
                 # data
                 dir_test = "/users/cmk2000/sharedscratch/Datasets/testsets/imageffhq" #/users/cmk2000/sharedscratch/Datasets/testsets/ffhq or imageffhq
@@ -185,7 +188,8 @@ def main(
                     physic = phy.Deblurring(
                         sigma_model=args.physic.sigma_model,
                         device=device,
-                        transform_y=args.physic.transform_y,
+                        scale_image=args.physic.transform_y,
+                        operator_name=args.physic.operator_name,
                     )
                 elif args.task == "inp":
                     physic = phy.Inpainting(
@@ -197,8 +201,22 @@ def main(
                         index_jj = args.physic.inp.index_jj,
                         device=device,
                         sigma_model=args.physic.sigma_model,
-                        transform_y=args.physic.transform_y,
+                        scale_image=args.physic.transform_y,
                         mode=args.mode,
+                    )
+                elif args.task=="sr":
+                    physic = phy.SuperResolution(
+                        im_size=args.im_size,
+                        sigma_model=args.physic.sigma_model,
+                        device=device,
+                        scale_image=args.physic.transform_y,
+                        mode = args.mode,
+                    )
+                    kernels = phy.Kernels(
+                        operator_name=args.physic.operator_name,
+                        kernel_size=args.physic.kernel_size,
+                        device=device,
+                        mode = args.mode
                     )
                     
                 # HQS module
@@ -234,12 +252,14 @@ def main(
                     param_name_folder = os.path.join(f"zeta_{zeta}", f"eta_{eta}")
                 elif solver_type == "ddpm":
                     param_name_folder = f"ddpm_param_{args.ddpm_param}"
+                elif solver_type=="huen":
+                    param_name_folder = "huen"
                 else:
                     raise ValueError(f"Solver {solver_type} do not exists.")
                 
                 args.stochastic_rate = stochastic_rate
                 
-                root_dir_results = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, solver_type, use_lora, f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timesteps}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{args.lambda_}")
+                root_dir_results = os.path.join(args.path_save, args.task, f"Results_{args.physic.operator_name}", args.eval_date, solver_type, use_lora, f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timesteps}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{args.lambda_}")
                 
                 if args.evaluation.coverage or args.evaluation.metrics:
                     save_metric_path = os.path.join(root_dir_results, "metrics_results")
@@ -262,15 +282,19 @@ def main(
                 s_lpips = 0
                 count = 0   
                 results = {} 
-                if args.task == "deblur":
-                    blur = kernels.get_blur()
+                
+                # Blur kernel 
+                if args.task == "deblur" or args.task=="sr":    
+                    blur = kernels.get_blur(seed=1234)
+                    
                 # loop over testset 
                 for ii, im in enumerate(testset):
-                    if ii>100:
+                    if ii>max_images:
                         continue
                         
                     # True image
                     im_name = f"{(ii):05d}"
+                    
                     im = im.to(device)
                     x = utils.inverse_image_transform(im)
                     x_true = None
@@ -278,7 +302,9 @@ def main(
                     # observation y 
                     if args.task == "deblur":
                         y = physic.y(im, blur)
-                    else:
+                    elif args.task=="sr":
+                        y = physic.y(im, blur, args.physic.sr.sf)
+                    elif args.task=="inp":
                         y = physic.y(im)
                     
                     # coverage 
@@ -408,7 +434,7 @@ def main(
                         plt.savefig(os.path.join(metric_path, f"sampledist_{im_name}.png"))
 
                     # sliced wasserstein distance
-                    if args.evaluation.swd:    
+                    if args.evaluation.save_images:   
                         # save images for fid and cmmd evaluation
                         utils.save_images(ref_path, x, im_name)
                         utils.save_images(mmse_path, X_posterior_mean, im_name)
@@ -460,11 +486,14 @@ def main(
                 
                 wandb.finish()  
     return args 
+
+
 if __name__ == "__main__":
 
     for solver in SOLVER_TYPES:
         for steps in NUM_TIMESTEPS:
-            args = main(steps, solver, max_iter=max_iter)
+            for eta in [0.8]:# [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]:
+                args = main(steps, solver, max_iter=max_iter,eta= eta)
     args.step = steps
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -477,11 +506,11 @@ if __name__ == "__main__":
     vec_ssim_mmse = []
     vec_lpips_mmse = []
     vec_fid_last = []
-    if 0:
+    if max_images>50:
         for num_timestep in NUM_TIMESTEPS:
             for lambda_ in [args.lambda_]:
-                root_dir = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{lambda_}")
-                save_metric_path = os.path.join(args.path_save, args.task, f"Results{run_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", "metrics_evaluated")
+                root_dir = os.path.join(args.path_save, args.task, f"Results_{args.physic.operator_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", f"lambda_{lambda_}")
+                save_metric_path = os.path.join(args.path_save, args.task, f"Results_{args.physic.operator_name}", args.eval_date, "ddim", "lora", f"Max_iter_{max_iter}", f"unroll_iter_{args.max_unfolded_iter}", f"timesteps_{num_timestep}", f"Epoch_{args.epoch}", f"T_AUG_{T_AUG}", param_name_folder, f"stochastic_{args.stochastic_rate}", "metrics_evaluated")
                 root_dir_csv = os.path.join(root_dir, "metrics_results")
                 # FID
                 out= Fid_evatuation(root_dir, device)

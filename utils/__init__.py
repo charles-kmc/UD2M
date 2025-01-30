@@ -13,4 +13,4 @@ from .utils import (
     get_rgb_from_tensor
 )
 from .get_logger import get_loggers
-from .lora_parametrisation import LoRa_model
+from .lora_parametrisation import LoRa_model,enable_disable_lora
