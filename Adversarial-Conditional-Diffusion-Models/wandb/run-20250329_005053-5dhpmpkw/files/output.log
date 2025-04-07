@@ -1,0 +1,201 @@
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+
+  | Name             | Type                                  | Params | Mode
+-----------------------------------------------------------------------------------
+0 | model            | UNetModel                             | 93.6 M | train
+1 | discriminator    | DiscriminatorModel                    | 762 K  | train
+2 | mseLoss          | MSELoss                               | 0      | train
+3 | adversarial_loss | BCEWithLogitsLoss                     | 0      | train
+4 | lpips            | LearnedPerceptualImagePatchSimilarity | 14.7 M | train
+-----------------------------------------------------------------------------------
+830 K     Trainable params
+108 M     Non-trainable params
+109 M     Total params
+436.415   Total estimated model params size (MB)
+593       Modules in train mode
+59        Modules in eval mode
+Epoch 0:   0%|          | 0/356 [00:00<?, ?it/s]                            
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/connectors/data_connector.py:476: Your `val_dataloader`'s sampler has shuffling enabled, it is strongly recommended that you turn shuffling off for val/test dataloaders.
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/functional/image/lpips.py:325: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.load_state_dict(torch.load(model_path, map_location="cpu"), strict=False)
+/users/cmk2000/cmk2000/Deep learning models/LLMs/Regularised_CDM/DPIR/dpir_models.py:33: FutureWarning: You are using `torch.load` with `weights_only=False` (the current default value), which uses the default pickle module implicitly. It is possible to construct malicious pickle data which will execute arbitrary code during unpickling (See https://github.com/pytorch/pytorch/blob/main/SECURITY.md#untrusted-models for more details). In a future release, the default value for `weights_only` will be flipped to `True`. This limits the functions that could be executed during unpickling. Arbitrary objects will no longer be allowed to be loaded via this mode unless they are explicitly allowlisted by the user via `torch.serialization.add_safe_globals`. We recommend you start setting `weights_only=True` for any use case where you don't have full control of the loaded file. Please open an issue on GitHub for any issues related to this experimental feature.
+  self.model.load_state_dict(torch.load(model_path), strict=True)
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/wandb/sdk/data_types/image.py:512: RuntimeWarning: invalid value encountered in cast
+  return data.clip(0, 255).astype(np.uint8)
+2025-03-29 00:50:55,761 - WARNING - Images sizes do not match. This will causes images to be display incorrectly in the UI.
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/connectors/logger_connector/result.py:434: It is recommended to use `self.log('test -- g_loss', ..., sync_dist=True)` when logging on epoch level in distributed setting to accumulate the metric across devices.
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/connectors/logger_connector/result.py:434: It is recommended to use `self.log('mse', ..., sync_dist=True)` when logging on epoch level in distributed setting to accumulate the metric across devices.
+/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/connectors/logger_connector/result.py:434: It is recommended to use `self.log('psnr', ..., sync_dist=True)` when logging on epoch level in distributed setting to accumulate the metric across devices.
+Traceback (most recent call last):
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Regularised_CDM/main.py", line 221, in <module>
+    main()
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Regularised_CDM/main.py", line 216, in main
+    trainer.fit(pl_model, trainloader, valid_loader)
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/trainer.py", line 539, in fit
+    call._call_and_handle_interrupt(
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/call.py", line 46, in _call_and_handle_interrupt
+    return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/strategies/launchers/subprocess_script.py", line 105, in launch
+    return function(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/trainer.py", line 575, in _fit_impl
+    self._run(model, ckpt_path=ckpt_path)
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/trainer.py", line 982, in _run
+    results = self._run_stage()
+              ^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/trainer.py", line 1026, in _run_stage
+    self.fit_loop.run()
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/fit_loop.py", line 216, in run
+    self.advance()
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/fit_loop.py", line 455, in advance
+    self.epoch_loop.run(self._data_fetcher)
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 150, in run
+    self.advance(data_fetcher)
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 322, in advance
+    batch_output = self.manual_optimization.run(kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/optimization/manual.py", line 94, in run
+    self.advance(kwargs)
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/optimization/manual.py", line 114, in advance
+    training_step_output = call._call_strategy_hook(trainer, "training_step", *kwargs.values())
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/call.py", line 323, in _call_strategy_hook
+    output = fn(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/strategies/strategy.py", line 390, in training_step
+    return self._forward_redirection(self.model, self.lightning_module, "training_step", *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/strategies/strategy.py", line 641, in __call__
+    wrapper_output = wrapper_module(*args, **kwargs)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1636, in forward
+    else self._run_ddp_forward(*inputs, **kwargs)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1454, in _run_ddp_forward
+    return self.module(*inputs, **kwargs)  # type: ignore[index]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/strategies/strategy.py", line 634, in wrapped_forward
+    out = method(*_args, **_kwargs)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Regularised_CDM/unfolded_models/unfolded_models.py", line 282, in training_step
+    g_loss += self.args.train.scale_lpips*self.lpips(xest.add(1).div(2), batch.add(1).div(2)).mean()
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/metric.py", line 312, in forward
+    self._forward_cache = self._forward_reduce_state_update(*args, **kwargs)
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/metric.py", line 381, in _forward_reduce_state_update
+    self.update(*args, **kwargs)
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/metric.py", line 483, in wrapped_func
+    update(*args, **kwargs)
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/image/lpip.py", line 140, in update
+    loss, total = _lpips_update(img1, img2, net=self.net, normalize=self.normalize)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/functional/image/lpips.py", line 385, in _lpips_update
+    raise ValueError(
+ValueError: Expected both input arguments to be normalized tensors with shape [N, 3, H, W]. Got input with shape torch.Size([4, 3, 256, 256]) and torch.Size([4, 3, 256, 256]) and values in range [tensor(nan, device='cuda:0', grad_fn=<MinBackward1>), tensor(nan, device='cuda:0', grad_fn=<MaxBackward1>)] and [tensor(0.0047, device='cuda:0'), tensor(0.9750, device='cuda:0')] when all values are expected to be in the [-1, 1] range.
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Regularised_CDM/main.py", line 221, in <module>
+[rank0]:     main()
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Regularised_CDM/main.py", line 216, in main
+[rank0]:     trainer.fit(pl_model, trainloader, valid_loader)
+[rank0]:     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/trainer.py", line 539, in fit
+[rank0]:     call._call_and_handle_interrupt(
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/call.py", line 46, in _call_and_handle_interrupt
+[rank0]:     return trainer.strategy.launcher.launch(trainer_fn, *args, trainer=trainer, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/strategies/launchers/subprocess_script.py", line 105, in launch
+[rank0]:     return function(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/trainer.py", line 575, in _fit_impl
+[rank0]:     self._run(model, ckpt_path=ckpt_path)
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/trainer.py", line 982, in _run
+[rank0]:     results = self._run_stage()
+[rank0]:               ^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/trainer.py", line 1026, in _run_stage
+[rank0]:     self.fit_loop.run()
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/fit_loop.py", line 216, in run
+[rank0]:     self.advance()
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/fit_loop.py", line 455, in advance
+[rank0]:     self.epoch_loop.run(self._data_fetcher)
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 150, in run
+[rank0]:     self.advance(data_fetcher)
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/training_epoch_loop.py", line 322, in advance
+[rank0]:     batch_output = self.manual_optimization.run(kwargs)
+[rank0]:                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/optimization/manual.py", line 94, in run
+[rank0]:     self.advance(kwargs)
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/loops/optimization/manual.py", line 114, in advance
+[rank0]:     training_step_output = call._call_strategy_hook(trainer, "training_step", *kwargs.values())
+[rank0]:                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/trainer/call.py", line 323, in _call_strategy_hook
+[rank0]:     output = fn(*args, **kwargs)
+[rank0]:              ^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/strategies/strategy.py", line 390, in training_step
+[rank0]:     return self._forward_redirection(self.model, self.lightning_module, "training_step", *args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/strategies/strategy.py", line 641, in __call__
+[rank0]:     wrapper_output = wrapper_module(*args, **kwargs)
+[rank0]:                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1636, in forward
+[rank0]:     else self._run_ddp_forward(*inputs, **kwargs)
+[rank0]:          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1454, in _run_ddp_forward
+[rank0]:     return self.module(*inputs, **kwargs)  # type: ignore[index]
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/pytorch_lightning/strategies/strategy.py", line 634, in wrapped_forward
+[rank0]:     out = method(*_args, **_kwargs)
+[rank0]:           ^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/cmk2000/Deep learning models/LLMs/Regularised_CDM/unfolded_models/unfolded_models.py", line 282, in training_step
+[rank0]:     g_loss += self.args.train.scale_lpips*self.lpips(xest.add(1).div(2), batch.add(1).div(2)).mean()
+[rank0]:                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1553, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1562, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/metric.py", line 312, in forward
+[rank0]:     self._forward_cache = self._forward_reduce_state_update(*args, **kwargs)
+[rank0]:                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/metric.py", line 381, in _forward_reduce_state_update
+[rank0]:     self.update(*args, **kwargs)
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/metric.py", line 483, in wrapped_func
+[rank0]:     update(*args, **kwargs)
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/image/lpip.py", line 140, in update
+[rank0]:     loss, total = _lpips_update(img1, img2, net=self.net, normalize=self.normalize)
+[rank0]:                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/users/cmk2000/.conda/envs/dmog_env39/lib/python3.12/site-packages/torchmetrics/functional/image/lpips.py", line 385, in _lpips_update
+[rank0]:     raise ValueError(
+[rank0]: ValueError: Expected both input arguments to be normalized tensors with shape [N, 3, H, W]. Got input with shape torch.Size([4, 3, 256, 256]) and torch.Size([4, 3, 256, 256]) and values in range [tensor(nan, device='cuda:0', grad_fn=<MinBackward1>), tensor(nan, device='cuda:0', grad_fn=<MaxBackward1>)] and [tensor(0.0047, device='cuda:0'), tensor(0.9750, device='cuda:0')] when all values are expected to be in the [-1, 1] range.

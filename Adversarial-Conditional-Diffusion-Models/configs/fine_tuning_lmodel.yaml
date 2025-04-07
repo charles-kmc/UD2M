@@ -1,0 +1,95 @@
+
+noise_schedule_type: linear
+ddpm_param: 1
+seed: 46
+use_wandb: True
+save_progressive: True
+init_xt_y: False
+pertub: True
+mode: train
+
+save_checkpoint_range: 30
+save_checkpoint_dir: /users/cmk2000/sharedscratch/CKM/Regularised_CDM
+save_dir: /users/cmk2000/sharedscratch/CKM/Regularised_CDM/Results
+
+in_channels: 3
+out_channels: 3
+im_size: 256
+num_channels: 128
+num_gpus: 1
+
+data:
+  in_channels: 3
+  out_channels: 3
+  im_size: 256
+  test_batch_size: 1
+  num_workers: 0
+  shuffle: True
+  train_batch_size: 4
+  # dataset_path: /users/cmk2000/sharedscratch/Datasets/ffhq_dataset
+  dataset_path: /users/cmk2000/sharedscratch/Datasets/training_CT_data/trainingset_true_tiff
+  dataset_name: CT    # CT. ImageNet FFHQ
+
+model:
+  use_lora: true
+  rank: 5
+  target_modules: ["qkv", "proj_out"]
+  frozen_model_name: diffusion_ffhq_10m 
+  frozen_model_dir: /users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo
+
+train:
+  adversarial: 1
+  num_z_train: 1
+  num_z_test: 1
+  gp_weight: 0.01
+  beta_2: 0.999
+  beta_1: 0.5
+  learning_rate: 0.0001
+  num_epochs: 1000
+  resume: False
+  resume_epoch: 0
+  gradient_accumulation: False
+  acc_grad_step: 10
+  gradient_clip: True
+  scale_lpips: 0.1
+  gradient_scale_dist: 0.01
+
+dpir:
+  use_dpir: True
+  pretrained_pth: 
+  pretrained_pth: /users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo
+  model_name: drunet_color #"ircnn_color, drunet_color",
+
+physic:
+  kernel_size: 25
+  operator_name: box  #"gaussian", "uniform_motion", "random", "box"
+  random_blur: False
+  sigma_model: 0.05
+  transform_y: True
+    
+  inp:
+    mask_rate: 0.5
+    # operator_name: random
+    box_proportion: 0.4
+    index_ii: None
+    index_jj: None
+      
+  deblur:
+    random_blur: False
+      
+  sr:
+    sf: 4
+  ct:
+    angles: 78
+    step_algo: 0.00001
+    max_iter_algo: 10
+
+evaluation:
+  save_images: True
+  fid: True
+  swd: True
+  cmmd: True
+  metrics: True
+  skipper: 2
+  coverage: False
+    

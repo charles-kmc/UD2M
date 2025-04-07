@@ -16,7 +16,7 @@ def args_unfolded():
         "save_progressive":True,
         "init_xt_y":False,
         "pertub":True,
-        "train_batch_size":8,
+        "train_batch_size":4,
         "shuffle":True,
         "test_batch_size":1,
         "num_workers":0,

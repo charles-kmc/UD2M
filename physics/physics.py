@@ -389,7 +389,7 @@ class SuperResolution:
         self.sigma_model = 2 * sigma_model if self.scale_image else sigma_model
         self.dtype = dtype
         self.mode = mode
-        self.bool = 0
+        self.bool = 1
     
     def upsample(self, x):
         '''s-fold upsampler

@@ -1,0 +1,10 @@
+{"time":"2025-03-29T00:44:21.478065665Z","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2025-03-29T00:44:21.478080994Z","level":"INFO","msg":"created symlink","path":"wandb/run-20250329_004421-8ycl8evc/logs/debug-core.log"}
+{"time":"2025-03-29T00:44:21.47919768Z","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2025-03-29T00:44:21.489909496Z","level":"INFO","msg":"created new stream","id":"8ycl8evc"}
+{"time":"2025-03-29T00:44:21.489927339Z","level":"INFO","msg":"stream: started","id":"8ycl8evc"}
+{"time":"2025-03-29T00:44:21.489946275Z","level":"INFO","msg":"handler: started","stream_id":{"value":"8ycl8evc"}}
+{"time":"2025-03-29T00:44:21.489992552Z","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"8ycl8evc"}}
+{"time":"2025-03-29T00:44:21.4901196Z","level":"INFO","msg":"sender: started","stream_id":{"value":"8ycl8evc"}}
+{"time":"2025-03-29T00:44:21.938540999Z","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2025-03-29T00:44:21.941088711Z","level":"INFO","msg":"Starting system monitor"}

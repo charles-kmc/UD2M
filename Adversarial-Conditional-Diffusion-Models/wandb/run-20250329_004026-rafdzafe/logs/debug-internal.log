@@ -1,0 +1,21 @@
+{"time":"2025-03-29T00:40:26.981532099Z","level":"INFO","msg":"using version","core version":"0.18.3"}
+{"time":"2025-03-29T00:40:26.981545133Z","level":"INFO","msg":"created symlink","path":"wandb/run-20250329_004026-rafdzafe/logs/debug-core.log"}
+{"time":"2025-03-29T00:40:26.982898323Z","level":"ERROR","msg":"dialing: google: could not find default credentials. See https://cloud.google.com/docs/authentication/external/set-up-adc for more information"}
+{"time":"2025-03-29T00:40:26.991770818Z","level":"INFO","msg":"created new stream","id":"rafdzafe"}
+{"time":"2025-03-29T00:40:26.991784944Z","level":"INFO","msg":"stream: started","id":"rafdzafe"}
+{"time":"2025-03-29T00:40:26.991803299Z","level":"INFO","msg":"handler: started","stream_id":{"value":"rafdzafe"}}
+{"time":"2025-03-29T00:40:26.991844907Z","level":"INFO","msg":"writer: Do: started","stream_id":{"value":"rafdzafe"}}
+{"time":"2025-03-29T00:40:26.991983978Z","level":"INFO","msg":"sender: started","stream_id":{"value":"rafdzafe"}}
+{"time":"2025-03-29T00:40:27.393588004Z","level":"INFO","msg":"wandb-core","!BADKEY":null}
+{"time":"2025-03-29T00:40:27.396064202Z","level":"INFO","msg":"Starting system monitor"}
+{"time":"2025-03-29T00:40:30.723064792Z","level":"INFO","msg":"stream: closing","id":"rafdzafe"}
+{"time":"2025-03-29T00:40:30.723209674Z","level":"INFO","msg":"Stopping system monitor"}
+{"time":"2025-03-29T00:40:30.725990013Z","level":"INFO","msg":"Stopped system monitor"}
+{"time":"2025-03-29T00:40:30.884345484Z","level":"WARN","msg":"No job ingredients found, not creating job artifact"}
+{"time":"2025-03-29T00:40:30.884353239Z","level":"WARN","msg":"No source type found, not creating job artifact"}
+{"time":"2025-03-29T00:40:30.884357056Z","level":"INFO","msg":"sender: sendDefer: no job artifact to save"}
+{"time":"2025-03-29T00:40:31.35255724Z","level":"INFO","msg":"fileTransfer: Close: file transfer manager closed"}
+{"time":"2025-03-29T00:40:31.739994092Z","level":"INFO","msg":"handler: closed","stream_id":{"value":"rafdzafe"}}
+{"time":"2025-03-29T00:40:31.740021683Z","level":"INFO","msg":"writer: Close: closed","stream_id":{"value":"rafdzafe"}}
+{"time":"2025-03-29T00:40:31.740232569Z","level":"INFO","msg":"sender: closed","stream_id":{"value":"rafdzafe"}}
+{"time":"2025-03-29T00:40:31.742130422Z","level":"INFO","msg":"stream: closed","id":"rafdzafe"}

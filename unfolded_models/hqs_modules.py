@@ -51,7 +51,7 @@ class HQS_models:
         x:torch.Tensor, 
         t:int, 
         max_iter:int = 3,
-        T_AUG:int = 5, #15
+        T_AUG:int = 15, #15
         lambda_sig:float = 1.0
     ) -> dict:
         self.obs = obs
@@ -88,7 +88,7 @@ class HQS_models:
                 noise = torch.randn_like(zest)
                 val = 1 * torch.ones_like(t_denoising).long()
                 max_val = 1000 * torch.ones_like(t_denoising).long()
-                tu = torch.clamp(t_denoising+0, val, max_val) #3
+                tu = torch.clamp(t_denoising+3, val, max_val) #3
                 z_input = self.diffusion_scheduler.sample_xt(zest, tu, noise=noise)
                 wandb.log({"t_denoiser":t_denoising.ravel()[0]})
             else:
@@ -100,6 +100,8 @@ class HQS_models:
             
             # estimate of x_start
             x = self.diffusion_scheduler.predict_xstart_from_eps(z_input, t_denoising, eps)
+            if self.args.task=="inp":
+                x = self.physic.Mask*x + (1-self.physic.Mask)*y
             x_0 = utils.inverse_image_transform(x)
             x_0 = torch.clamp(x_0, 0.0, 1.0)
             

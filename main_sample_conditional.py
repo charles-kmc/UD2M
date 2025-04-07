@@ -39,17 +39,17 @@ def linear_indices(num_iter, lambda_min=0.3,lambda_max=0.6):
         lambd = np.array([0.32])
     lambd = lambd.reshape(1,-1)
     return lambd, seq
-max_images = 0
+max_images = 10
 max_iter = 1
 ddpm_param = 1
 run_name = "_sr_sampling"
 # LAMBDA, INDICES = linear_indices(max_iter)
 stochastic_model = False
 stochastic_rate = 0.05
-SOLVER_TYPES =  ["huen"]
+SOLVER_TYPES =  ["ddim"]
 LORA = True
 MAX_UNFOLDED_ITER = [3]
-NUM_TIMESTEPS = [100]#[50, 100, 200, 300, 500, 700, 800, 1000]
+NUM_TIMESTEPS = [500]#[50, 100, 200, 300, 500, 700, 800, 1000]
 eta =1.0   # sr=0.8
 T_AUG = 0
 ZETA = [0.6]#[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]#[0.1] #op 0.4 or 0.6 sr = 0.9
@@ -362,7 +362,7 @@ def main(
                         psnr_val = metrics.psnr_function(out["xstart_pred"], x)
                         wandb.log({f"psnrs": psnr_val}) 
                         
-                    if args.use_wandb and ii%20 == 0:
+                    if args.use_wandb and ii%2 == 0:
                         im_wdb = wandb.Image(
                             utils.get_rgb_from_tensor(x), 
                             caption=f"true image", 

@@ -18,6 +18,7 @@ from accelerate import Accelerator
 from torch.optim import AdamW
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from .diffusion_schedulers import DiffusionScheduler, GetDenoisingTimestep
 from .hqs_modules import HQS_models
@@ -87,9 +88,9 @@ class Trainer:
         self.copy_model = copy.deepcopy(self.model)
         
         # ---> Discriminator 
-        discriminator = wgan.Discriminator(self.args.im_size).to(device)
-        discriminator.apply(wgan.weights_init_normal)
-        self.discriminator = discriminator.to(device)
+        D_model = wgan.ProjectedDiscriminator().to(device)
+        D_model.apply(wgan.weights_init_normal)
+        self.D_model = D_model.to(device)
         
         # ---> set seed
         self._seed(self.args.seed)
@@ -111,9 +112,9 @@ class Trainer:
         b1 = 0.5
         b2 = 0.999
         self.optimizer = AdamW(self.model_params_learnable, lr=self.args.learning_rate, weight_decay=self.args.weight_decay)
-        self.optimizer_D = torch.optim.Adam(self.discriminator.parameters(), lr=self.args.learning_rate, betas=(b1, b2))
+        self.optimizer_D = torch.optim.Adam(self.D_model.parameters(), lr=self.args.learning_rate, betas=(b1, b2))
         self.optimizer_info = torch.optim.Adam(
-            itertools.chain(self.model_params_learnable, self.discriminator.parameters()), lr=self.args.learning_rate, betas=(b1, b2))
+            itertools.chain(self.model_params_learnable, self.D_model.parameters()), lr=self.args.learning_rate, betas=(b1, b2))
         
         # ---> Scheduler
         self.scheduler = torch.optim.lr_scheduler.StepLR(self.optimizer, step_size=int(100 * 0.2), gamma=0.1)
@@ -262,35 +263,36 @@ class Trainer:
                     if epoch ==0 and ii == 0:
                         self.save_args_yaml()
                     
-                    # ---> loss
-                    loss = nn.MSELoss()(eps_pred, noise_target).mean() #nn.MSELoss()(xstart_pred, utils.inverse_image_transform(batch_0)).mean()
-            
+                    ## ---> Discriminator
+                    # Minimize logits for generated images.
+                    gen_logits = self.D_model(out["xstart_pred"])
+                    loss_gen = (F.relu(torch.ones_like(gen_logits) + gen_logits)).mean() / B
+                    self.accelerator.backward(loss_gen, retain_graph=True) 
+
+                    # Maximize logits for real images.
+                    real_img_tmp = batch_0.add(1).div(2).detach().requires_grad_(False)
+                    real_logits = self.D_model(real_img_tmp)
+                    loss_real = (F.relu(torch.ones_like(real_logits) - real_logits)).mean() / B
+                    self.accelerator.backward(loss_real, retain_graph=True) 
+                    
+                    # ---> updating learnable parameters and setting gradient to zero 
+                    self.optimizer.step() 
+                    self.D_model.zero_grad()
+
+                    ## ---> Genarator - Diffusion model
+                    # Consistancy loss
+                    loss = nn.MSELoss()(eps_pred, noise_target).mean() / B
+                    
+                    # Maximize logits for generated images.
+                    gen_logits = self.D_model(out["xstart_pred"])
+                    loss += (-gen_logits).mean() / B
+
                     # ---> updating learnable parameters and setting gradient to zero
                     self.accelerator.backward(loss)        
                     self.optimizer.step() 
                     self.model.zero_grad()
                     
-                    # ----------------------#
-                    #  Train Discriminator  #
-                    # ----------------------#
-                    if self.args.adversarial:
-                        self.optimizer_D.zero_grad()
-                    
-                        # ---> Loss for real images
-                        real_pred = self.discriminator(utils.inverse_image_transform(batch_0))
-                        d_real_loss = self.adversarial_loss(real_pred, valid)
-
-                        # ---> Loss for fake images
-                        fake_pred = self.discriminator(xstart_pred.detach())
-                        d_fake_loss = self.adversarial_loss(fake_pred, fake)
-
-                        # ---> Total discriminator loss
-                        d_loss = (d_real_loss + d_fake_loss) / 2
-
-                        d_loss.backward()
-                        self.optimizer_D.step()
-                    
-                    # ---> update scheduler    
+                    ## ---> update scheduler    
                     self.scheduler.step()
 
 
@@ -516,10 +518,10 @@ class Trainer:
         checkpoint_dir = bf.join(self.args.path_save, self.args.task, "Checkpoints", self.args.date, f"model_noise_{self.args.physic.sigma_model}") 
         try:
             unwrap_model = self.accelerator.unwrap_model(self.model)
-            unwrap_discriminator = self.accelerator.unwrap_model(self.discriminator)
+            unwrap_D_model = self.accelerator.unwrap_model(self.D_model)
         except:
             unwrap_model = self.model
-            unwrap_discriminator = self.discriminator
+            unwrap_D_model = self.D_model
         
         # state dict 
         trainable_lora_state_dict = {name: param for name, param in unwrap_model.named_parameters() if param.requires_grad}  
@@ -538,7 +540,7 @@ class Trainer:
                         'model_state_dict': trainable_lora_state_dict,
                         'optimizer_state_dict': self.optimizer.state_dict(),
                         'scheduler_state_dict': self.scheduler.state_dict(),  
-                        'discriminator_state_dict': self.discriminator.state_dict(),  
+                        'D_model_state_dict': self.D_model.state_dict(),  
                         "epoch":epoch
                     }, 
                     f
@@ -556,8 +558,8 @@ class Trainer:
         self.copy_model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)
         
         if trainable_state_dict["model_state_dict"] is not None:
-            if hasattr(self, "discriminator"):
-                self.discriminator.load_state_dict(trainable_state_dict["discriminator_state_dict"], strict=False)
+            if hasattr(self, "D_model"):
+                self.D_model.load_state_dict(trainable_state_dict["D_model_state_dict"], strict=False)
                 
         
     # resume training 
