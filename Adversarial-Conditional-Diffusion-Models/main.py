@@ -125,6 +125,7 @@ def main():
         )
     sampler = RandomSampler(train_dataset, num_samples=args.data.number_sample_per_epoch, replacement=False) if args.data.is_random_sampler else None
     
+    print(f"\t ************************************\t{len(train_dataset)} \t *********************************")
     trainloader = DataLoader(
         train_dataset, 
         batch_size = args.data.train_batch_size, 
@@ -206,8 +207,9 @@ def main():
     
     os.makedirs(os.path.join(args.save_checkpoint_dir, 'wandb', date), exist_ok=True)
     wandb_logger = WandbLogger(
-        project=f"Adversarial Conditional diffusion models {args.task} {args.physic.operator_name}",  
-        name=date+"_"+args.task+"_lambda"+str(args.lambda_)+"_"+args.physic.operator_name+f"_{args.data.dataset_name}",
+        project=f"Adversarial Conditional diffusion models {args.task} {args.physic.operator_name} {args.data.dataset_name}",  
+        # name=date+"_"+args.task+"_lambda"+str(args.lambda_)+"_"+args.physic.operator_name+f"_{args.data.dataset_name}",
+        name=date+"_"+args.task+"_lambda"+str(args.lambda_),
         log_model=False,
         # save_dir=args.save_checkpoint_dir + 'wandb' + date,
     )
