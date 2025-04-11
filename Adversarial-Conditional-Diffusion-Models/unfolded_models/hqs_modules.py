@@ -80,7 +80,7 @@ class HQS_models:
             self.params["step_algo"] =  self.args.physic.ct.step_algo
     
         # --- initialisation
-        # x = x / extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t_denoising, x_t.shape).ravel()[0]
+        x = x / models.extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t_denoising, x_t.shape).ravel()[0]
         
         for ii in range(max_iter):
             # prox step
@@ -118,7 +118,6 @@ class HQS_models:
             if self.args.task=="inp" and ii<max_iter-1:
                 x = (1-self.physic.Mask)*x + (self.physic.Mask)*y
         
-        print(x.max(), x.min())    
         pred_eps = self.diffusion_scheduler.predict_eps_from_xstrat(x_t, t, x)
         if self.args.use_wandb:
             wandb.log({"max x":x.max(),"min x":x.min()})

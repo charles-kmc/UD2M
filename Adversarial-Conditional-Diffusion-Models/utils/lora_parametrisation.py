@@ -49,6 +49,7 @@ def apply_lora_parametrization(model, target_layer, rank):
     for name, layer in model.named_modules():
     #    Check if the layer name ends with "qkv" or "proj_out"
         if name.endswith(tuple(target_layer)):
+            print(f"Applying LoRA to {name}")
             P.register_parametrization(layer, "weight", layer_parametrisation(layer, rank=rank))           
 
 def LoRa_model(model, target_layer, rank = 2):

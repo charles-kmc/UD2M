@@ -12,6 +12,9 @@ import unfolded_models as um
 import physics as phy
 import utils as utils
 
+from lsun_diffusion.pytorch_diffusion.ckpt_util import get_ckpt_path
+
+
 def main():
     # args
     date = datetime.datetime.now().strftime("%d-%m-%Y")
@@ -40,17 +43,29 @@ def main():
     
     # datasets
     prop = 0.2
-    datasets = GetDatasets(
-        args.dataset_path, 
-        args.im_size, 
-        dataset_name=args.dataset_name,
-    )
-    train_size = int(prop * len(datasets))
-    test_size = len(datasets) - train_size
-    train_dataset, test_dataset = random_split(
-        datasets, 
-        [train_size, test_size]
-    )
+    if args.dataset_name=="LSUN":
+        test_dataset = GetDatasets(
+            os.path.join(args.dataset_path, "train"), 
+            args.im_size, 
+            dataset_name=args.dataset_name,
+        )
+        test_dataset = GetDatasets(
+            os.path.join(args.dataset_path, "val"), 
+            args.im_size, 
+            dataset_name=args.dataset_name,
+        )
+    else:
+        datasets = GetDatasets(
+            args.dataset_path, 
+            args.im_size, 
+            dataset_name=args.dataset_name,
+        )
+        train_size = int(prop * len(datasets))
+        test_size = len(datasets) - train_size
+        train_dataset, test_dataset = random_split(
+            datasets, 
+            [train_size, test_size]
+        )
     trainloader = DataLoader(
         train_dataset, 
         batch_size=args.train_batch_size, 
@@ -65,14 +80,23 @@ def main():
     )
     
     # model 
-    frozen_model_name = 'diffusion_ffhq_10m' 
     frozen_model_dir = '/users/cmk2000/sharedscratch/Pretrained-Checkpoints/model_zoo' 
-    frozen_model_path = os.path.join(frozen_model_dir, f'{frozen_model_name}.pt')
-    frozen_model, _ = load_frozen_model(frozen_model_name, frozen_model_path, device)
+    if args.dataset_name=="LSUN":
+        model_name = "lsun_bedroom" #"ema_lsun_bedroom"
+        frozen_model_path,_ = get_ckpt_path(model_name, root=frozen_model_dir)
+        frozen_model = load_frozen_model(frozen_model_path, device)
+        target_modules = ["q", "k", "v", "proj_out"] 
+    elif args.dataset_name=="FFHQ":
+        frozen_model_name = 'diffusion_ffhq_10m' 
+        frozen_model_path = os.path.join(frozen_model_dir, f'{frozen_model_name}.pt')
+        frozen_model, _ = load_frozen_model(frozen_model_name, frozen_model_path, device)
+        target_modules = ["qkv", "proj_out"]
+    else:
+        raise ValueError(f"We don't have a pre-trained model for this dataset: {args.dataset_name}")
     
     # LoRA model 
+    args.target_modules = target_modules
     model = copy.deepcopy(frozen_model)
-    target_modules = ["qkv", "proj_out"]
     utils.LoRa_model(
         model, 
         target_layer =target_modules, 

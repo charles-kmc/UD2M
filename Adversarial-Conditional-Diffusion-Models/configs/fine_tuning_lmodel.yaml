@@ -23,12 +23,15 @@ data:
   out_channels: 3
   im_size: 256
   test_batch_size: 1
-  num_workers: 0
+  num_workers: 32
   shuffle: True
   train_batch_size: 4
+  number_sample_per_epoch: 3000
+  is_random_sampler: True
   # dataset_path: /users/cmk2000/sharedscratch/Datasets/ffhq_dataset
-  dataset_path: /users/cmk2000/sharedscratch/Datasets/training_CT_data/trainingset_true_tiff
-  dataset_name: CT    # CT. ImageNet FFHQ
+  dataset_path: "" #/training_CT_data/trainingset_true_tiff
+  root: /users/cmk2000/sharedscratch/Datasets #/training_CT_data/trainingset_true_tiff
+  dataset_name: LSUN  # CT, ImageNet FFHQ, LSUN
 
 model:
   use_lora: true

@@ -143,16 +143,8 @@ def main(
                 
                 # -- model
                 model = models.adapter_lora_model(args)    
-                for name, params in model.named_parameters():
-                    if "lora" in name:
-                        print(params[1,:])
-                        break
-                    
                 models.load_trainable_params(model, args)
-                for name, params in model.named_parameters():
-                    if "lora" in name:
-                        print(params[1,:])
-                        break
+             
                 # Diffusion noise
                 diffusion_scheduler = ums.DiffusionScheduler(device=device,noise_schedule_type=args.noise_schedule_type)
        

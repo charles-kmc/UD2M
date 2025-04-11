@@ -3,9 +3,10 @@ import copy
 import datetime
 import yaml
 import wandb
+import pandas as pd
 
 import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, RandomSampler
 import torch.profiler as tp
 from models.load_model import load_frozen_model
 from datasets.datasets import GetDatasets
@@ -15,11 +16,36 @@ import unfolded_models as um
 import physics as phy
 import utils as utils
 
+from lsun_diffusion.pytorch_diffusion.ckpt_util import get_ckpt_path
+
+
 import pytorch_lightning as pl
 from pytorch_lightning.profilers import PyTorchProfiler
 from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning import seed_everything
 from pytorch_lightning.loggers import WandbLogger
+
+
+def extract_image_paths(root_dir):
+    image_paths = []
+    labels = []
+    
+    # Traverse through the root directory
+    df = pd.DataFrame(columns=["img_path"])
+    s_dir = "/users/cmk2000/sharedscratch/Datasets/LSUN/infos"
+    os.makedirs(s_dir, exist_ok=True)
+    for root, dirs, files in os.walk(root_dir):
+        d = []
+        for file in files:
+            # Assuming images are jpg, jpeg, png. You can extend it to other formats.
+            if file.endswith(('.webp')):
+                image_path = os.path.join(root, file)
+                label = os.path.basename(root)  # Label is the folder name
+                d.append(image_path)
+                new_row = pd.DataFrame({"img_path": d})
+                df = pd.concat([df, new_row], ignore_index=True)
+                
+        df.to_csv(os.path.join(s_dir,"lsun_bedroom_infos.csv"), index=False)
 
 def main():
     # logger 
@@ -27,18 +53,18 @@ def main():
     # args
     date = datetime.datetime.now().strftime("%d-%m-%Y")
     config = configs()
-    print(os.path.join(script_dir,"configs", config.config_file))
     with open(os.path.join(script_dir, "configs", config.config_file), 'r') as file:
         config_dict = yaml.safe_load(file)
     args = utils.dict_to_dotdict(config_dict)
     args.task = config.task
+    args.data.dataset_name = config.dataset
     args.physic.operator_name = config.operator_name
     if config.task == "inp":
         args.dpir.use_dpir = config.use_dpir
     args.lambda_ = config.lambda_
     args.date = date
     args.max_unfolded_iter = 3
-   
+    
     # logger 
     script_path = script_dir.rsplit("/", 1)[0]
     log_dir = os.path.join(script_path, "Z_logs", f"Logger_CDM_{args.task}", date)
@@ -50,32 +76,61 @@ def main():
     
     # datasets
     if args.data.dataset_name=="FFHQ":
-        args.data.dataset_path =  "/users/cmk2000/sharedscratch/Datasets/ffhq_dataset"
+        args.data.dataset_path =  f"{args.data.root}/ffhq_dataset"
     elif args.data.dataset_name=="CT":
-        args.data.dataset_path = "/users/cmk2000/sharedscratch/Datasets/training_CT_data/trainingset_true_tiff"
+        args.data.dataset_path = f"{args.data.root}/training_CT_data/trainingset_true_tiff"
+    elif args.data.dataset_name=="LSUN":
+        args.data.dataset_path =  f"{args.data.root}/LSUN"
     elif args.data.dataset_name=="ImageNet":
         args.data.dataset_path =  ""
+        raise ValueError("Not implemented !!")
+        
+    
+    # if True:
+    #     import pandas as pd
+    #     print(args.data.number_sample_per_epoch)
+    #     extract_image_paths("/users/cmk2000/sharedscratch/Datasets/LSUN/train")
+    # sderf
+    
+    
+    # datasets
     prop = 0.2
     prop2 = 0.001
-    datasets = GetDatasets(
-        args.data.dataset_path, 
-        args.data.im_size, 
-        dataset_name=args.data.dataset_name,
-    )
-    train_size = int(prop * len(datasets))
-    print(train_size)
-    valid_size = len(datasets) - train_size
-    val = int(prop2 * valid_size)
-    valid_size = valid_size - val
-    train_dataset, valid_dataset, _ = random_split(
-        datasets, 
-        [train_size, val, valid_size]
-    )
+    if args.data.dataset_name=="LSUN":
+        train_dataset = GetDatasets(
+            args.data.dataset_path, 
+            args.data.im_size, 
+            dataset_name=args.data.dataset_name,
+            type_="train",
+        )
+        valid_dataset = GetDatasets(
+            args.data.dataset_path, 
+            args.data.im_size, 
+            dataset_name=args.data.dataset_name,
+            type_="val",
+        )
+    else:
+        datasets = GetDatasets(
+            args.data.dataset_path, 
+            args.data.im_size, 
+            dataset_name=args.data.dataset_name,
+        )
+        train_size = int(prop * len(datasets))
+        valid_size = len(datasets) - train_size
+        val = int(prop2 * valid_size)
+        valid_size = valid_size - val
+        train_dataset, valid_dataset, _ = random_split(
+            datasets, 
+            [train_size, val, valid_size]
+        )
+    sampler = RandomSampler(train_dataset, num_samples=args.data.number_sample_per_epoch, replacement=False) if args.data.is_random_sampler else None
+    
     trainloader = DataLoader(
         train_dataset, 
-        batch_size=args.data.train_batch_size, 
-        shuffle=args.data.shuffle, 
-        num_workers=args.data.num_workers
+        batch_size = args.data.train_batch_size, 
+        shuffle = args.data.shuffle if not args.data.is_random_sampler else False, 
+        num_workers = args.data.num_workers,
+        sampler = sampler
     )
     valid_loader = DataLoader(
         valid_dataset, 
@@ -151,8 +206,8 @@ def main():
     
     os.makedirs(os.path.join(args.save_checkpoint_dir, 'wandb', date), exist_ok=True)
     wandb_logger = WandbLogger(
-        project=f"Adversarial Conditional diffusion models {args.task}",  
-        name=date+"_"+args.task+"_lambda"+str(args.lambda_)+"_"+args.physic.operator_name,
+        project=f"Adversarial Conditional diffusion models {args.task} {args.physic.operator_name}",  
+        name=date+"_"+args.task+"_lambda"+str(args.lambda_)+"_"+args.physic.operator_name+f"_{args.data.dataset_name}",
         log_model=False,
         # save_dir=args.save_checkpoint_dir + 'wandb' + date,
     )
@@ -175,9 +230,9 @@ def main():
         monitor='epoch',
         mode='max',
         dirpath=pth,
-        filename='checkpoint_lora_'+ args.task +'_{epoch:03d}',
-        save_top_k=20,
-        every_n_epochs=5,
+        filename=f'{args.data.dataset_name.lower()}_lora_{args.task}'+'_{epoch:03d}',
+        save_top_k=40,
+        every_n_epochs=10,
     )
 
     # --- >> profi;er for advance analysis
@@ -203,8 +258,9 @@ def main():
                          logger=wandb_logger, 
                          benchmark=False,
                          log_every_n_steps=5,
-                        #  precision="bf16",
                          num_nodes=1,
+                         limit_train_batches=args.data.number_sample_per_epoch//args.data.train_batch_size#1000 // 32
+                        #  precision="bf16",
                     )
 
     # --- >> Training

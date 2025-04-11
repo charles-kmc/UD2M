@@ -95,7 +95,7 @@ class UnfoldedModel(pl.LightningModule):
         self.mseLoss = nn.MSELoss()
         self.adversarial_loss = nn.BCEWithLogitsLoss() #nn.BCELoss()
         self.lpips = LearnedPerceptualImagePatchSimilarity(net_type='vgg') # Squeeze
-        self.nor_ =0.0
+        self.nor_ = 0.0
 
     def _to_device(self):
         self.metrics = self.metrics_(self.device)    
@@ -191,6 +191,8 @@ class UnfoldedModel(pl.LightningModule):
         self.discriminator.train()
         if 0:
             self.diagnos_model()
+            sedrf
+        
         
         # Device
         self._to_device()
