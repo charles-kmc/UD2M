@@ -83,6 +83,9 @@ class Kernels:
             blur_kernel = self._motion_kernel().to(self.device)
         elif self.operator_name == "uniform_motion":
             blur_kernel = self._uniform_motion_kernel(self.kernel_size).to(self.device)
+        elif self.operator_name == "bicubic":
+            blur_kernel = self._bicubic_kernel(4).to(self.device)  # Fixed to 4 times SR for now
+
         else:
             raise ValueError(f"Blur type {self.operator_name } not implemented !!")
         return blur_kernel.squeeze()
@@ -103,6 +106,20 @@ class Kernels:
             pass
         kernel = generator.step(1)
         return kernel["filter"].squeeze()
+
+    def _bicubic_kernel(self, factor):
+        x = np.arange(start=-2 * factor + 0.5, stop=2 * factor, step=1) / factor
+        a = -0.5
+        x = np.abs(x)
+        w = ((a + 2) * np.power(x, 3) - (a + 3) * np.power(x, 2) + 1) * (x <= 1)
+        w += (
+            (a * np.power(x, 3) - 5 * a * np.power(x, 2) + 8 * a * x - 4 * a)
+            * (x > 1)
+            * (x < 2)
+        )
+        w = np.outer(w, w)
+        w = w / np.sum(w)
+        return torch.Tensor(w)
     
     def _motion_kernel(self):
         # defined transforms 
