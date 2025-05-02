@@ -35,6 +35,7 @@ class UnfoldedModel(pl.LightningModule):
             kernels:phy.Kernels, 
             num_pgus:int, 
             args, 
+            device,
             max_unfoled_iter:int=3, 
             wandb_logger:WandbLogger = None,
             )->None:
@@ -68,12 +69,13 @@ class UnfoldedModel(pl.LightningModule):
         
         # ---> HQS model
         self.denoising_timestep_ = lambda device: GetDenoisingTimestep(device)
-        self.hqs_module_ = lambda device: HQS_models(
+        self.hqs_module = HQS_models(
             self.model,
             self.physic, 
             self.diffusion_scheduler_(device), 
             self.denoising_timestep_(device),
-            self.args
+            self.args,
+            device
         )
         # ---> physics
         if self.args.task=="sr" or self.args.task=="deblur":
@@ -84,6 +86,8 @@ class UnfoldedModel(pl.LightningModule):
             self.blur = None
         else:
             raise ValueError("Task not implemented !!!")
+        
+        self.psnr_outputs = []
         
         # ---> DPIR
         self.dpir_model_ = lambda device: DPIR_deb(device = device, model_name = self.args.dpir.model_name, pretrained_pth=self.args.dpir.pretrained_pth)
@@ -100,7 +104,7 @@ class UnfoldedModel(pl.LightningModule):
     def _to_device(self):
         self.metrics = self.metrics_(self.device)    
         self.dpir_model = self.dpir_model_(self.device) 
-        self.hqs_module = self.hqs_module_(self.device) 
+        self.hqs_module = self.hqs_module.to(self.device) 
         self.diffusion_scheduler = self.diffusion_scheduler_(self.device) 
         self.denoising_timestep = self.denoising_timestep_(self.device) 
         
@@ -127,12 +131,12 @@ class UnfoldedModel(pl.LightningModule):
                 only_inputs=True,
             )[0]
             gradients = gradients.view(gradients.size(0), -1)
-            gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean()
+            gradient_penalty = ((gradients.norm(2, dim=1)) ** 2).mean() # 1/5/25 Modified to Gradient Penalty from Goodfellow et. al.
             return gradient_penalty
         
         # --- Forward pass
         def forward(self, obs, x_init, t):
-            out = self.hqs_module.run_unfolded_loop( obs, x_init, t, max_iter = self.max_unfolded_iter, lambda_sig = self.args.lambda_)
+            out = self.hqs_module.run_unfolded_loop(obs, x_init, t, max_iter = self.max_unfolded_iter, lambda_sig = self.args.lambda_)
             return out
         
         ## ====> Adversarial loss function: D
@@ -184,16 +188,23 @@ class UnfoldedModel(pl.LightningModule):
         ## ====> Drift penality function
         # def drift_penalty(self, real_pred):
         #     return 0.001 * torch.mean(real_pred ** 2)
+
+    
+    def _proc_batch(self, batch):
+        if isinstance(batch, list):
+            if isinstance(batch[1], dict) and "y_label" in batch[1].keys():
+                batch, y_label = batch[0], batch[1]["y_label"]
+            else:
+                raise ValueError("Batch should either be a tensor of size (B,C,H,W) or a tuple of (tensor, dict) where dict contains class conditional y")
+        else: 
+            y_label = None
+        return batch, y_label
         
     ## ====> training penality function
     def training_step(self, batch, batch_idx):
         self.model.train()
         self.discriminator.train()
-        if 0:
-            self.diagnos_model()
-            sedrf
-        
-        
+        batch, y_label = self._proc_batch(batch)
         # Device
         self._to_device()
         
@@ -236,7 +247,7 @@ class UnfoldedModel(pl.LightningModule):
             raise ValueError(f"This task ({self.args.task})is not implemented!!!")
             
         # ---> unfolded model
-        obs = {"x_t":x_t, "y":y, "b":batch}
+        obs = {"x_t":x_t, "y":y, "b":batch, "y_label":y_label}
         if self.args.task not in ["inp", "ct"]:
             obs["blur"] = self.blur
         
@@ -332,6 +343,12 @@ class UnfoldedModel(pl.LightningModule):
         self.log('d_loss', d_loss, prog_bar=True)
         self.log('norm params', nor_new, prog_bar=True)
         self.log('rel. error', err, prog_bar=True)
+        for i in range(self.hqs_module.max_iter):
+            self.log(f"SP_param_{i}", self.hqs_module.SP_Param[i].exp(), prog_bar=False)
+            self.log(f"LambdaSIG_param_{i}", self.hqs_module.LambdaSIG[i].exp(), prog_bar=False)
+            self.log(f"TAUG_param_{i}", 1000*self.hqs_module.TAUG[i], prog_bar=False)  # T_ are multiplied by 1000 in script to match size of noise schedule
+            self.log(f"TLAT_param_{i}", 1000*self.hqs_module.TLAT[i], prog_bar=False)
+
         self.nor_ = nor_new
         
     # # --- >> EMA update    
@@ -348,102 +365,106 @@ class UnfoldedModel(pl.LightningModule):
 
     #     return self.ema_decay * avg_model_param + (1 - self.ema_decay) * model_param.detach().cpu()
     
+
     # --- >> Validation function           
     def validation_step(self, batch, batch_idx, external_test=False):
-       
-        if batch_idx==1:
-            # image 
-            self.discriminator.eval()
-            
-            # Device
-            self._to_device()
-            
-            # image 
-            B,C = batch.shape[:2]
-            # ---> sample noisy x_t
-            t = self.diffusion_scheduler.sample_times(B)
-            noise_target = torch.randn_like(batch)
-            x_t = self.diffusion_scheduler.sample_xt(batch, t, noise=noise_target)
-            
-            # ---> observation y 
-            if self.args.task == "deblur":
-                y = self.physic.y(batch, self.blur)
-            elif self.args.task=="sr":
-                y = self.physic.y(batch, self.blur, self.args.physic.sr.sf)
-            elif self.args.task=="inp":
-                y = self.physic.y(batch)
-            elif self.args.task=="ct":
-                y = self.physic.y(batch)
-            else:
-                raise ValueError(f"This task ({self.args.task})is not implemented!!!")
-        
-            # ---> initialisation unfolded model
-            if self.args.dpir.use_dpir and self.args.task == "deblur":
-                if self.args.dpir.use_dpir:
-                    y_ = utils.inverse_image_transform(y)
-                    x_init = self.dpir_model.run(y_, self.blur, iter_num = 1) #y.clone()
-                    x_init = utils.image_transform(x_init)
-                else:
-                    x_init = y.clone()
-            elif self.args.task=="sr":
-                with torch.no_grad():
-                    y_ = self.physic.upsample(utils.inverse_image_transform(y))
-                    if self.args.dpir.use_dpir:
-                        x_init = self.dpir_model.run(y_, self.blur, iter_num = 1)
-                    x_init = utils.image_transform(y_)
-            elif self.args.task=="inp":
-                x_init = y.clone()
-            elif self.args.task=="ct":
-                x_init = self.physic.init(y)
-            else:
-                raise ValueError(f"This task ({self.args.task})is not implemented!!!")
-            
-            # ---> unfolded model
-            obs = {"x_t":x_t, "y":y, "b":batch}
-            if self.args.task not in ["inp", "ct"]:
-                obs["blur"] = self.blur
-            
-            
-            gens = torch.zeros(size=
-                        (y.size(0), 
-                        self.args.train.num_z_test, 
-                        self.args.data.in_channels, 
-                        self.args.data.im_size, 
-                        self.args.data.im_size),
-                device=self.device
-            )
-            
-            if self.args.train.num_z_test>1:
-                for id_z in range(self.args.train.num_z_test):
-                    out = self.forward(obs, x_init, t)
-                    gens[:, id_z, :, :, :] = out["xstart_pred"]
-                xest = torch.mean(gens, dim=1)
-            else:   
-                out = self.forward(obs, x_init, t)
-                xest = out["xstart_pred"]
+        # image 
+        self.discriminator.eval()
+        batch, y_label = self._proc_batch(batch)
 
+
+        
+        
+        # Device
+        self._to_device()
+        
+        # image 
+        B,C = batch.shape[:2]
+        # ---> sample noisy x_t
+        t = self.diffusion_scheduler.sample_times(B)
+        noise_target = torch.randn_like(batch)
+        x_t = self.diffusion_scheduler.sample_xt(batch, t, noise=noise_target)
+        
+        # ---> observation y 
+        if self.args.task == "deblur":
+            y = self.physic.y(batch, self.blur)
+        elif self.args.task=="sr":
+            y = self.physic.y(batch, self.blur, self.args.physic.sr.sf)
+        elif self.args.task=="inp":
+            y = self.physic.y(batch)
+        elif self.args.task=="ct":
+            y = self.physic.y(batch)
+        else:
+            raise ValueError(f"This task ({self.args.task})is not implemented!!!")
+    
+        # ---> initialisation unfolded model
+        if self.args.dpir.use_dpir and self.args.task == "deblur":
+            if self.args.dpir.use_dpir:
+                y_ = utils.inverse_image_transform(y)
+                x_init = self.dpir_model.run(y_, self.blur, iter_num = 1) #y.clone()
+                x_init = utils.image_transform(x_init)
+            else:
+                x_init = y.clone()
+        elif self.args.task=="sr":
+            with torch.no_grad():
+                y_ = self.physic.upsample(utils.inverse_image_transform(y))
+                if self.args.dpir.use_dpir:
+                    x_init = self.dpir_model.run(y_, self.blur, iter_num = 1)
+                x_init = utils.image_transform(y_)
+        elif self.args.task=="inp":
+            x_init = y.clone()
+        elif self.args.task=="ct":
+            x_init = self.physic.init(y)
+        else:
+            raise ValueError(f"This task ({self.args.task})is not implemented!!!")
+        
+        # ---> unfolded model
+        obs = {"x_t":x_t, "y":y, "b":batch, "y_label":y_label}
+        if self.args.task not in ["inp", "ct"]:
+            obs["blur"] = self.blur
+        
+        gens = torch.zeros(size=
+                    (y.size(0), 
+                    self.args.train.num_z_test, 
+                    self.args.data.in_channels, 
+                    self.args.data.im_size, 
+                    self.args.data.im_size),
+            device=self.device
+        )
+        
+        if self.args.train.num_z_test>1:
+            for id_z in range(self.args.train.num_z_test):
+                out = self.forward(obs, x_init, t)
+                gens[:, id_z, :, :, :] = out["xstart_pred"]
             xest = torch.mean(gens, dim=1)
+        else:   
+            out = self.forward(obs, x_init, t)
+            xest = out["xstart_pred"]
+
+        xest = torch.mean(gens, dim=1)
+        
+        # ---> adversarial loss is binary cross-entropy
+        valid = torch.FloatTensor(B, 1).fill_(1.0).requires_grad_(False).to(self.device)   
+        if self.args.task=="sr":     
+            y_up = self.physic.upsample(y)
+        elif self.args.task=="ct":
+            y_up = self.physic.ATx(y)
+        else:
+            y_up=y.clone()
             
-            # ---> adversarial loss is binary cross-entropy
-            valid = torch.FloatTensor(B, 1).fill_(1.0).requires_grad_(False).to(self.device)   
-            if self.args.task=="sr":     
-                y_up = self.physic.upsample(y)
-            elif self.args.task=="ct":
-                y_up = self.physic.ATx(y)
-            else:
-                y_up=y.clone()
-             
-            if self.args.train.num_z_train>1:
-                g_loss_valid = self.adversarial_loss_diffusion(y_up, gens)
-                g_loss_valid += self.l1_std_p(xest, gens, batch)
-            else:
-                g_loss_valid= 0
-            g_loss_valid += self.mseLoss(xest, batch).mean()
-            
-            self.log('test -- g_loss', g_loss_valid, prog_bar=True)
-            self.log("mse", self.metrics.mse_function(out["xstart_pred"].detach().cpu(), batch.add(1).div(2).detach().cpu()).item(), prog_bar=True)
-            self.log("psnr", self.metrics.psnr_function(out["xstart_pred"].detach().cpu(), batch.add(1).div(2).detach().cpu()).item(), prog_bar=True)
-            
+        if self.args.train.num_z_train>1:
+            g_loss_valid = self.adversarial_loss_diffusion(y_up, gens)
+            g_loss_valid += self.l1_std_p(xest, gens, batch)
+        else:
+            g_loss_valid= 0
+        g_loss_valid += self.mseLoss(xest, batch).mean()
+        
+        self.log('test -- g_loss', g_loss_valid, prog_bar=True)
+        self.log("mse", self.metrics.mse_function(out["xstart_pred"].detach().cpu(), batch.add(1).div(2).detach().cpu()).item(), prog_bar=True)
+        self.log("psnr", self.metrics.psnr_function(out["xstart_pred"].detach().cpu(), batch.add(1).div(2).detach().cpu()).item(), prog_bar=True)
+        self.psnr_outputs.append(self.metrics.psnr_function(out["xstart_pred"].detach().cpu(), batch.add(1).div(2).detach().cpu()))
+        
+        if batch_idx == 0:
             self.wandb_logger.log_image(
                     key = "training",
                     images = [
@@ -456,12 +477,18 @@ class UnfoldedModel(pl.LightningModule):
                     ],
                     caption=["x0_hat", "x0", "y", "xt", "z_input", "z"]
                 )
-        else:
-            pass
+    
+    def on_validation_epoch_end(self):
+        psnrs = torch.stack([torch.tensor(p) for p in self.psnr_outputs])
+        psnr_mean = torch.mean(psnrs)
+        self.log("psnr_mean", psnr_mean, prog_bar=True)
+        self.psnr_outputs.clear()
+
+
         
     def configure_optimizers(self):
         # ---> leanable parameters
-        self.model_params = list(filter(lambda p: p.requires_grad, self.model.parameters()))
+        self.model_params = list(filter(lambda p: p.requires_grad, self.model.parameters())) + list(filter(lambda p: p.requires_grad, self.hqs_module.parameters()))
         self.discriminator_params = list(filter(lambda p: p.requires_grad, self.discriminator.parameters()))
         
         # ---> optimizers        

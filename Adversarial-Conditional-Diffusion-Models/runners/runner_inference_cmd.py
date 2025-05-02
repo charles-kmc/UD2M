@@ -131,7 +131,7 @@ class Conditional_sampler:
     
                 # save the process
                 if self.args.save_progressive and (seq[ii] in progress_seq):
-                    x_show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x))      #[0,1]
+                    x_show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x[0].unsqueeze(0)))      #[0,1]
                     progress_img.append(x_show)
                     utils.delete([x_show])
             

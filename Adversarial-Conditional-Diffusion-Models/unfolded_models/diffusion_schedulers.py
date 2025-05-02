@@ -49,6 +49,16 @@ class DiffusionScheduler:
         self.sqrt_alphas_cumprod     = torch.sqrt(self.alphas_cumprod)
         self.sqrt_1m_alphas_cumprod  = torch.sqrt(1. - self.alphas_cumprod)
         self.sigmas   = torch.div(self.sqrt_1m_alphas_cumprod, self.sqrt_alphas_cumprod)
+        self.deg_cont = 3
+        self.sqrt_alphas_cumprod_cont = torch.from_numpy(
+            np.polyfit(np.arange(0, num_timesteps), self.sqrt_alphas_cumprod.cpu().log().numpy(), self.deg_cont),
+        ).to(self.device)
+        self.inv_sigmas_cont = torch.from_numpy(
+            np.polyfit(self.sigmas.cpu().log().numpy(), np.arange(0, num_timesteps), self.deg_cont),
+        ).to(self.device)
+
+        # print(f"alpha_cont_diff: {torch.from_numpy(np.polyval(self.sqrt_alphas_cumprod_cont, np.arange(0, num_timesteps))).exp() - self.sqrt_alphas_cumprod.cpu()}")
+        # exit()
         
     def sample_times(self, bzs):
         if self.fix_timestep:
@@ -72,6 +82,40 @@ class DiffusionScheduler:
             + models.extract_tensor(self.sqrt_1m_alphas_cumprod, timesteps, x_start.shape)
             * noise
         )   
+
+    def alpha_cont_diff(self, t):  ## Interpolate alphas for continuous time approximation
+        """
+        alpha_cont_diff: \alpha_t = \alpha_0 + \alpha_1 t + \alpha_2 t^2 + \alpha_3 t^3
+        """
+        return sum([
+            self.sqrt_alphas_cumprod_cont[-i-1] * t**i for i in range(self.deg_cont)
+        ]).exp()
+    
+    def inv_sigmas_cont_diff(self, sig):
+        """
+        inv_sigmas_cont_diff: \sigma_t = \sigma_0 + \sigma_1 t + \sigma_2 t^2 + \sigma_3 t^3
+        """
+        return sum([
+            self.inv_sigmas_cont[-i-1] * sig**i for i in range(self.deg_cont)
+        ])
+
+    def sample_xt_cont(
+        self, 
+        x_start:torch.Tensor, 
+        timesteps:torch.Tensor, 
+        noise:torch.Tensor
+    ) -> torch.Tensor:
+        if noise is None:
+            noise = torch.randn_like(x_start)
+        assert noise.shape == x_start.shape
+        sqrt_alp_cont = self.alpha_cont_diff(timesteps)
+        while len(sqrt_alp_cont.shape) < len(x_start.shape):
+            sqrt_alp_cont = sqrt_alp_cont[..., None]
+        return (
+            sqrt_alp_cont * x_start
+            + (1-sqrt_alp_cont.square()).sqrt()
+            * noise
+        )   
     
     #predict x_start from eps 
     def predict_xstart_from_eps(self, x_t, t, eps):
@@ -79,6 +123,17 @@ class DiffusionScheduler:
         return (
             (x_t - models.extract_tensor( self.sqrt_1m_alphas_cumprod, t, x_t.shape ) * eps) / 
             models.extract_tensor(self.sqrt_alphas_cumprod, t, x_t.shape )
+        )
+    
+    #predict x_start from eps 
+    def predict_xstart_from_eps_cont(self, x_t, t, eps):
+        assert x_t.shape == eps.shape, ValueError(f"x_t and eps have different shape ({x_t.shape} != {eps.shape})")
+        sqrt_alp_cont = self.alpha_cont_diff(t)
+        while len(sqrt_alp_cont.shape) < len(x_t.shape):
+            sqrt_alp_cont = sqrt_alp_cont[..., None]
+        return (
+            (x_t - (1 - sqrt_alp_cont.square()).sqrt() * eps) / 
+            sqrt_alp_cont
         )
         
     # predict eps from x_start
@@ -123,25 +178,26 @@ class GetDenoisingTimestep:
         return rho, tz, ty
     
     # get rho and t from sigma_t and sigma_y
-    def get_z_timesteps(self, t, sigma_y, x_shape, T_AUG, task="inp"):
+    def get_z_timesteps(self, t, sigma_y, x_shape, T_AUG, sp, **kwargs):
         sigma_t = models.extract_tensor(self.scheduler.sigmas, t, x_shape) 
         if not torch.is_tensor(sigma_y):
             sigma_y = torch.tensor(sigma_y).to(self.device)
         else:
             sigma_y = sigma_y.to(self.device)
-        sp = 8 if task == "inp" else 1
         
-        rho = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2)) * sp
+        
+        rho_unscaled = sigma_y * sigma_t * torch.sqrt(1 / (sigma_y**2 + sigma_t**2))  ## For finding T
+        rho =  rho_unscaled* sp   ### For HQS
         
         tz = torch.clamp(
-            self._noise_step(rho.ravel()[0]).cpu() + torch.tensor(T_AUG),
+            self._noise_step(rho_unscaled.ravel()[0]).cpu() + T_AUG,
             1,
             self.scheduler.num_timesteps
         )
-        tz = (tz * torch.ones((x_shape[0],))).long().to(self.device)
-        rho_param = models.extract_tensor(self.scheduler.sigmas, tz, x_shape)
+        tz = (tz * torch.ones((x_shape[0],), device=t.device))
+        # rho_param = models.extract_tensor(self.scheduler.sigmas, tz, x_shape)
         ty = self._noise_step(sigma_y)
-        return rho_param, tz, ty
+        return rho, tz, ty
     
     # getting the corresponding timestep from the diffusion process   
     def _noise_step(self, sigma):

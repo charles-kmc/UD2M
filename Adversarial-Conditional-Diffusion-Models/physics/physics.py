@@ -11,7 +11,7 @@ from .blur_functions import gaussian_kernel, uniform_kernel, uniform_motion_kern
 from utils.utils import inverse_image_transform, image_transform
 from deepinv.physics.generator import MotionBlurGenerator
 import physics.sisr_utils as sisr_utils
-
+from deepinv.physics.blur import bicubic_filter
 import deepinv as dinv
 
 
@@ -54,27 +54,31 @@ class Kernels:
         operator_name,
         kernel_size,
         device,
-        path_motion_kernel:str = "/users/cmk2000/sharedscratch/Datasets/blur-kernels/kernels",
+        # path_motion_kernel:str = "/users/cmk2000/sharedscratch/Datasets/blur-kernels/kernels",
         mode = "test",
         dtype = torch.float32,
+        std = 3.0,
+        sf = 4,
     ):
         self.operator_name = operator_name
         self.kernel_size = kernel_size
         self.device = device
         self.mode = mode
         self.dtype = dtype
+        self.std = std
+        self.sf = sf
         
         # motion kernel
-        if mode == "train":
-            self.path_motion_kernel_train = os.path.join(path_motion_kernel, "training_set")
-            self.list_motion_kernel = os.listdir(self.path_motion_kernel_train)
-        else:
-            self.path_motion_kernel_val = os.path.join(path_motion_kernel, "validation_set")
-            self.list_motion_kernel = os.listdir(self.path_motion_kernel_val)
+        # if mode == "train":
+        #     self.path_motion_kernel_train = os.path.join(path_motion_kernel, "training_set")
+        #     self.list_motion_kernel = os.listdir(self.path_motion_kernel_train)
+        # else:
+        #     self.path_motion_kernel_val = os.path.join(path_motion_kernel, "validation_set")
+        #     self.list_motion_kernel = os.listdir(self.path_motion_kernel_val)
  
     def get_blur(self, seed=None):
         if self.operator_name == "gaussian":
-            blur_kernel = self._gaussian_kernel(self.kernel_size).to(self.device)
+            blur_kernel = self._gaussian_kernel(self.kernel_size, std = self.std).to(self.device)
         elif self.operator_name  == "uniform":
             if seed is not None:
                 set_seed(seed)
@@ -84,8 +88,7 @@ class Kernels:
         elif self.operator_name == "uniform_motion":
             blur_kernel = self._uniform_motion_kernel(self.kernel_size).to(self.device)
         elif self.operator_name == "bicubic":
-            blur_kernel = self._bicubic_kernel(4).to(self.device)  # Fixed to 4 times SR for now
-
+            blur_kernel = bicubic_filter(self.sf).to(self.device)
         else:
             raise ValueError(f"Blur type {self.operator_name } not implemented !!")
         return blur_kernel.squeeze()
@@ -106,20 +109,6 @@ class Kernels:
             pass
         kernel = generator.step(1)
         return kernel["filter"].squeeze()
-
-    def _bicubic_kernel(self, factor):
-        x = np.arange(start=-2 * factor + 0.5, stop=2 * factor, step=1) / factor
-        a = -0.5
-        x = np.abs(x)
-        w = ((a + 2) * np.power(x, 3) - (a + 3) * np.power(x, 2) + 1) * (x <= 1)
-        w += (
-            (a * np.power(x, 3) - 5 * a * np.power(x, 2) + 8 * a * x - 4 * a)
-            * (x > 1)
-            * (x < 2)
-        )
-        w = np.outer(w, w)
-        w = w / np.sum(w)
-        return torch.Tensor(w)
     
     def _motion_kernel(self):
         # defined transforms 
@@ -255,7 +244,7 @@ class Deblurring:
         if not hasattr(self, "pre_compute"):
             raise ValueError("pre_compute doesn't exists!!")        
         if self.operator_name=="gaussian":
-            FFT_hcy = self.pre_compute["FFT_hcy"]      
+            FFT_hcy = self.pre_compute["FFT_hcy"]  
             FFT_hch = self.pre_compute["FFT_hch"]
             FFTx = torch.fft.fft2(x, dim=(-2,-1))
             FFTx_t = torch.fft.fft2(x_t, dim=(-2,-1))
@@ -336,7 +325,7 @@ class Inpainting:
         self.box_pro = box_proportion if box_proportion is not None else 0.4
         self.box_size = int(box_proportion * im_size)
         
-        self.Mask = self.get_mask()
+        self.Mask = self.get_mask(index_ii=index_ii, index_jj=index_jj)
     
     def get_mask(self, index_ii=None, index_jj=None):
         mask = torch.ones((self.im_size,self.im_size), device=self.device)

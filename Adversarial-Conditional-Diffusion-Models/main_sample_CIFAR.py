@@ -22,23 +22,22 @@ from metrics.coverage.coverage_function import coverage_eval
 from metrics.metrics import Metrics
 
 
-max_images = 300
-max_iter = 128
+max_images = 512
+max_iter = 1
 ddpm_param = 1
 
 stochastic_model = False
 stochastic_rate = 0.05
 SOLVER_TYPES =  ["ddim"] # huen, ddpm, ddim
 LORA = True
-MAX_UNFOLDED_ITER = [3,]
+
 NUM_TIMESTEPS = [3,]#[50, 100, 200, 300, 500, 700, 800, 1000]
-etas =[0.8]   # sr=0.8
+etas =[0.0]   # sr=0.8
 T_AUG = 0
-ZETA = [0.9]#[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]#[0.1] #op 0.4 or 0.6 sr = 0.9
+ZETA = [0.1]#[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]#[0.1] #op 0.4 or 0.6 sr = 0.9
 date_eval = datetime.datetime.now().strftime("%d-%m-%Y")
 
 def main(
-    num_timesteps:int, 
     solver_type:str, 
     ddpm_param:float = 1.,
     date_eval:str = date_eval, 
@@ -48,7 +47,7 @@ def main(
     with torch.no_grad():
         # args
         mode = "inference"
-      
+        
         script_dir = os.path.dirname(__file__)
         # args
         config = configs(mode=mode)
@@ -60,7 +59,10 @@ def main(
         args.mode = mode
         args.physic.operator_name = config.operator_name 
         args.physic.sigma_model = config.sigma_model
-        
+        args.max_unfolded_iter = config.max_unfolded_iter
+        MAX_UNFOLDED_ITER = [args.max_unfolded_iter,]
+        num_timesteps = config.num_timesteps
+        steps = num_timesteps
         if args.mode == mode:
             ckpt_epoch = config.ckpt_epoch
             ckpt_date = config.ckpt_date
@@ -76,20 +78,20 @@ def main(
         run_name = f"_{args.task}_sampling"
         # lora dir and name
         if args.task=="inp":
-            if args.physic.operator_name=="random":
-                args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, args.physic.operator_name, f"scale_{args.physic.inp.mask_rate}") 
+            if True:  # TODO: Fix this, missing same conditional in mainCIFAR.py
+                args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task + f'_{args.max_unfolded_iter}', ckpt_date, args.physic.operator_name, f"scale_{args.physic.inp.mask_rate}") 
             elif args.physic.operator_name=="box":
-                args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, args.physic.operator_name, f"box_prop_{args.physic.inp.box_proportion}")
+                args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task+ f'_{args.max_unfolded_iter}', ckpt_date, args.physic.operator_name, f"box_prop_{args.physic.inp.box_proportion}")
             else:
                 raise ValueError("Operator not implemented !!")
         elif args.task=="deblur":
-            args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, args.physic.operator_name) 
+            args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task+ f'_{args.max_unfolded_iter}', ckpt_date, args.physic.operator_name) 
         elif args.task=="sr":
-            args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, f"factor_{args.physic.sr.sf}") 
+            args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task+ f'_{args.max_unfolded_iter}', ckpt_date, f"factor_{args.physic.sr.sf}") 
         else:
             raise ValueError("Operator not implemented !!")
         
-        args.lora_checkpoint_name = f"lsun_lora_{args.task}_epoch={ckpt_epoch:03d}.ckpt" #checkpoint_lora_sr_epoch=079
+        args.lora_checkpoint_name = f"Bestpsnr_{args.task}_epoch={ckpt_epoch:03d}.ckpt" #checkpoint_lora_sr_epoch=079
         print(args.lora_checkpoint_dir, args.lora_checkpoint_name)
         # parameters
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
@@ -134,17 +136,33 @@ def main(
                                 "dir": dir_w,
                                 "pertub":args.pertub,
                             },
-                            name = f"{formatted_time}{run_name}_{solver_type}_num_steps_{num_timesteps}_unfolded_iter_{args.max_unfolded_iter}_{init}_max_iter_{max_iter}_task_{args.task}_rank_{args.model.rank}_{solver_params_title}_epoch_{args.epoch}_T_AUG_{T_AUG}",
+                            name = f"{formatted_time}{run_name}_{solver_type}_num_steps_{num_timesteps}_unfolded_iter_{args.max_unfolded_iter}_{init}_max_iter_{config.max_unfolded_iter}_task_{args.task}_rank_{args.model.rank}_{solver_params_title}_epoch_{args.epoch}_T_AUG_{T_AUG}",
                         )
                 # data
-                dir_test = "/mnt/scratch/users/applied_computational_math/LSUN/" #/users/cmk2000/sharedscratch/Datasets/testsets/ffhq or imageffhq
-                datasets = GetDatasets(dir_test, args.im_size, dataset_name = "LSUN",type_ = "val")
-                testset = DataLoader(datasets, batch_size=8, shuffle=False, num_workers=4)
-                print(len(datasets))
+                from diffusion.utils.data import get_data, RandomSubsetDataSampler
+                from torchvision.transforms import Lambda
+
+                data = get_data("Imagenet64", new_transforms = [Lambda(utils.image_transform),])
+                testset = DataLoader(
+                    data["test"], 
+                    batch_size=32, 
+                    shuffle=False,
+                    num_workers=args.data.num_workers,
+                    drop_last=True,
+                )
+                
                 # -- model
-                model = models.adapter_lora_model(args)    
+                model = models.adapter_lora_model(args)  
+                for name, params in model.named_parameters():
+                    if "lora" in name:
+                        print(params[1,:])
+                        break
+                    
                 models.load_trainable_params(model, args)
-             
+                for name, params in model.named_parameters():
+                    if "lora" in name:
+                        print(params[1,:])
+                        break
                 # Diffusion noise
                 diffusion_scheduler = ums.DiffusionScheduler(device=device,noise_schedule_type=args.noise_schedule_type)
        
@@ -154,7 +172,8 @@ def main(
                         operator_name=args.physic.operator_name,
                         kernel_size=args.physic.kernel_size,
                         device=device,
-                        mode = args.mode
+                        mode = args.mode,
+                        std = 1.0
                     )
                     physic = phy.Deblurring(
                         sigma_model=args.physic.sigma_model,
@@ -186,7 +205,7 @@ def main(
                     )
                     kernels = phy.Kernels(
                         operator_name=args.physic.operator_name,
-                        kernel_size=args.physic.sr.sf,
+                        kernel_size=args.physic.kernel_size,
                         device=device,
                         mode = args.mode
                     )
@@ -229,7 +248,7 @@ def main(
                 else:
                     raise ValueError(f"Solver {solver_type} do not exists.")
                                 
-                root_dir_results = os.path.join(args.save_dir, f"{args.task}_{use_lora}", f"operator_{args.physic.operator_name}", args.eval_date, solver_type, f"Max_iter_{max_iter}", f"timesteps_{num_timesteps}", param_name_folder, f"lambda_{args.lambda_}")
+                root_dir_results = os.path.join(args.save_dir, f"{args.task}_{use_lora}", f"operator_{args.physic.operator_name}", args.eval_date, solver_type, f"Max_iter_{max_iter}", f"timesteps_{num_timesteps}", param_name_folder, f"lambda_{args.lambda_}", f"Steps_{steps}", f"Iters_{args.max_unfolded_iter}")
                 
                 if args.evaluation.coverage or args.evaluation.metrics:
                     save_metric_path = os.path.join(root_dir_results, "metrics_results")
@@ -247,7 +266,7 @@ def main(
                 
                 # Evaluations
                 s_psnr,s_mse,s_ssim,s_lpips,count = 0,0,0,0,0 
-                results = {} 
+                # results = {} 
                 
                 # Blur kernel 
                 if args.task == "deblur" or args.task=="sr":    
@@ -259,7 +278,7 @@ def main(
                         break
                         
                     # True image
-                    
+                    im_name = f"{(ii):05d}"
                     im = im.to(device)
                     x = utils.inverse_image_transform(im)
                     x_true = None
@@ -277,7 +296,7 @@ def main(
                         shape = x.squeeze().shape
                         shapes=(max_iter-1,) + shape
                         data = torch.zeros(shapes, dtype = x.dtype)
-                    im_name = f"{(ii):05d}"
+
                     for it in range(max_iter):
                         start_time = time.time()
                         out = diffsampler.sampler(
@@ -384,8 +403,8 @@ def main(
                     if args.evaluation.coverage:
                         sampledist = out_coverage["sampledist"]
                         truexdist = out_coverage["truexdist"]
-                        results[f"{ii}_sample_dist"] = sampledist
-                        results[f"{ii}_truex_dist"] = truexdist
+                        # results[f"{ii}_sample_dist"] = sampledist
+                        # results[f"{ii}_truex_dist"] = truexdist
                         plt.figure(figsize=(8, 6))
                         plt.hist(sampledist, bins=30, density=True, alpha=0.7, color='blue')
                         plt.xlabel('Value')
@@ -456,6 +475,5 @@ def main(
 
 if __name__ == "__main__":
     for solver in SOLVER_TYPES:
-        for steps in NUM_TIMESTEPS:
             for eta in etas:# [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]:
-                args = main(steps, solver, max_iter=max_iter,eta= eta)
+                args = main(solver, max_iter=max_iter,eta= eta)
