@@ -10,7 +10,8 @@ import unfolded_models as ums
 import physics as phy
 import utils as utils
 import models as models
-
+import deepinv as dinv
+from unfolded_models.unfolded_models import StackedJointPhysics
 
 class Conditional_sampler:
     def __init__(
@@ -22,7 +23,9 @@ class Conditional_sampler:
         args,
         max_unfolded_iter:int = 3,
         solver_type = "ddim",
-        classic_sampling:bool=False
+        classic_sampling:bool=False,
+        dphys = None,
+        img_shape = (3,256,256)
     ) -> None:
         self.hqs_model = hqs_model
         self.diffusion = diffusion
@@ -32,6 +35,18 @@ class Conditional_sampler:
         self.max_unfolded_iter = max_unfolded_iter
         self.solver_type = solver_type
         self.classic_sampling= classic_sampling
+        self.d_phys = dphys
+        self.img_shape = img_shape
+
+        if dphys is not None:
+            from ram import RAM
+            self.RAM = RAM(device=device)
+            self.RAM.eval()
+            for k, v in self.RAM.named_parameters():
+                v.requires_grad = False
+            self.stacked_physic = StackedJointPhysics(
+                self.d_phys, self.diffusion
+            )
         
         # DPIR model
         self.dpir_model = DPIR_deb(
@@ -43,6 +58,16 @@ class Conditional_sampler:
         # metric
         self.metrics = utils.Metrics(self.device)
     
+    def RAM_Initialization(self, y, xt, t):
+        if isinstance(t, torch.Tensor) and t.numel()>1:
+            t = int(t[0].item())
+        self.stacked_physic.set_t(t)
+        xt_init = (xt.clone() + self.stacked_physic.physics_list[1].alphas_cumprod[t].sqrt())/2 
+        min = torch.min(torch.tensor([p.noise_model.sigma for p in self.stacked_physic.physics_list]))
+        y_ram = dinv.utils.TensorList([utils.inverse_image_transform(y)*min/self.d_phys.noise_model.sigma, xt_init*min/self.stacked_physic.physics_list[1].noise_model.sigma])
+        x_init = self.RAM(y_ram, self.stacked_physic)
+        return utils.image_transform(x_init)
+    
     def sampler(
         self, 
         y:torch.tensor, 
@@ -51,7 +76,8 @@ class Conditional_sampler:
         eta:float=0., 
         zeta:float=1.,
         x_true:torch.Tensor = None,
-        lambda_:float=1
+        lambda_:float=1,
+        y_label = None
     ):
     
         with torch.no_grad():
@@ -67,14 +93,12 @@ class Conditional_sampler:
                     x0 = utils.image_transform(x0)
                 else:
                     x0 = y.clone()
-            elif  self.args.task=="sr":
-                if self.args.dpir.use_dpir:
-                    y_ = self.physics.upsample(utils.inverse_image_transform(y))
-                    y_ = self.dpir_model.run(y_, self.physics.blur, iter_num = 1)
-                    x0 = utils.image_transform(y_)
-                else:
-                    y_ = self.physics.upsample(utils.inverse_image_transform(y))
-                    x0 = utils.image_transform(y_)
+            # elif  self.args.task=="sr":
+            #     # if self.args.dpir.use_dpir:
+            #     x0 = self.RAM_Initialization(y, torch.randn(self.img_shape), torch.tensor(self.diffusion.num_timesteps-1))
+            elif self.args.task=="sr":
+                y_ = self.physics.upsample(utils.inverse_image_transform(y))
+                x0 = utils.image_transform(y_)
             elif self.args.task=="inp":
                 x0 = y.clone()
             elif self.args.task=="ct":
@@ -85,6 +109,7 @@ class Conditional_sampler:
             # initilisation
             x = torch.randn_like(x0)  
             progress_img = []
+            progress_zero = []
             
             # reverse process
             if x_true is not None:
@@ -97,11 +122,13 @@ class Conditional_sampler:
                     x0 = out_val["xstart_pred"].mul(2).add(-1)
                     
                 else:
+                    x_init = self.RAM_Initialization(y, x, torch.tensor(t_i).to(self.device))
                     max_unfolded_iter = self.max_unfolded_iter
-                    obs = {"x_t":x, "y":y}
+                    obs = {"x_t":x, "y":y, "y_label":y_label}
                     if not self.args.task=="inp":
                         obs["blur"] = self.physics.blur
-                    out_val = self.hqs_model.run_unfolded_loop(obs, x0, torch.tensor(t_i).to(self.device), max_iter = max_unfolded_iter, lambda_sig= lambda_)
+                    # Modified12 May 25 - always initialize HQS with the same x0 (xt appears through the prox step)
+                    out_val = self.hqs_model.run_unfolded_loop(obs, x_init, torch.tensor(t_i).to(self.device), max_iter = max_unfolded_iter, lambda_sig= lambda_)
                     x0 = out_val["xstart_pred"].mul(2).add(-1)
                     
                 if x_true is not None:
@@ -116,11 +143,11 @@ class Conditional_sampler:
                     elif self.solver_type == "ddpm":
                         x = diffusionsolver.ddpm_solver(x, out_val["eps_pred"], ii, ddpm_param = self.args.ddpm_param)
                     elif self.solver_type == "huen":
-                        x, d_old = diffusionsolver.huen_solver(x, out_val["eps_pred"], ii) 
+                        x, d_old = diffusionsolver.huen_solver(x, out_val["eps_pred"], ii)
                         tiim1 = self.seq[ii + 1]  
                         beta_tiim1 = models.extract_tensor(self.diffusion.betas, tiim1, x.shape)
                         if beta_tiim1 !=0:
-                            out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter)
+                            out_val = self.hqs_model.run_unfolded_loop(y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter)
                             x0 = utils.image_transform(out_val["xstart_pred"])
                             iim1 = ii + 1
                             x = diffusionsolver.huen_solver(x0, x, iim1, d_old=d_old)
@@ -132,17 +159,25 @@ class Conditional_sampler:
                 # save the process
                 if self.args.save_progressive and (seq[ii] in progress_seq):
                     x_show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x[0].unsqueeze(0)))      #[0,1]
+                    x_0show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x0[0].unsqueeze(0)))      #[0,1]
                     progress_img.append(x_show)
+                    progress_zero.append(x0[0])
                     utils.delete([x_show])
             
             if self.args.save_progressive:   
                 img_total = cv2.hconcat(progress_img)
+                # img_zero_total = cv2.hconcat(progress_zero)
                 if self.args.use_wandb and self.args.save_wandb_img:
                     image_wdb = wandb.Image(img_total, caption=f"progress sequence for im {im_name}", file_type="png")
+                    # image_zero_wdb = wandb.Image(img_zero_total, caption=f"Img zero sequence for im {im_name}", file_type="png")
                     wandb.log({"pregressive":image_wdb})
+                    # wandb.log({"pregressive_zero":image_zero_wdb})
                     utils.delete([progress_img])
+                    
         out_val["xstart_pred"] = utils.inverse_image_transform(x)
         out_val["progress_img"] = img_total
+        out_val["progress_zero"] = progress_zero
+        out_val["x_init"] = utils.inverse_image_transform(x_init)
         if x_true is not None:
             out_val["psnrs"] = psnrs
         return out_val

@@ -31,12 +31,16 @@ def main(cfg):
     mean_psnr_l = data["psnr last"].mean()
     mean_lpips_l = data["lpips last"].mean()
     mean_ssim_l = data["ssim last"].mean()
+    mean_psnr_i = data["psnr_init"].mean()
+    mean_lpips_i = data["lpips_init"].mean()
     dic_results[f"psnr mmse"] = [mean_psnr]
     dic_results[f"lpips mmse"] = [mean_lpips]
     dic_results[f"ssim mmse"] = [mean_ssim]
     dic_results[f"psnr sample"] = [mean_psnr_l]
     dic_results[f"lpips sample"] = [mean_lpips_l]
     dic_results[f"ssim sample"] = [mean_ssim_l]
+    dic_results[f"psnr init"] = [mean_psnr_i]
+    dic_results[f"lpips init"] = [mean_lpips_i]
     vec_lpips_mmse.append(mean_lpips)
     vec_psnr_mmse.append(mean_psnr)
     vec_ssim_mmse.append(mean_ssim)

@@ -71,6 +71,7 @@ def main():
     )
     
     # physic
+    dinv_physic = None
     if args.task == "deblur":
         kernels = phy.Kernels(
             operator_name=args.physic.operator_name,
@@ -103,6 +104,17 @@ def main():
             device=device,
             mode = args.mode
         )
+        from deepinv.physics import Inpainting, GaussianNoise
+        dinv_physic = Inpainting(
+            (3, 64, 64),
+            mask = physic.Mask,
+            device = device,
+            noise_model = GaussianNoise(
+                sigma= args.physic.sigma_model,
+            ),
+        ).to(device)
+        
+            
     elif args.task == "sr":
         physic = phy.SuperResolution(
             im_size=args.data.im_size,
@@ -117,6 +129,16 @@ def main():
             device=device,
             mode = args.mode
         )
+        from deepinv.physics import Downsampling, GaussianNoise
+        dinv_physic =   Downsampling(
+            filter = "bicubic",
+            img_size = (3, 64, 64),
+            factor = args.physic.sr.sf,
+            device = device,
+            noise_model = GaussianNoise(
+                sigma= args.physic.sigma_model,
+            ),
+        ).to(device)
 
     elif args.task == "ct":
         physic = phy.CT(
@@ -145,7 +167,7 @@ def main():
     )
     
     # model
-    pl_model = um.UnfoldedModel(physic, kernels, args.num_gpus, args, device=device, wandb_logger=wandb_logger, max_unfoled_iter=args.max_unfolded_iter)
+    pl_model = um.UnfoldedModel(physic, kernels, args.num_gpus, args, device=device, wandb_logger=wandb_logger, max_unfoled_iter=args.max_unfolded_iter, dphys = dinv_physic)
     if args.task=="sr":
         pth = os.path.join(args.save_checkpoint_dir, f"{args.task}_{args.max_unfolded_iter}", date, f"factor_{args.physic.sr.sf}")
     elif args.task=="deblur":
@@ -200,7 +222,7 @@ def main():
                          logger=wandb_logger, 
                          benchmark=False,
                          log_every_n_steps=100,
-                         precision="bf16",
+                        #  precision="bf16",
                          num_nodes=1,
                     )
 

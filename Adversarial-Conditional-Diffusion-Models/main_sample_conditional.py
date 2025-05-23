@@ -10,6 +10,7 @@ import datetime
 import scipy.io as sio
 import torch
 from torch.utils.data import DataLoader
+import cv2
 
 from datasets.datasets import GetDatasets
 import models as models
@@ -23,7 +24,7 @@ from metrics.metrics import Metrics
 
 
 max_images = 300
-max_iter = 128
+max_iter = 8
 ddpm_param = 1
 
 stochastic_model = False
@@ -60,7 +61,8 @@ def main(
         args.mode = mode
         args.physic.operator_name = config.operator_name 
         args.physic.sigma_model = config.sigma_model
-        
+        num_timesteps = config.num_timesteps
+    
         if args.mode == mode:
             ckpt_epoch = config.ckpt_epoch
             ckpt_date = config.ckpt_date
@@ -72,6 +74,7 @@ def main(
         args.ddpm_param = ddpm_param
         args.solver_type = solver_type
         args.eta = eta
+        args.init_prev = config.init_prev
         #args.dpir.use_dpir = False
         run_name = f"_{args.task}_sampling"
         # lora dir and name
@@ -89,7 +92,7 @@ def main(
         else:
             raise ValueError("Operator not implemented !!")
         
-        args.lora_checkpoint_name = f"lsun_lora_{args.task}_epoch={ckpt_epoch:03d}.ckpt" #checkpoint_lora_sr_epoch=079
+        args.lora_checkpoint_name = f"lsun_BestPSNR_lora_{args.task}_epoch={ckpt_epoch:03d}.ckpt" #checkpoint_lora_sr_epoch=079
         print(args.lora_checkpoint_dir, args.lora_checkpoint_name)
         # parameters
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
@@ -138,13 +141,13 @@ def main(
                         )
                 # data
                 dir_test = "/mnt/scratch/users/applied_computational_math/LSUN/" #/users/cmk2000/sharedscratch/Datasets/testsets/ffhq or imageffhq
-                datasets = GetDatasets(dir_test, args.im_size, dataset_name = "LSUN",type_ = "val")
+                datasets = GetDatasets(dir_test, args.im_size, dataset_name = "LSUN",type_ = "val", transform="CentreCrop")
                 testset = DataLoader(datasets, batch_size=8, shuffle=False, num_workers=4)
                 print(len(datasets))
                 # -- model
                 model = models.adapter_lora_model(args)    
                 models.load_trainable_params(model, args)
-             
+
                 # Diffusion noise
                 diffusion_scheduler = ums.DiffusionScheduler(device=device,noise_schedule_type=args.noise_schedule_type)
        
@@ -190,16 +193,41 @@ def main(
                         device=device,
                         mode = args.mode
                     )
+                    from deepinv.physics import Downsampling, GaussianNoise
+                    dinv_physic =   Downsampling(
+                        filter = "bicubic",
+                        img_size = (3, 256, 256),
+                        factor = args.physic.sr.sf,
+                        device = device,
+                        noise_model = GaussianNoise(
+                            sigma= args.physic.sigma_model,
+                        ),
+                    ).to(device)
                     
                 # HQS module
-                denoising_timestep = ums.GetDenoisingTimestep(device)
+                denoising_timestep = ums.GetDenoisingTimestep(diffusion_scheduler, device)
                 hqs_module = ums.HQS_models(
                     model,
                     physic, 
                     diffusion_scheduler, 
                     denoising_timestep,
-                    args
+                    args,
+                    device=device
                 )
+                # Load HQS_model weights
+                lora_checkpoint_dir = args.lora_checkpoint_dir
+                lora_checkpoint_name = args.lora_checkpoint_name
+                filepath = bf.join(lora_checkpoint_dir, lora_checkpoint_name)
+                st_dict = torch.load(filepath, map_location=device)#["HQS_state_dict"]
+                hqs_dict = st_dict["HQS_state_dict"]
+                ram_dict = st_dict["RAM_state_dict"]
+                hqs_module.load_state_dict(hqs_dict, strict=False)
+                hqs_module.to(device)
+                print("HQS model loaded")
+                print("LOADED Params: ")
+                for name, param in hqs_module.named_parameters():
+                    if param.requires_grad:
+                        print(name, param.data)
                     
                 # sampler
                 diffsampler = runners.Conditional_sampler(
@@ -208,8 +236,14 @@ def main(
                     diffusion_scheduler, 
                     device, 
                     args,
-                    max_unfolded_iter = max_unfolded_iter
+                    max_unfolded_iter = max_unfolded_iter,
+                    dphys = dinv_physic if args.task=="sr" else None,
                 )
+                print("Loading parameters for RAM module")
+                print(*[k for k in ram_dict.keys()], sep="\n")
+                diffsampler.RAM.load_state_dict(ram_dict, strict=False)
+                diffsampler.RAM.to(device)
+
 
                 # Metrics
                 metrics = Metrics(device=device)
@@ -230,19 +264,21 @@ def main(
                     raise ValueError(f"Solver {solver_type} do not exists.")
                                 
                 root_dir_results = os.path.join(args.save_dir, f"{args.task}_{use_lora}", f"operator_{args.physic.operator_name}", args.eval_date, solver_type, f"Max_iter_{max_iter}", f"timesteps_{num_timesteps}", param_name_folder, f"lambda_{args.lambda_}")
-                
+                if args.init_prev:
+                    root_dir_results = root_dir_results + "init_prev"
                 if args.evaluation.coverage or args.evaluation.metrics:
                     save_metric_path = os.path.join(root_dir_results, "metrics_results")
                     os.makedirs(save_metric_path, exist_ok=True)
                     
                 if args.evaluation.save_images:
                     ref_path = os.path.join(root_dir_results, "ref")
+                    init_path = os.path.join(root_dir_results, "init")
                     mmse_path = os.path.join(root_dir_results, "mmse")
                     metric_path = os.path.join(root_dir_results, "metrics")
                     var_path = os.path.join(root_dir_results, "var")
                     y_path = os.path.join(root_dir_results, "y")
                     last_path = os.path.join(root_dir_results, "last")
-                    for dir_ in [ref_path, mmse_path, y_path, last_path, var_path,metric_path]:
+                    for dir_ in [ref_path, init_path, mmse_path, y_path, last_path, var_path,metric_path]:
                         os.makedirs(dir_, exist_ok=True)
                 
                 # Evaluations
@@ -301,8 +337,9 @@ def main(
                             if args.evaluation.coverage:
                                 data[it-1] = out["xstart_pred"].detach().squeeze()
                             if args.use_wandb and ii%10==0 and args.evaluation.coverage:
-                                psnr_val = metrics.psnr_function(out["xstart_pred"], x)
-                                wandb.log({f"sample psnr {im_name}": psnr_val})
+                                for i in range(len(x)):
+                                    psnr_val = metrics.psnr_function(out["xstart_pred"][i].unsqueeze(0), x.unsqueeze(0))
+                                    wandb.log({f"sample psnr {im_name}": psnr_val})
                     # posterior mean - mmse
                     if max_iter>1:
                         X_posterior_mean = posterior.get_mean()
@@ -323,8 +360,13 @@ def main(
                         pass
                         
                     if args.use_wandb:
-                        psnr_val = metrics.psnr_function(out["xstart_pred"], x)
-                        wandb.log({f"psnrs": psnr_val}) 
+                        for psnr_i in range(len(x)):
+                            psnr_val = metrics.psnr_function(out["xstart_pred"][psnr_i].unsqueeze(0), x[psnr_i].unsqueeze(0))
+                            psnr_mean_val = metrics.psnr_function(X_posterior_mean[psnr_i].unsqueeze(0), x[psnr_i].unsqueeze(0))
+                            psnr_init_val = metrics.psnr_function(out["x_init"][psnr_i].unsqueeze(0), x[psnr_i].unsqueeze(0))
+                            wandb.log({f"psnrs": psnr_val}) 
+                            wandb.log({f"psnr_mean": psnr_mean_val})
+                            wandb.log({f"psnr_init": psnr_init_val})
                         
                     if args.use_wandb and ii%2 == 0:
                         im_wdb = wandb.Image(
@@ -335,6 +377,11 @@ def main(
                         x0_wdb = wandb.Image(
                             utils.get_rgb_from_tensor(out["xstart_pred"][0].unsqueeze(0)), 
                             caption=f"sample psnr/mse ({metrics.psnr_function(out['xstart_pred'][0].unsqueeze(0), x[0].unsqueeze(0)):.2f},{metrics.lpips_function(out['xstart_pred'][0].unsqueeze(0), x[0].unsqueeze(0)):.2f}))", 
+                            file_type="png"
+                        )
+                        xinit_wdb = wandb.Image(
+                            utils.get_rgb_from_tensor(out["x_init"][0].unsqueeze(0)), 
+                            caption=f"Initialization/mse ({metrics.psnr_function(out['x_init'][0].unsqueeze(0), x[0].unsqueeze(0)):.2f},{metrics.lpips_function(out['x_init'][0].unsqueeze(0), x[0].unsqueeze(0)):.2f}))", 
                             file_type="png"
                         )
                         xmmse_wdb = wandb.Image(
@@ -357,12 +404,17 @@ def main(
                             caption=f"observation", 
                             file_type="png"
                         )
-                        xy = [im_wdb, y_wdb, x0_wdb, z0_wdb, xmmse_wdb, xvar_wdb]
+                        xy = [im_wdb, y_wdb, xinit_wdb, x0_wdb, z0_wdb, xmmse_wdb, xvar_wdb]
                         wandb.log({"blurred and predict":xy})
                         # progression
                         image_wdb = wandb.Image(out["progress_img"], caption=f"progress sequence for im {im_name}", file_type="png")
                         wandb.log({"pregressive":image_wdb})
-                        utils.delete([image_wdb, xy, xmmse_wdb, z0_wdb, y_wdb, x0_wdb, im_wdb, xvar_wdb])
+                        progress_zero = out["progress_zero"]
+                        psnrs_zero = [metrics.psnr_function(utils.inverse_image_transform(pz.unsqueeze(0)), x[0].unsqueeze(0)) for pz in progress_zero]
+                        img_zero_total = cv2.hconcat([utils.get_rgb_from_tensor(utils.inverse_image_transform(pz.unsqueeze(0))) for pz in progress_zero])
+                        image_zero = wandb.Image(img_zero_total, caption=f"progress sequence for im {im_name}. PSNR Func: {psnrs_zero}", file_type="png")
+                        wandb.log({"pregressive_zero":image_zero})
+                        utils.delete([image_wdb, xy, xinit_wdb, xmmse_wdb, z0_wdb, y_wdb, x0_wdb, im_wdb, xvar_wdb])
                     
                     # coverage
                     if args.evaluation.coverage:
@@ -399,11 +451,12 @@ def main(
 
                     # sliced wasserstein distance
                     if args.evaluation.save_images:   
-                        for iii, (x_t, xp_t, y_t, v_t) in enumerate(zip(x, X_posterior_mean, y, X_posterior_var)):
+                        for iii, (x_t, x0_t, xp_t, y_t, v_t) in enumerate(zip(x, out["x_init"], X_posterior_mean, y, X_posterior_var)):
                             im_name = f"{(ii*x.shape[0] + iii):05d}"
                             # save images for fid and cmmd evaluation
                             utils.save_images(ref_path, x_t, im_name)
                             utils.save_images(mmse_path, xp_t, im_name)
+                            utils.save_images(init_path, x0_t, im_name)
                             # std = torch.sqrt(X_posterior_var)
                             std = v_t
                             err = torch.abs(xp_t-x_t)
@@ -424,6 +477,9 @@ def main(
                             mse_temp = metrics.mse_function(xp_t, x_t)
                             ssim_temp = metrics.ssim_function(xp_t, x_t)
                             lpips_temp = metrics.lpips_function(xp_t, x_t)
+                            psnr_init_temp = metrics.psnr_function(x0_t, x_t)
+                            lpips_init_temp = metrics.psnr_function(x0_t, x_t)
+                            
                             
                             psnr_temp_last = metrics.psnr_function(last_sample[iii], x_t)
                             mse_temp_last = metrics.mse_function(last_sample[iii], x_t)
@@ -440,6 +496,8 @@ def main(
                                 "mse last": [mse_temp_last],
                                 "ssim last": [ssim_temp_last],
                                 "lpips last": [lpips_temp_last],
+                                "psnr_init":[psnr_init_temp],
+                                "lpips_init":[lpips_init_temp]
                             })
                             save_dir_metric = os.path.join(save_metric_path, 'metrics_results.csv')
                             matrics_pd.to_csv(save_dir_metric, mode='a', header=not os.path.exists(save_dir_metric))

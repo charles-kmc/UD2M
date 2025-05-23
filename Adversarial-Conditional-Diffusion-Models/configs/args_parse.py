@@ -14,6 +14,7 @@ def configs(mode="train"):
         parser.add_argument("--ckpt_date", type=str, required=True, help="Date when the checkpoint was save")
         parser.add_argument("--total_steps", type=int, required=True, help="Total timesteps")
         parser.add_argument("--num_timesteps", type = int, required=True, help="Number of timesteps")
+        parser.add_argument("--init_prev", action="store_true", help="Use the previous estimate as initialization")
     config = parser.parse_args()
     
     if config.task == "inp":

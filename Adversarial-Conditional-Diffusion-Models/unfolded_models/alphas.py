@@ -1,23 +1,40 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import math
+cos_function = lambda x: math.cos((x + 0.008) / (1.008) * math.pi / 2)**2
+def CosineScheduler(timesteps, beta_max =0.999):
+    cos_function = lambda x: math.cos((x + 0.008) / (1.008) * math.pi / 2)**2
+    betas = []
+    for t in range(timesteps):
+        t1 = t/timesteps
+        t2 = (t+1)/timesteps
+        beta = min(1 - cos_function(t2) / cos_function(t1), beta_max)
+        betas.append(beta)
+    return np.array(betas)
 
-betas  = np.linspace(0.0001, 0.02, 1000)
+betas  = CosineScheduler(1000)
+# betas = np.linspace(0.0001, 0.02, 1000)
 alphas = 1 - betas
 alphas_cumprod = np.cumprod(alphas)
-
-alphas_approx = np.exp(1000*(1-betas[0]) - (betas[-1] - betas[0]) * np.arange(1000)**2/2/1000)
-print("alphas_approx", alphas_approx)
 Ts = np.arange(1000)
+print(alphas_cumprod - np.array([cos_function((t+1)/1000)/cos_function(0) for t in Ts]))
+# alphas_approx = np.exp(1000*(1-betas[0]) - (betas[-1] - betas[0]) * np.arange(1000)**2/2/1000)
+# print("alphas_approx", alphas_approx)
+
 def plot_alphas():
     plt.figure(figsize=(10, 5))
-    plt.plot(Ts, alphas, label='alphas')
-    plt.plot(Ts, alphas_cumprod, label='alphas_cumprod')
-    plt.plot(Ts, alphas_approx, label='alphas_approx')
+    plt.plot(Ts, np.log(alphas), label='alphas')
+    plt.plot(Ts, np.log(alphas_cumprod), label='alphas_cumprod')
+    plt.plot(Ts, np.log([cos_function((t)/1000) for t in Ts]), label='cos_function')
+    # plt.plot(Ts, alphas_approx, label='alphas_approx')
     plt.title('Alphas and Alphas Cumulative Product')
     plt.xlabel('Time Steps')
     plt.ylabel('Value')
     plt.legend()
     plt.grid()
     plt.show()
+
+
+
 
 plot_alphas()

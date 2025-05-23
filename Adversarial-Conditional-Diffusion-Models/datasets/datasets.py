@@ -64,7 +64,7 @@ class GetDatasets:
         # transformer
         self.transform = v2.Compose([
             v2.ToTensor(), 
-            v2.RandomCrop((self.im_size, self.im_size)) if transform == "RandomCrop" else v2.Resize((self.im_size, self.im_size)),
+            v2.RandomCrop((self.im_size, self.im_size)) if transform == "RandomCrop" else v2.CenterCrop((self.im_size, self.im_size)),
             #v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
         ])
         

@@ -83,6 +83,8 @@ class Kernels:
             if seed is not None:
                 set_seed(seed)
             blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
+        elif self.operator_name == "anisotropic":
+            blur_kernel = self._anisotropic_kernel(self.kernel_size).to(self.device)
         elif self.operator_name  == "motion":
             blur_kernel = self._motion_kernel().to(self.device)
         elif self.operator_name == "uniform_motion":
@@ -92,6 +94,14 @@ class Kernels:
         else:
             raise ValueError(f"Blur type {self.operator_name } not implemented !!")
         return blur_kernel.squeeze()
+    
+    def _anisotropic_kernel(self, kernel_size):
+        sigma = 10  # better make argument for kernel type
+        pdf = lambda x: torch.exp(torch.Tensor([-0.5 * (x / sigma) ** 2]))
+        kernel = torch.Tensor([pdf(-2), pdf(-1), pdf(0), pdf(1), pdf(2)]).to(
+            self.device)
+        kernel = torch.matmul(kernel[:,None],kernel[None,:])/torch.sum(kernel)**2
+        return kernel
 
     def _uniform_motion_kernel(self, kernel_size):
         self.uniform_kernel_generator = MotionBlurGenerator((kernel_size,kernel_size), num_channels=1)#UniformMotionBlurGenerator(kernel_size=(kernel_size,kernel_size))
@@ -109,6 +119,20 @@ class Kernels:
             pass
         kernel = generator.step(1)
         return kernel["filter"].squeeze()
+
+    def _bicubic_kernel(self, factor):
+        x = np.arange(start=-2 * factor + 0.5, stop=2 * factor, step=1) / factor
+        a = -0.5
+        x = np.abs(x)
+        w = ((a + 2) * np.power(x, 3) - (a + 3) * np.power(x, 2) + 1) * (x <= 1)
+        w += (
+            (a * np.power(x, 3) - 5 * a * np.power(x, 2) + 8 * a * x - 4 * a)
+            * (x > 1)
+            * (x < 2)
+        )
+        w = np.outer(w, w)
+        w = w / np.sum(w)
+        return torch.Tensor(w)
     
     def _motion_kernel(self):
         # defined transforms 
@@ -414,16 +438,11 @@ class SuperResolution:
         self.im_size = im_size
         self.scale_image = scale_image
         self.device = device
-        self.sigma_model = 2 * sigma_model if self.scale_image else sigma_model
+        self.sigma_model = 2*sigma_model if self.scale_image else sigma_model
         self.dtype = dtype
         self.mode = mode
-        self.bool = 1
     
     def upsample(self, x):
-        '''s-fold upsampler
-        Upsampling the spatial size by filling the new entries with zeros
-        x: tensor image, NxCxWxH
-        '''
         sf = self.sf
         z = F.interpolate(x, size=(x.shape[-2]*sf, x.shape[-1]*sf), mode='bilinear') 
         return z
@@ -433,112 +452,64 @@ class SuperResolution:
         st = 0
         return x[..., st::sf, st::sf]
     
+    def blur2A(self, im_size, transpose=False):
+        if len(self.blur.shape) > 2:
+            raise ValueError("The kernel dimension is not correct")
+        device = self.blur.device
+        blur=self.blur
+        if transpose:
+            blur = self.blur.T
+        n, m = blur.shape
+        H_op = torch.zeros(im_size[-2], im_size[-1], dtype=blur.dtype).to(device)
+        H_op[:n,:m] = blur
+        for axis, axis_size in enumerate(blur.shape):
+            H_op = torch.roll(H_op, -int(axis_size / 2), dims=axis)
+        FFT_h = torch.fft.fft2(H_op, dim = (-2,-1))
+        n_ops = torch.sum(torch.tensor(FFT_h.shape) * torch.log2(torch.tensor(FFT_h.shape)))
+        FFT_h[torch.abs(FFT_h)<n_ops*2.22e-6] = torch.tensor(0)
+        return FFT_h[None, None, ...]
+    
+    def Ax(self, x):
+        if not hasattr(self, "pre_compute"):
+            raise ValueError("pre_compute doesn't exists!!")
+        FFT_x = torch.fft.fft2(x, dim = (-2,-1))
+        ax = torch.real(
+            torch.fft.ifft2(self.pre_compute["FFT_h"] * FFT_x, dim = (-2,-1))
+        )
+        return ax
+    
+    # forward operator
+    def ATx(self, x):
+        if not hasattr(self, "pre_compute"):
+            raise ValueError("pre_compute doesn't exists!!")
+        FFT_x = torch.fft.fft2(x, dim = (-2,-1))
+        atx = torch.real(
+            torch.fft.ifft2(self.pre_compute["FFT_hc"] * FFT_x, dim = (-2,-1))
+        )
+        return atx
+ 
     def y(self, x:torch.Tensor, blur:torch.Tensor, sf:int)->torch.Tensor:
-        '''__summary__
-        Generate observation.
+        self.pre_compute = {}
+        self.sf, self.blur, im_size = sf,blur,x.shape
+        if not self.scale_image:
+            x = inverse_image_transform(x)
+      
+        # observation model   
+        FFT_h = self.blur2A(im_size)  
+        self.pre_compute["FFT_h"]=FFT_h
         
-        inputs:
-            - x (tensor): high-resolution image
-            - blur (tensor): blur kernel
-            - sf (int): resolution factor
-        outputs:
-            - obs (tensor): low-resolution image
-        '''
-        self.sf = sf
-        self.blur = blur
-        if self.scale_image:
-            x0 = inverse_image_transform(x)
-        else:
-            x0 = x 
-        
-        # observation model     
-        FFT_h = blur_to_operator(blur, x0.shape)
-        FFT_x = torch.fft.fft2(x0, dim = (-2,-1))
-        Hx = torch.real(torch.fft.ifft2(FFT_h * FFT_x, dim = (-2,-1)))
+        Hx = self.Ax(x)
         Lx = self.downsample(Hx)
-        
-        if self.scale_image:
-            Lx = image_transform(Lx)
-        
-        obs =  Lx + self.sigma_model * torch.randn_like(Lx)
-        
+        y_ =  Lx + self.sigma_model * torch.randn_like(Lx)
+                
         # pre compute
         FFT_hc = torch.conj(FFT_h)
-        if self.scale_image and self.bool:
-            obs_ = (obs+1)/2
-        else:
-            obs_=obs.clone()
-           
-        FFT_y = torch.fft.fft2(obs_, dim = (-2,-1))
-        FFT_hcy = FFT_hc*torch.fft.fft2(self.upsample(obs_), dim=(-2, -1))
-        self.pre_compute = {"FFT_h":FFT_h, "FFT_hch":FFT_h**2, "FFT_hc":FFT_hc, "FFT_y":FFT_y, "FFT_hcy":FFT_hcy}
-        
-        return obs
-    
-    def mean_estimate00(
-        self,
-        obs:dict, 
-        x:torch.Tensor, 
-        params:dict
-    ):
-        ## 
-        if self.bool:
-            x = (x+1)/2
-            xt = (obs["x_t"]+1)/2
-            params["sigma_model"] = params["sigma_model"]/2
-        else:
-            xt = obs["x_t"]
-        if not hasattr(self, "pre_compute"):
-            raise ValueError("pre_compute is None")
-        sf = self.sf
-        
-        ## 
-        var = params["lambda_sig"]*params["sigma_model"]**2
-        alpha_z = 1/(params["rho"]**2)
-        alpha_xt = 1/(params["sigma_t"]**2)
-        alpha = alpha_z + alpha_xt
-        alpha_var = (alpha*var).ravel()[0]
-        
-        # cf. Woodbury formular
-        F_rhs = self.pre_compute["FFT_hcy"] + torch.fft.fft2(alpha_z*x, dim=(-2,-1)) + torch.fft.fft2((alpha_xt/params["sqrt_alpha_comprod"])*xt, dim=(-2,-1)) 
-        z1 = self.pre_compute["FFT_h"].mul(F_rhs)
-        
-        FBR = torch.mean(sisr_utils.splits(z1, sf), dim=-1, keepdim=False)
-        invW = torch.mean(sisr_utils.splits(self.pre_compute["FFT_hch"], sf), dim=-1, keepdim=False)
-        invWBR = FBR.div(invW+alpha_var)
-        FCBinvWBR = self.pre_compute["FFT_hc"]*invWBR.repeat(1, 1, sf, sf)
-        
-        Fz = (F_rhs - FCBinvWBR)/alpha
-        zest = torch.real(torch.fft.ifft2(Fz, dim=(-2, -1)))
-        
-        # scale from [0,1] to [-1,1]
-        if self.scale_image and self.bool:
-            zest = torch.clamp(zest,0,1)
-            zest = image_transform(zest)
-        return zest
-    
-    def mean_estimate00(
-        self,
-        obs:dict, 
-        x:torch.Tensor, 
-        params:dict,
-    ):
-        ## TODO
-        x_t = obs["x_t"]
-        if not hasattr(self, "pre_compute"):
-            raise ValueError("pre_compute is None")
-        ## TODO
-        sigma_y = 1/(params["lambda_sig"]*params["sigma_model"]**2)
-        alpha_z = 1/params["rho"]**2
-        alpha_xt = 1/(params["sigma_t"]**2)
-        alpha = alpha_z + alpha_xt
-
-        F_rhs = self.pre_compute["FFT_hcy"]*sigma_y + alpha_z*torch.fft.fft2(x, dim=(-2,-1)) + (alpha_xt/params["sqrt_alpha_comprod"])*torch.fft.fft2(x_t, dim=(-2,-1)) 
-        co_variance = self.pre_compute["FFT_hch"]*sigma_y + alpha
-        Fz = F_rhs/co_variance
-        
-        zest = torch.real(torch.fft.ifft2(Fz, dim=(-2, -1)))
-        return zest
+        FFT_hcy = FFT_hc*torch.fft.fft2(image_transform(self.upsample(inverse_image_transform(y_))), dim=(-2, -1))
+        self.pre_compute["FFT_hc"] = FFT_hc
+        self.pre_compute["FFT_hch"] = FFT_h**2
+        self.pre_compute["FFT_hcy"] = FFT_hcy
+             
+        return y_
  
     def mean_estimate(
         self,
@@ -546,34 +517,18 @@ class SuperResolution:
         x:torch.Tensor, 
         params:dict,
         ):   
-             
-        # ---> Compute right-hand vector in frequency domain
-        if self.bool:
-            x = (x+1)/2
-            xt = (obs["x_t"]+1)/2
-            sigma_model = params["sigma_model"]/2
-        else:
-            xt = obs["x_t"]
-            sigma_model = params["sigma_model"]
-        x_fft = torch.fft.fft2(x, dim = (-2,-1)) 
-        xt_fft = torch.fft.fft2(xt, dim = (-2,-1)) 
-        assert x_fft.shape == xt_fft.shape == self.pre_compute["FFT_hcy"].shape, f"x ({x_fft.shape}) and xt ({xt_fft.shape}) should have the same shape!!"
+            
+        x_t, sigma_model = obs["x_t"], params["sigma_model"]
+        x_fft, xt_fft = torch.fft.fft2(x, dim = (-2,-1)) , torch.fft.fft2(x_t, dim = (-2,-1)) 
         
-        right_fft = self.pre_compute["FFT_hcy"] / (params["lambda_sig"]*sigma_model**2) + x_fft/(params["rho"]**2) + xt_fft / (params["sigma_t"]**2*params["sqrt_alpha_comprod"])
+        assert x_fft.shape == xt_fft.shape == self.pre_compute["FFT_hcy"].shape, f"x ({x_fft.shape}) and xt ({xt_fft.shape}) should have the same shape!!"
+        right_fft = self.pre_compute["FFT_hcy"]/(params["lambda_sig"]*sigma_model**2) + x_fft/(params["rho"]**2) + xt_fft/(params["sigma_t"]**2*params["sqrt_alpha_comprod"])
 
         # ---> Covariance in fft
         denom_fft = self.pre_compute["FFT_hch"]/(params["lambda_sig"]*sigma_model**2) + 1/params["rho"]**2 + 1/params["sigma_t"]**2
-        
-        # ---> Solve in the frequency domain
-        zest_fft = right_fft / denom_fft
-
-        # ---> Inverse FFT to get back to the spatial domain
+        zest_fft = right_fft/denom_fft
         zest = torch.real(torch.fft.ifft2(zest_fft, dim = (-2,-1)))
-        
-        # ---> scale from [0,1] to [-1,1]
-        if self.scale_image and self.bool:
-            zest = torch.clamp(zest,0,1)
-            zest = image_transform(zest)
+ 
         return zest
     
 class CT():

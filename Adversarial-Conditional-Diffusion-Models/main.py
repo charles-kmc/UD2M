@@ -153,6 +153,15 @@ def main():
             device=device,
             scale_image=args.physic.transform_y,
         )
+        from deepinv.physics import BlurFFT, GaussianNoise
+        dinv_physic = BlurFFT(
+            (3,256,256),
+            filter = kernels.get_blur().unsqueeze(0).unsqueeze(0),
+            device = device,
+            noise_model = GaussianNoise(
+                sigma= args.physic.sigma_model,
+            ),
+        )
     elif args.task == "inp":
         physic = phy.Inpainting(
             mask_rate=args.physic.inp.mask_rate,
@@ -172,6 +181,16 @@ def main():
             device=device,
             mode = args.mode
         )
+        from deepinv.physics import Inpainting, GaussianNoise
+        dinv_physic = Inpainting(
+            (3,256, 256),
+            mask = physic.Mask,
+            device = device,
+            noise_model = GaussianNoise(
+                sigma= args.physic.sigma_model,
+            ),
+        ).to(device)
+
     elif args.task == "sr":
         physic = phy.SuperResolution(
             im_size=args.data.im_size,
@@ -186,6 +205,16 @@ def main():
             device=device,
             mode = args.mode
         )
+        from deepinv.physics import Downsampling, GaussianNoise
+        dinv_physic =   Downsampling(
+            filter = "bicubic",
+            img_size = (3, 256, 256),
+            factor = args.physic.sr.sf,
+            device = device,
+            noise_model = GaussianNoise(
+                sigma= args.physic.sigma_model,
+            ),
+        ).to(device)
 
     elif args.task == "ct":
         physic = phy.CT(
@@ -215,7 +244,7 @@ def main():
     )
     
     # model
-    pl_model = um.UnfoldedModel(physic, kernels, args.num_gpus, args, device=device, wandb_logger=wandb_logger)
+    pl_model = um.UnfoldedModel(physic, kernels, args.num_gpus, args, device=device, wandb_logger=wandb_logger, dphys = dinv_physic, PnP_Forward=False)
     if args.task=="sr":
         pth = os.path.join(args.save_checkpoint_dir, f"{args.task}", date, f"factor_{args.physic.sr.sf}")
     elif args.task=="deblur":
@@ -233,8 +262,16 @@ def main():
         mode='max',
         dirpath=pth,
         filename=f'{args.data.dataset_name.lower()}_lora_{args.task}'+'_{epoch:03d}',
-        save_top_k=40,
-        every_n_epochs=10,
+        save_top_k=2,
+        every_n_epochs=1,
+    )
+    psnr_callback_epoch = ModelCheckpoint(
+        monitor='psnr_mean',
+        mode='max',
+        dirpath=pth,
+        filename=f'{args.data.dataset_name.lower()}_BestPSNR_lora_{args.task}'+'_{epoch:03d}',
+        save_top_k=1,
+        every_n_epochs=1,
     )
 
     # --- >> profi;er for advance analysis
@@ -252,16 +289,16 @@ def main():
     # --- >> Trainer module
     trainer = pl.Trainer(accelerator="gpu", 
                          devices=args.num_gpus, 
-                         strategy='ddp',
+                         strategy='ddp_find_unused_parameters_true',
                          max_epochs=args.train.num_epochs, 
-                         callbacks=[checkpoint_callback_epoch],
+                         callbacks=[checkpoint_callback_epoch, psnr_callback_epoch],
                          num_sanity_val_steps=2, 
                          profiler="simple", 
                          logger=wandb_logger, 
                          benchmark=False,
                          log_every_n_steps=5,
                          num_nodes=1,
-                         limit_train_batches=args.data.number_sample_per_epoch//args.data.train_batch_size#1000 // 32
+                         limit_train_batches=args.data.number_sample_per_epoch//args.data.train_batch_size,#1000 // 32
                         #  precision="bf16",
                     )
 

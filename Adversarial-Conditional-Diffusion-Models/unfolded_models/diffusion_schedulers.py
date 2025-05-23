@@ -36,9 +36,12 @@ class DiffusionScheduler:
         self.device = device
         self.fix_timestep = fix_timestep
         self.num_timesteps = num_timesteps
+        self.noise_schedule_type = noise_schedule_type
         if noise_schedule_type == "cosine":
+            print("Using cosine noise schedule")
             betas = CosineScheduler(num_timesteps)
         elif noise_schedule_type=="linear":
+            print("Using linear noise schedule")
             betas = LinearScheduler(num_timesteps, beta_start=start_beta, beta_end=end_beta)
         else:
             raise NotImplementedError("This noise schedule is not implemented !!!")
@@ -50,15 +53,18 @@ class DiffusionScheduler:
         self.sqrt_1m_alphas_cumprod  = torch.sqrt(1. - self.alphas_cumprod)
         self.sigmas   = torch.div(self.sqrt_1m_alphas_cumprod, self.sqrt_alphas_cumprod)
         self.deg_cont = 3
-        self.sqrt_alphas_cumprod_cont = torch.from_numpy(
-            np.polyfit(np.arange(0, num_timesteps), self.sqrt_alphas_cumprod.cpu().log().numpy(), self.deg_cont),
-        ).to(self.device)
-        self.inv_sigmas_cont = torch.from_numpy(
-            np.polyfit(self.sigmas.cpu().log().numpy(), np.arange(0, num_timesteps), self.deg_cont),
-        ).to(self.device)
+        
+        if noise_schedule_type == "linear":
+            self.sqrt_alphas_cumprod_cont = torch.from_numpy(
+                np.polyfit(np.arange(0, num_timesteps), self.sqrt_alphas_cumprod.cpu().log().numpy(), self.deg_cont),
+            ).to(self.device)
+            self.inv_sigmas_cont = torch.from_numpy(
+                np.polyfit(self.sigmas.cpu().log().numpy(), np.arange(0, num_timesteps), self.deg_cont),
+            ).to(self.device)
+        elif noise_schedule_type == "cosine":
+            self.sqrt_cos_function = lambda t: ((t/1000 + 0.008) / (1.008) * math.pi / 2).cos()
 
-        # print(f"alpha_cont_diff: {torch.from_numpy(np.polyval(self.sqrt_alphas_cumprod_cont, np.arange(0, num_timesteps))).exp() - self.sqrt_alphas_cumprod.cpu()}")
-        # exit()
+
         
     def sample_times(self, bzs):
         if self.fix_timestep:
@@ -84,12 +90,13 @@ class DiffusionScheduler:
         )   
 
     def alpha_cont_diff(self, t):  ## Interpolate alphas for continuous time approximation
-        """
-        alpha_cont_diff: \alpha_t = \alpha_0 + \alpha_1 t + \alpha_2 t^2 + \alpha_3 t^3
-        """
-        return sum([
-            self.sqrt_alphas_cumprod_cont[-i-1] * t**i for i in range(self.deg_cont)
-        ]).exp()
+        if self.noise_schedule_type == "linear":
+            return sum([
+                self.sqrt_alphas_cumprod_cont[-i-1] * t**i for i in range(self.deg_cont)
+            ]).exp()
+        elif self.noise_schedule_type == "cosine":
+            return self.sqrt_cos_function(t+1)/self.sqrt_cos_function(torch.zeros_like(t))
+            
     
     def inv_sigmas_cont_diff(self, sig):
         """
@@ -146,7 +153,8 @@ class DiffusionScheduler:
     
     # get sequence of timesteps 
     def get_seq_progress_seq(self, iter_num):
-        seq = np.sqrt(np.linspace(0, self.num_timesteps**2, iter_num))
+        # seq = np.linspace(0, self.num_timesteps, iter_num+1)[1:]
+        seq = np.square(np.linspace(0, self.num_timesteps**0.5, iter_num+1)[1:])
         seq = [int(s) for s in list(seq)]
         seq[-1] = seq[-1] - 1
         progress_seq = seq[::max(len(seq)//10,1)]
@@ -158,8 +166,8 @@ class DiffusionScheduler:
 
 # coustomise timesteps for the denoising step  
 class GetDenoisingTimestep:
-    def __init__(self, device):
-        self.scheduler = DiffusionScheduler(device=device)
+    def __init__(self, scheduler, device):
+        self.scheduler = scheduler
         self.device = device
     
     # getting differently the timestep   
