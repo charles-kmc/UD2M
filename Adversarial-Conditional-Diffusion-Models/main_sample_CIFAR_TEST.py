@@ -1,0 +1,332 @@
+import os
+import copy
+import time
+import yaml
+import numpy as np
+import pandas as pd
+import blobfile as bf
+import matplotlib.pyplot as plt
+import datetime
+import scipy.io as sio
+import torch
+from torch.utils.data import DataLoader
+
+from datasets.datasets import GetDatasets
+import models as models
+import utils as utils
+import unfolded_models as ums
+import physics as phy
+import runners as runners
+from configs.args_parse import configs
+from metrics.coverage.coverage_function import coverage_eval
+from metrics.metrics import Metrics
+
+
+max_images = 512
+max_iter = 8
+ddpm_param = 1
+
+stochastic_model = False
+stochastic_rate = 0.05
+SOLVER_TYPES =  ["ddim"] # huen, ddpm, ddim
+LORA = True
+
+NUM_TIMESTEPS = [10,]#[50, 100, 200, 300, 500, 700, 800, 1000]
+etas =[0.8]   # sr=0.8
+T_AUG = 0
+ZETA = [0.9]#[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]#[0.1] #op 0.4 or 0.6 sr = 0.9
+date_eval = datetime.datetime.now().strftime("%d-%m-%Y")
+
+def main(
+    solver_type:str, 
+    ddpm_param:float = 1.,
+    date_eval:str = date_eval, 
+    max_iter:int = 1, 
+    eta:float=0.0
+):
+    with torch.no_grad():
+        # args
+        mode = "inference"
+        
+        script_dir = os.path.dirname(__file__)
+        # args
+        config = configs(mode=mode)
+        print(os.path.join(script_dir,"configs", config.config_file))
+        with open(os.path.join(script_dir, "configs", config.config_file), 'r') as file:
+            config_dict = yaml.safe_load(file)
+        args = utils.dict_to_dotdict(config_dict)
+        args.task = config.task
+        args.mode = mode
+        args.physic.operator_name = config.operator_name 
+        args.physic.sigma_model = config.sigma_model
+        args.max_unfolded_iter = config.max_unfolded_iter
+        MAX_UNFOLDED_ITER = [args.max_unfolded_iter,]
+        num_timesteps = config.num_timesteps
+        steps = num_timesteps
+        if args.mode == mode:
+            ckpt_epoch = config.ckpt_epoch
+            ckpt_date = config.ckpt_date
+        if config.task == "inp":
+            args.dpir.use_dpir = config.use_dpir
+        args.lambda_ = config.lambda_
+        args.lora = LORA
+        args.evaluation.coverage = False
+        args.ddpm_param = ddpm_param
+        args.solver_type = solver_type
+        args.eta = eta
+        #args.dpir.use_dpir = False
+        run_name = f"_{args.task}_sampling"
+        # lora dir and name
+        if args.task=="inp":
+            if True:  # TODO: Fix this, missing same conditional in mainCIFAR.py
+                args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task + f'_{args.max_unfolded_iter}', ckpt_date, args.physic.operator_name, f"scale_{args.physic.inp.mask_rate}") 
+            elif args.physic.operator_name=="box":
+                args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task+ f'_{args.max_unfolded_iter}', ckpt_date, args.physic.operator_name, f"box_prop_{args.physic.inp.box_proportion}")
+            else:
+                raise ValueError("Operator not implemented !!")
+        elif args.task=="deblur":
+            args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task+ f'_{args.max_unfolded_iter}', ckpt_date, args.physic.operator_name) 
+        elif args.task=="sr":
+            args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task+ f'_{args.max_unfolded_iter}', ckpt_date, f"factor_{args.physic.sr.sf}") 
+        else:
+            raise ValueError("Operator not implemented !!")
+        
+        args.lora_checkpoint_name = f"Bestpsnr_{args.task}_epoch={ckpt_epoch:03d}.ckpt" #checkpoint_lora_sr_epoch=079
+        print(args.lora_checkpoint_dir, args.lora_checkpoint_name)
+        # parameters
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
+        args.device = device
+        
+        for idx in range(len(ZETA)):
+            zeta = ZETA[idx]
+            args.zeta = zeta
+            for max_unfolded_iter in MAX_UNFOLDED_ITER:
+                args.max_unfolded_iter = max_unfolded_iter
+                args.date = ckpt_date
+                args.epoch = ckpt_epoch
+                args.eval_date = date_eval
+                args.save_wandb_img = False                
+                
+                if args.dpir.use_dpir and args.task!="inp":
+                    init = f"init_model_{args.dpir.model_name}"
+                else:
+                    init = f"init_xty_{args.init_xt_y}"
+                
+                if args.use_wandb:
+                    import wandb
+                    formatted_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                    dir_w = "/users/js3006/Conditional-Diffusion-Models-for-IVP/Adversarial-Conditional-Diffusion-Models/Regularised_CDM/wandb"
+                    os.makedirs(dir_w, exist_ok=True)
+                    if solver_type == "ddim":
+                        solver_params_title = f"eta{args.eta}_zeta_{args.zeta}"
+                    elif solver_type == "ddpm":
+                        solver_params_title = f"param_{args.ddpm_param}"
+                    elif solver_type=="huen":
+                        solver_params_title = f"huen"
+                    else:
+                        raise ValueError(f"Solver {solver_type} do not exists.")
+                    wandb.init(
+                            # set the wandb project where this run will be logged
+                            project=f"Sampling Unfolded Conditional Diffusion Models {args.task}_{args.physic.operator_name}",
+                            dir = dir_w,
+                            config={
+                                "model": "Deep Unfolding",
+                                "Structure": "HQS",
+                                "dataset": "FFHQ - 256",
+                                "dir": dir_w,
+                                "pertub":args.pertub,
+                            },
+                            name = f"{formatted_time}{run_name}_{solver_type}_num_steps_{num_timesteps}_unfolded_iter_{args.max_unfolded_iter}_{init}_max_iter_{config.max_unfolded_iter}_task_{args.task}_rank_{args.model.rank}_{solver_params_title}_epoch_{args.epoch}_T_AUG_{T_AUG}",
+                        )
+                # data
+                from diffusion.utils.data import get_data, RandomSubsetDataSampler
+                from torchvision.transforms import Lambda
+
+                data = get_data("Imagenet64", new_transforms = [Lambda(utils.image_transform),], labels = True)
+                testset = DataLoader(
+                    data["test"], 
+                    batch_size=32, 
+                    shuffle=False,
+                    num_workers=args.data.num_workers,
+                    drop_last=True,
+                )
+                
+                # -- model
+                model = models.adapter_lora_model(args)  
+                for name, params in model.named_parameters():
+                    if "lora" in name:
+                        print(params[1,:])
+                        break
+                    
+                    device = args.device
+                lora_checkpoint_dir = args.lora_checkpoint_dir
+                lora_checkpoint_name = args.lora_checkpoint_name
+                filepath = bf.join(lora_checkpoint_dir, lora_checkpoint_name)
+                trainable_state_dict = torch.load(filepath + '.1', map_location=device)
+                try:
+                    model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)  
+                except:
+                    model.load_state_dict(trainable_state_dict["state_dict"], strict=False)  
+
+                # set model to eval mode
+                model.eval()
+                for _k, v in model.named_parameters():
+                    v.requires_grad = False
+                model = model.to(device)
+                for name, params in model.named_parameters():
+                    if "lora" in name:
+                        print(params[1,:])
+                        break
+                # Diffusion noise
+                diffusion_scheduler = ums.DiffusionScheduler(device=device,noise_schedule_type=args.noise_schedule_type)
+       
+                # physic
+                if args.task == "deblur":
+                    kernels = phy.Kernels(
+                        operator_name=args.physic.operator_name,
+                        kernel_size=args.physic.kernel_size,
+                        device=device,
+                        mode = args.mode,
+                        std = 1.0
+                    )
+                    physic = phy.Deblurring(
+                        sigma_model=args.physic.sigma_model,
+                        device=device,
+                        scale_image=args.physic.transform_y,
+                        operator_name=args.physic.operator_name,
+                    )
+                elif args.task == "inp":
+                    print("operator name", args.physic.operator_name)
+                    physic = phy.Inpainting(
+                        mask_rate=args.physic.inp.mask_rate,
+                        im_size=args.im_size,
+                        operator_name=args.physic.operator_name,
+                        box_proportion = args.physic.inp.box_proportion,
+                        index_ii = args.physic.inp.index_ii,
+                        index_jj = args.physic.inp.index_jj,
+                        device=device,
+                        sigma_model=args.physic.sigma_model,
+                        scale_image=args.physic.transform_y,
+                        mode=args.mode,
+                    )
+                elif args.task=="sr":
+                    physic = phy.SuperResolution(
+                        im_size=args.im_size,
+                        sigma_model=args.physic.sigma_model,
+                        device=device,
+                        scale_image=args.physic.transform_y,
+                        mode = args.mode,
+                    )
+                    kernels = phy.Kernels(
+                        operator_name=args.physic.operator_name,
+                        kernel_size=args.physic.kernel_size,
+                        device=device,
+                        mode = args.mode
+                    )
+                    
+                    
+                # HQS module
+                denoising_timestep = ums.GetDenoisingTimestep(diffusion_scheduler, device)
+                hqs_module = ums.HQS_models(
+                    model,
+                    physic, 
+                    diffusion_scheduler, 
+                    denoising_timestep,
+                    args,
+                    device=device
+                )
+                print(trainable_state_dict["HQS_state_dict"])
+                hqs_module.load_state_dict(trainable_state_dict["HQS_state_dict"], strict=False)
+                for name, param in hqs_module.named_parameters():
+                    if param.requires_grad:
+                        print("loading params")
+                        print(name, param)
+                hqs_module = hqs_module.to(device)
+
+                # sampler
+                diffsampler = runners.Conditional_sampler(
+                    hqs_module, 
+                    physic, 
+                    diffusion_scheduler, 
+                    device, 
+                    args,
+                    max_unfolded_iter = max_unfolded_iter
+                )
+
+                # Metrics
+                metrics = Metrics(device=device)
+                
+                # directories
+                if args.model.use_lora:
+                    use_lora = "lora"
+                else:
+                    use_lora = "no_lora"
+                
+                if solver_type == "ddim":
+                    param_name_folder = os.path.join(f"zeta_{zeta}", f"eta_{eta}")
+                elif solver_type == "ddpm":
+                    param_name_folder = f"ddpm_param_{args.ddpm_param}"
+                elif solver_type=="huen":
+                    param_name_folder = "huen"
+                else:
+                    raise ValueError(f"Solver {solver_type} do not exists.")
+                                
+                root_dir_results = os.path.join(args.save_dir, f"{args.task}_{use_lora}", f"operator_{args.physic.operator_name}", args.eval_date, solver_type, f"Max_iter_{max_iter}", f"timesteps_{num_timesteps}", param_name_folder, f"lambda_{args.lambda_}", f"Steps_{steps}", f"Iters_{args.max_unfolded_iter}")
+                
+                if args.evaluation.coverage or args.evaluation.metrics:
+                    save_metric_path = os.path.join(root_dir_results, "metrics_results")
+                    os.makedirs(save_metric_path, exist_ok=True)
+                    
+                if args.evaluation.save_images:
+                    ref_path = os.path.join(root_dir_results, "ref")
+                    mmse_path = os.path.join(root_dir_results, "mmse")
+                    metric_path = os.path.join(root_dir_results, "metrics")
+                    var_path = os.path.join(root_dir_results, "var")
+                    y_path = os.path.join(root_dir_results, "y")
+                    last_path = os.path.join(root_dir_results, "last")
+                    for dir_ in [ref_path, mmse_path, y_path, last_path, var_path,metric_path]:
+                        os.makedirs(dir_, exist_ok=True)
+                
+                # Evaluations
+                s_psnr,s_mse,s_ssim,s_lpips,count = 0,0,0,0,0 
+                # results = {} 
+                
+                # Blur kernel 
+                if args.task == "deblur" or args.task=="sr":    
+                    blur = kernels.get_blur(seed=1234)
+                    
+                # loop over testset 
+                for ii, im in enumerate(testset):
+                    if isinstance(im, list):
+                        if isinstance(im[1], dict) and "y_label" in im[1].keys():
+                            im, y_label = im[0], im[1]["y_label"]
+                            y_label = y_label.to(device)
+                    else: 
+                        y_label = None
+                    if ii*im.shape[0]>max_images:
+                        break
+                        
+                    # True image
+                    im_name = f"{(ii):05d}"
+                    im = im.to(device)
+                    x = utils.inverse_image_transform(im)
+                    x_true = None
+                    
+                    # observation y 
+                    if args.task == "deblur":
+                        y = physic.y(im, blur)
+                    elif args.task=="sr":
+                        y = physic.y(im, blur, args.physic.sr.sf)
+                    elif args.task=="inp":
+                        y = physic.y(im)
+
+
+                    
+                wandb.finish()  
+    return args 
+
+
+if __name__ == "__main__":
+    for solver in SOLVER_TYPES:
+            for eta in etas:# [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]:
+                args = main(solver, max_iter=max_iter,eta= eta)

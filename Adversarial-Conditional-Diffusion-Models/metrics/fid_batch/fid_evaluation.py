@@ -4,7 +4,7 @@ import os
         
 from .utils import create_batches
 
-def Fid_evatuation(dir_results, device, mmse_sample = True, last_sample = True, method = "ours"):
+def Fid_evatuation(dir_results, device, mmse_sample = True, last_sample = True, init_sample = True, method = "ours"):
     """
     Calculate the Fréchet Inception Distance (FID) between the target and estimated images.
 
@@ -39,6 +39,14 @@ def Fid_evatuation(dir_results, device, mmse_sample = True, last_sample = True, 
         shutil.rmtree(batch_dir_last)
     else:
         out["fid_last"]= 0
+    if init_sample:
+        dir_last = os.path.join(dir_results, "init")
+        batch_dir_init = create_batches(dir_last, 4)
+        print("we want to compute the fid of the last estimate")
+        fid_init = fid(batch_dir_ref, batch_dir_init) 
+        out["fid_init"]= fid_init
+        shutil.rmtree(batch_dir_init)
+    
         
     print("fid computed")
     shutil.rmtree(batch_dir_ref)

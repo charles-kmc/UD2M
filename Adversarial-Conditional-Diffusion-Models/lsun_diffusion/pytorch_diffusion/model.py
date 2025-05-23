@@ -286,7 +286,7 @@ class Model(nn.Module):
                                         padding=1)
 
 
-    def forward(self, x, t):
+    def forward(self, x, t, y=None):
         assert x.shape[2] == x.shape[3] == self.resolution
 
         # timestep embedding

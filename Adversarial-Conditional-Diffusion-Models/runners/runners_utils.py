@@ -17,8 +17,8 @@ class DiffusionSolver:
         beta_t = self.diffusion.betas[self.seq[ii]]
         eta_sigma = eta * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] / self.diffusion.sqrt_1m_alphas_cumprod[t_i] * torch.sqrt(beta_t)
         x = self.diffusion.sqrt_alphas_cumprod[t_im1] * x0 \
-            + np.sqrt(1-zeta) * (torch.sqrt(self.diffusion.sqrt_1m_alphas_cumprod[t_im1]**2 - eta_sigma**2) * eps + eta_sigma * torch.randn_like(x0)) \
-                + np.sqrt(zeta) * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] * torch.randn_like(x0)
+            + (torch.sqrt(self.diffusion.sqrt_1m_alphas_cumprod[t_im1]**2 - eta_sigma**2) * eps + eta_sigma * torch.randn_like(x0)) \
+                + eta_sigma * self.diffusion.sqrt_1m_alphas_cumprod[t_im1] * torch.randn_like(x0)
         return x
     
     # DDPM solver

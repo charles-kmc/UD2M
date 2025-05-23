@@ -49,10 +49,10 @@ class GetDatasets:
                 dataset_dir, 
                 im_size, 
                 dataset_name = "FFHQ",
-                transform = None, 
                 clip_min = -1.0, 
                 clip_max = 1.0,  
-                type_ = "train"              
+                type_ = "train",
+                transform = "RandomCrop",              
             ):
         self.dataset_name = dataset_name
         self.dataset_dir = dataset_dir
@@ -64,7 +64,7 @@ class GetDatasets:
         # transformer
         self.transform = v2.Compose([
             v2.ToTensor(), 
-            v2.Resize((self.im_size, self.im_size)),
+            v2.RandomCrop((self.im_size, self.im_size)) if transform == "RandomCrop" else v2.CenterCrop((self.im_size, self.im_size)),
             #v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
         ])
         
@@ -78,12 +78,14 @@ class GetDatasets:
                 self.ref_images = glob.glob(os.path.join(self.dataset_dir , '*.png'))
             elif dataset_name == "LSUN":
                 if self.type == "train":
-                    data_dir = os.path.join(self.dataset_dir, "train")
-                    data_df = pd.read_csv(os.path.join(data_dir.rsplit("/",1)[0],"infos/lsun_bedroom_paths.csv"))
-                    self.ref_images = data_df["img_path"].values
+                    data_dir = "/mnt/scratch/users/applied_computational_math/LSUN/bedroom_train"
+                    data_df = pd.read_csv(os.path.join(data_dir,"lsun_bedroom.csv"))
+                    self.ref_images = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.webp')]
                 elif self.type == "val":
-                    data_dir = os.path.join(self.dataset_dir, "val")
-                    self.ref_images = glob.glob(os.path.join(data_dir, '*.png'))
+                    data_dir = "/mnt/scratch/users/applied_computational_math/LSUN/bedroom_val"
+                    data_df = pd.read_csv(os.path.join(data_dir,"lsun_bedroom.csv"))
+                    self.ref_images = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.webp')]
+
                 else:
                     raise ValueError(f"This type {self.type} is not yet implemented !!")
                 print(f"Number of images in {dataset_name} dataset: {len(self.ref_images)}")

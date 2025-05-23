@@ -161,7 +161,7 @@ def main():
         physics = utils.DotDict({"kernels": kernels, "physic": physic})
         
     # HQS module
-    denoising_timestep = um.GetDenoisingTimestep(device)
+    denoising_timestep = um.GetDenoisingTimestep(diffusion_scheduler, device)
     hqs_module = um.HQS_models(
         model,
         physic, 
