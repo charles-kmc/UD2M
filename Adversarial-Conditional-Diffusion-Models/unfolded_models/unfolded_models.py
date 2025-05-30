@@ -28,7 +28,6 @@ from DPIR.dpir_models import DPIR_deb
 from Conditioned_GAN.models.discriminator import DiscriminatorModel
 
 
-
 class UnfoldedModel(pl.LightningModule):
     def __init__(
             self, 
@@ -52,6 +51,12 @@ class UnfoldedModel(pl.LightningModule):
         self.physic = physic
         self.d_phys = dphys
         self.PnP_Forward = PnP_Forward
+
+        if hasattr(args, "use_GAN"):
+            self.use_GAN = args.use_GAN
+        else:
+            self.use_GAN = True
+
         
         
         
@@ -98,6 +103,7 @@ class UnfoldedModel(pl.LightningModule):
                 self.d_phys, self.diffusion_scheduler
             )
         
+
         self.hqs_module = HQS_models(
             self.model,
             self.physic, 
@@ -107,6 +113,7 @@ class UnfoldedModel(pl.LightningModule):
             device,
             RAM = self.RAM if PnP_Forward else None,
             RAM_Physics = dphys if PnP_Forward else None,
+            cm = args.use_CM
         )
         # ---> physics
         if self.args.task=="sr" or self.args.task=="deblur":
@@ -241,7 +248,21 @@ class UnfoldedModel(pl.LightningModule):
         y_ram = dinv.utils.TensorList([utils.inverse_image_transform(y)*min/self.d_phys.noise_model.sigma, xt_init*min/self.stacked_physic.physics_list[1].noise_model.sigma])
         x_init = self.RAM(y_ram, self.stacked_physic)
         return utils.image_transform(x_init)
-        
+    
+
+    def get_x_init(self, y, x_t, t):
+        if self.d_phys is not None: # Initialize from RAM using both (y, x_t)
+            x_init = self.RAM_Initialization(y, x_t, t)
+        elif self.args.dpir.use_dpir and self.args.task in {"deblur", "sr"}: # Initialize from DPIR (legacy)
+            x_init = self.dpir_model.run(
+                utils.inverse_image_transform(y),
+                self.blur,
+                iter_num = 1
+            )
+            x_init = utils.image_transform(x_init)
+        else: # Initialize from y
+            x_init = y 
+        return x_init
         
     ## ====> training penality function
     def training_step(self, batch, batch_idx):
@@ -271,28 +292,9 @@ class UnfoldedModel(pl.LightningModule):
             y = self.physic.y(batch)
         else:
             raise ValueError(f"This task ({self.args.task})is not implemented!!!")
-        # ---> initialisation unfolded model
-        if self.args.dpir.use_dpir and self.args.task == "deblur":
-            y_ = utils.inverse_image_transform(y)
-            x_init = self.dpir_model.run(y_, self.blur, iter_num = 1) #y.clone()
-            x_init = utils.image_transform(x_init)
-        elif self.args.task=="sr":
-            with torch.no_grad() if batch_idx % 2 == 1 else torch.enable_grad():
-                if self.d_phys is not None:
-                    x_init = self.RAM_Initialization(y, x_t, t)
-                else:
-                    x_init = utils.image_transform(y_)
-        elif self.args.task=="inp":
-            # with torch.no_grad():
-            if self.d_phys is not None:
-                x_init = self.RAM(utils.inverse_image_transform(y), self.d_phys)
-                x_init = utils.image_transform(x_init)
-            else:
-                x_init = y.clone()
-        elif self.args.task=="ct":
-            x_init = self.physic.init(y)
-        else:
-            raise ValueError(f"This task ({self.args.task})is not implemented!!!")
+
+        # ---> initialisation unfolded model=
+        x_init = self.get_x_init(y, x_t, t)
             
         # ---> unfolded model
         obs = {"x_t":x_t, "y":y, "b":batch, "y_label":y_label}
@@ -335,14 +337,17 @@ class UnfoldedModel(pl.LightningModule):
         else:
             y_up=y.clone()
         
-        if batch_idx % 2 == 0:
-            if self.args.train.num_z_train>1:
+        if batch_idx % 2 == 0 or not self.use_GAN:
+            if self.args.train.num_z_train>1 and self.use_GAN:
                 g_loss = self.adversarial_loss_diffusion(y_up, gens)
-            else:
+            elif self.use_GAN:
                 d_out = self.discriminator(input=xest, y=y_up)
                 g_loss = self.adversarial_loss(d_out, valid)
-            g_loss += self.mseLoss(out["eps_pred"], noise_target).mean()
-            g_loss += self.args.train.scale_lpips*self.lpips(xest.add(1).div(2), batch.add(1).div(2)).mean()
+            else: 
+                g_loss = 0.
+            g_loss = g_loss + self.mseLoss(out["eps_pred"], noise_target).mean()
+            if self.args.train.scale_lpips > 1e-8:
+                g_loss = g_loss +  self.args.train.scale_lpips*self.lpips(xest.add(1).div(2), batch.add(1).div(2)).mean()
             self.log('g_loss', g_loss, prog_bar=True)
             for i in range(self.hqs_module.num_weights_hqs):
                 self.log(f"SP_param_{i}", self.hqs_module.SP_Param[i].exp(), prog_bar=False)
@@ -369,7 +374,7 @@ class UnfoldedModel(pl.LightningModule):
         #     pass
 
         # --- > train discriminator
-        if batch_idx % 2 == 1:
+        if batch_idx % 2 == 1 and self.use_GAN:
             x_hat = out["xstart_pred"]
             x_hat = x_hat.mul(2).add(-1)
             
@@ -445,29 +450,7 @@ class UnfoldedModel(pl.LightningModule):
             raise ValueError(f"This task ({self.args.task})is not implemented!!!")
     
         # ---> initialisation unfolded model
-        if self.args.dpir.use_dpir and self.args.task == "deblur":
-            if self.args.dpir.use_dpir:
-                y_ = utils.inverse_image_transform(y)
-                x_init = self.dpir_model.run(y_, self.blur, iter_num = 1) #y.clone()
-                x_init = utils.image_transform(x_init)
-            else:
-                x_init = y.clone()
-        elif self.args.task=="sr":
-            with torch.no_grad():
-                if self.d_phys is not None:
-                    x_init = self.RAM_Initialization(y, x_t, t)
-                else:
-                    x_init = utils.image_transform(y_)
-        elif self.args.task=="inp":
-            with torch.no_grad():
-                if self.d_phys is not None:
-                    x_init = self.RAM_Initialization(y, x_t, t)
-                else:
-                    x_init = y.clone()
-        elif self.args.task=="ct":
-            x_init = self.physic.init(y)
-        else:
-            raise ValueError(f"This task ({self.args.task})is not implemented!!!")
+        x_init = self.get_x_init(y, x_t, t)
         
         # ---> unfolded model
         obs = {"x_t":x_t, "y":y, "b":batch, "y_label":y_label}
@@ -528,13 +511,16 @@ class UnfoldedModel(pl.LightningModule):
                     ],
                     caption=["x0_hat", "x0", "y", "xt", "z_input", "z"]
                 )
+            if x_init is not None:
+                out["IMDICT"] = {"x_init": x_init, **out["IMDICT"]}
+
             self.wandb_logger.log_image(
                 key = "Unfolded_Loop",
-                images = [utils.get_batch_rgb_from_batch_tensor(x_init.add(1).div(2).detach())] +[
-                    utils.get_batch_rgb_from_batch_tensor(v.add(1).div(2).detach()) for k, v in out["IMDICT"].items()
+                images = [utils.get_batch_rgb_from_batch_tensor(v.add(1).div(2).detach()) for k, v in out["IMDICT"].items()
                 ],
-                caption=["x_init"] + [f"{k}" for k in out["IMDICT"].keys()]
+                caption = [f"{k}" for k in out["IMDICT"].keys()]
             )
+
     
     def on_validation_epoch_end(self):
         psnrs = torch.stack([torch.tensor(p) for p in self.psnr_outputs])
@@ -553,7 +539,7 @@ class UnfoldedModel(pl.LightningModule):
         # ---> optimizers        
         opt_g = torch.optim.AdamW([
                 {"params":self.model_params},
-                {"params":self.RAM_params, "lr":self.args.train.learning_rate*0.1},  # Use smaller learning rate for RAM to avoid overfitting
+                {"params":self.RAM_params, "lr":self.args.train.learning_rate*0.01},  # Use smaller learning rate for RAM to avoid overfitting
             ], lr=self.args.train.learning_rate, weight_decay=0.01)
         opt_d = torch.optim.AdamW(self.discriminator_params, lr=self.args.train.learning_rate, weight_decay=0.01)
     

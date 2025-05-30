@@ -42,7 +42,7 @@ def load_frozen_model(model_name, model_checkpoint_path):
             use_fp16 = False,
         )
     
-    elif model_name == "lsun_bedroom":
+    elif model_name == "cd_bedroom256_lpips":
         model_config = dict(
             model_checkpoint_path=model_checkpoint_path,
             num_channels=256,
@@ -50,14 +50,15 @@ def load_frozen_model(model_name, model_checkpoint_path):
             attention_resolutions="32,16,8",
             image_size = 256,
             class_cond = False,
-            learn_sigma = True,
+            learn_sigma = False,
             noise_schedule = "linear",
             num_head_channels = 64,
             use_fp16 = False,
-            use_scale_shift_norm = True,
+            use_scale_shift_norm = False,
             dropout = 0.1,
             use_new_attention_order = True,
             resblock_updown = True,
+            use_cm = True
         )
 
     else:
@@ -175,14 +176,16 @@ def adapter_lora_model(args):
     """
     # pre-trained model 
     if args.data.dataset_name=="LSUN":
-        model_name = "lsun_bedroom" #"ema_lsun_bedroom"
-        frozen_model_path = lsun_diffusion.get_ckpt_path(model_name, root=args.model.frozen_model_dir)
-        model_frozen = load_frozen_model_lsun(frozen_model_path)
-        target_modules = [".q", ".k", ".v", "proj_out"] 
-        # frozen_model_name = "lsun_bedroom"
-        # frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
-        # model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
-        # target_modules = ["qkv", "proj_out"]
+        if not args.use_CM:
+            model_name = "lsun_bedroom" #"ema_lsun_bedroom"
+            frozen_model_path = lsun_diffusion.get_ckpt_path(model_name, root=args.model.frozen_model_dir)
+            model_frozen = load_frozen_model_lsun(frozen_model_path)
+            target_modules = [".q", ".k", ".v", "proj_out"] 
+        else:
+            frozen_model_name = "cd_bedroom256_lpips"
+            frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
+            model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
+            target_modules = ["qkv", "proj_out"]
     elif args.data.dataset_name=="FFHQ":
         frozen_model_name = 'diffusion_ffhq_10m' 
         frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
@@ -209,8 +212,11 @@ def adapter_lora_model(args):
             else:
                 params.requires_grad = False
         # Last layer
-        if args.data.dataset_name=="LSUN":
+        if args.data.dataset_name=="LSUN" and not args.use_CM:
             for param in model.conv_out.parameters():
+                param.requires_grad_(True)
+        elif args.data.dataset_name=="LSUN" and args.use_CM:
+            for param in model.out.parameters():
                 param.requires_grad_(True)
         elif args.data.dataset_name=="FFHQ":      
             for param in model.out.parameters():

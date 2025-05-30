@@ -60,6 +60,7 @@ def model_and_diffusion_defaults():
         resblock_updown=False,
         use_fp16=False,
         use_new_attention_order=False,
+        use_cm = False,
     )
     res.update(diffusion_defaults())
     return res
@@ -95,6 +96,7 @@ def create_model_and_diffusion(
     resblock_updown,
     use_fp16,
     use_new_attention_order,
+    use_cm=False,
 ):
     model = create_model(
         image_size,
@@ -113,6 +115,7 @@ def create_model_and_diffusion(
         resblock_updown=resblock_updown,
         use_fp16=use_fp16,
         use_new_attention_order=use_new_attention_order,
+        use_cm=use_cm,
     )
     diffusion = create_gaussian_diffusion(
         steps=diffusion_steps,
@@ -144,6 +147,7 @@ def create_model(
     resblock_updown=False,
     use_fp16=False,
     use_new_attention_order=False,
+    use_cm=False,
 ):
     if channel_mult == "":
         if image_size == 512:
@@ -162,6 +166,9 @@ def create_model(
     attention_ds = []
     for res in attention_resolutions.split(","):
         attention_ds.append(image_size // int(res))
+    
+    if use_cm:
+        from .cmunet import UNetModel
 
     return UNetModel(
         image_size=image_size,

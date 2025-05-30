@@ -33,9 +33,9 @@ SOLVER_TYPES =  ["ddim"] # huen, ddpm, ddim
 LORA = True
 MAX_UNFOLDED_ITER = [3,]
 NUM_TIMESTEPS = [3,]#[50, 100, 200, 300, 500, 700, 800, 1000]
-etas =[0.8]   # sr=0.8
+etas =[0.2]   # sr=0.8
 T_AUG = 0
-ZETA = [0.9]#[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]#[0.1] #op 0.4 or 0.6 sr = 0.9
+ZETA = [0.4]#[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]#[0.1] #op 0.4 or 0.6 sr = 0.9
 date_eval = datetime.datetime.now().strftime("%d-%m-%Y")
 
 def main(
@@ -62,6 +62,12 @@ def main(
         args.physic.operator_name = config.operator_name 
         args.physic.sigma_model = config.sigma_model
         num_timesteps = config.num_timesteps
+        load_model = not config.RAM_only
+        if config.RAM_only:
+            MAX_UNFOLDED_ITER = [0,]
+        else: 
+            MAX_UNFOLDED_ITER = [3,]
+
     
         if args.mode == mode:
             ckpt_epoch = config.ckpt_epoch
@@ -82,7 +88,7 @@ def main(
             if args.physic.operator_name=="random":
                 args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, args.physic.operator_name, f"scale_{args.physic.inp.mask_rate}") 
             elif args.physic.operator_name=="box":
-                args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, args.physic.operator_name, f"box_prop_{args.physic.inp.box_proportion}")
+                args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, args.physic.operator_name, f"scale_{args.physic.inp.mask_rate}")
             else:
                 raise ValueError("Operator not implemented !!")
         elif args.task=="deblur":
@@ -165,6 +171,15 @@ def main(
                         scale_image=args.physic.transform_y,
                         operator_name=args.physic.operator_name,
                     )
+                    from deepinv.physics import BlurFFT, GaussianNoise
+                    dinv_physic = BlurFFT(
+                        (3,256,256),
+                        filter = kernels.get_blur().unsqueeze(0).unsqueeze(0),
+                        device = device,
+                        noise_model = GaussianNoise(
+                            sigma= args.physic.sigma_model,
+                        ),
+                    )
                 elif args.task == "inp":
                     print("operator name", args.physic.operator_name)
                     physic = phy.Inpainting(
@@ -179,6 +194,15 @@ def main(
                         scale_image=args.physic.transform_y,
                         mode=args.mode,
                     )
+                    from deepinv.physics import Inpainting, GaussianNoise
+                    dinv_physic = Inpainting(
+                        (3,256, 256),
+                        mask = physic.Mask,
+                        device = device,
+                        noise_model = GaussianNoise(
+                            sigma= args.physic.sigma_model,
+                        ),
+                    ).to(device)
                 elif args.task=="sr":
                     physic = phy.SuperResolution(
                         im_size=args.im_size,
@@ -214,15 +238,17 @@ def main(
                     args,
                     device=device
                 )
-                # Load HQS_model weights
-                lora_checkpoint_dir = args.lora_checkpoint_dir
-                lora_checkpoint_name = args.lora_checkpoint_name
-                filepath = bf.join(lora_checkpoint_dir, lora_checkpoint_name)
-                st_dict = torch.load(filepath, map_location=device)#["HQS_state_dict"]
-                hqs_dict = st_dict["HQS_state_dict"]
-                ram_dict = st_dict["RAM_state_dict"]
-                hqs_module.load_state_dict(hqs_dict, strict=False)
-                hqs_module.to(device)
+                if load_model:
+                    # Load HQS_model weights
+                    lora_checkpoint_dir = args.lora_checkpoint_dir
+                    lora_checkpoint_name = args.lora_checkpoint_name
+                    filepath = bf.join(lora_checkpoint_dir, lora_checkpoint_name)
+                    st_dict = torch.load(filepath, map_location=device)#["HQS_state_dict"]
+                    hqs_dict = st_dict["HQS_state_dict"]
+                    ram_dict = st_dict["RAM_state_dict"]
+                    
+                    hqs_module.load_state_dict(hqs_dict, strict=False)
+                    hqs_module.to(device)
                 print("HQS model loaded")
                 print("LOADED Params: ")
                 for name, param in hqs_module.named_parameters():
@@ -237,11 +263,13 @@ def main(
                     device, 
                     args,
                     max_unfolded_iter = max_unfolded_iter,
-                    dphys = dinv_physic if args.task=="sr" else None,
+                    dphys = dinv_physic,
                 )
-                print("Loading parameters for RAM module")
-                print(*[k for k in ram_dict.keys()], sep="\n")
-                diffsampler.RAM.load_state_dict(ram_dict, strict=False)
+                
+                if load_model:
+                    print("Loading parameters for RAM module")
+                    print(*[k for k in ram_dict.keys()], sep="\n")
+                    diffsampler.RAM.load_state_dict(ram_dict, strict=False)
                 diffsampler.RAM.to(device)
 
 
@@ -264,6 +292,8 @@ def main(
                     raise ValueError(f"Solver {solver_type} do not exists.")
                                 
                 root_dir_results = os.path.join(args.save_dir, f"{args.task}_{use_lora}", f"operator_{args.physic.operator_name}", args.eval_date, solver_type, f"Max_iter_{max_iter}", f"timesteps_{num_timesteps}", param_name_folder, f"lambda_{args.lambda_}")
+                if not load_model:
+                    root_dir_results = root_dir_results + "RAM_ONLY"
                 if args.init_prev:
                     root_dir_results = root_dir_results + "init_prev"
                 if args.evaluation.coverage or args.evaluation.metrics:
@@ -325,6 +355,9 @@ def main(
                             x_true = x_true,
                             lambda_ = args.lambda_
                         )
+                        if hasattr(diffsampler, "RAM"):
+                            out["x_init"] = diffsampler.RAM(utils.inverse_image_transform(y), dinv_physic).clamp(0,1)
+
                         # collapsed time
                         collapsed_time = time.time() - start_time           
                         # sample
@@ -394,11 +427,18 @@ def main(
                             caption=f"standard deviation", 
                             file_type="png"
                         )
-                        z0_wdb = wandb.Image(
-                            utils.get_rgb_from_tensor(out["aux"][0].unsqueeze(0)), 
-                            caption=f"z_est psnr/mse ({metrics.psnr_function(out['aux'][0].unsqueeze(0), x[0].unsqueeze(0)):.2f},{metrics.lpips_function(out['aux'][0].unsqueeze(0), x[0].unsqueeze(0)):.2f})", 
-                            file_type="png"
-                        )
+                        if hasattr(out, "aux"):
+                            z0_wdb = wandb.Image(
+                                utils.get_rgb_from_tensor(out["aux"][0].unsqueeze(0)), 
+                                caption=f"z_est psnr/mse ({metrics.psnr_function(out['aux'][0].unsqueeze(0), x[0].unsqueeze(0)):.2f},{metrics.lpips_function(out['aux'][0].unsqueeze(0), x[0].unsqueeze(0)):.2f})", 
+                                file_type="png"
+                            )
+                        else: 
+                            z0_wdb = wandb.Image(
+                                utils.get_rgb_from_tensor(torch.zeros((1,3,256,256)).to(device)), 
+                                caption=f"z_est", 
+                                file_type="png"
+                            )
                         y_wdb = wandb.Image(
                             utils.get_rgb_from_tensor(utils.inverse_image_transform(y[0].unsqueeze(0))), 
                             caption=f"observation", 
@@ -430,7 +470,7 @@ def main(
                         op_coverage.prob = np.array([alpha_levels])
                         out_coverage = coverage_eval(x.detach().cpu(), op_coverage)
                     
-                    last_sample = data[-1].to(device) if args.evaluation.coverage else out["xstart_pred"]
+                    last_sample = out["xstart_pred"]
                     utils.delete([data, op_coverage]) if args.evaluation.coverage else None
                     
                     if args.evaluation.coverage:
@@ -451,7 +491,7 @@ def main(
 
                     # sliced wasserstein distance
                     if args.evaluation.save_images:   
-                        for iii, (x_t, x0_t, xp_t, y_t, v_t) in enumerate(zip(x, out["x_init"], X_posterior_mean, y, X_posterior_var)):
+                        for iii, (x_t, x0_t, xp_t, x_ps_t, y_t, v_t) in enumerate(zip(x, out["x_init"], X_posterior_mean, out["xstart_pred"], y, X_posterior_var)):
                             im_name = f"{(ii*x.shape[0] + iii):05d}"
                             # save images for fid and cmmd evaluation
                             utils.save_images(ref_path, x_t, im_name)
@@ -464,7 +504,7 @@ def main(
                             utils.save_images(var_path, std/norm, im_name)
                             utils.save_images(var_path, err /norm, im_name+"_residual")
                             utils.save_images(y_path, utils.inverse_image_transform(y_t), im_name)
-                            utils.save_images(last_path, last_sample, im_name)
+                            utils.save_images(last_path, x_ps_t, im_name)
                             
                             # results[f"{ii*im.shape[0] + iii}_var"] = v_t.cpu().squeeze().numpy()
                             # results[f"{ii*im.shape[0] + iii}_mmse"] = xp_t.cpu().squeeze().numpy()
@@ -478,7 +518,7 @@ def main(
                             ssim_temp = metrics.ssim_function(xp_t, x_t)
                             lpips_temp = metrics.lpips_function(xp_t, x_t)
                             psnr_init_temp = metrics.psnr_function(x0_t, x_t)
-                            lpips_init_temp = metrics.psnr_function(x0_t, x_t)
+                            lpips_init_temp = metrics.lpips_function(x0_t, x_t)
                             
                             
                             psnr_temp_last = metrics.psnr_function(last_sample[iii], x_t)

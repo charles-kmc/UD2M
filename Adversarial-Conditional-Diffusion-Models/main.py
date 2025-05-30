@@ -234,6 +234,9 @@ def main():
     else:
         raise ValueError(f"This task ({args.task})is not implemented!!!")
     
+
+    if config.save_dir is not None:
+        args.save_checkpoint_dir = config.save_dir
     os.makedirs(os.path.join(args.save_checkpoint_dir, 'wandb', date), exist_ok=True)
     wandb_logger = WandbLogger(
         project=f"Adversarial Conditional diffusion models {args.task} {args.physic.operator_name} {args.data.dataset_name}",  

@@ -20,9 +20,10 @@ def main(cfg):
     save_metric_path = cfg.root_dir
     
     # FID
-    out = Fid_evatuation(root_dir, device, mmse_sample=True, last_sample=False)
+    out = Fid_evatuation(root_dir, device, mmse_sample=True, last_sample=True)
     dic_results[f"fid mmse"] = [out["fid_mmse"]]
     dic_results[f"fid last"] = [out["fid_last"]]
+    dic_results[f"fid init"] = [out["fid_init"]]
     
     data = pd.read_csv(os.path.join(root_dir, "metrics_results","metrics_results.csv"))
     mean_psnr = data["psnr"].mean()
@@ -49,7 +50,7 @@ def main(cfg):
     os.makedirs(save_metric_path, exist_ok=True)
     fid_pd = pd.DataFrame(dic_results)
     save_dir_ssim_psnr_lpips = os.path.join(save_metric_path, f'metrics_psnr_ssim_lpips_results.csv') #_eta_{eta}_zeta{zeta}
-    fid_pd.to_csv(save_dir_ssim_psnr_lpips, mode='a', header=not os.path.exists(save_dir_ssim_psnr_lpips))
+    fid_pd.to_csv(save_dir_ssim_psnr_lpips, mode='w', header=True)
     
     # plot the results
     plot = plt.figure()

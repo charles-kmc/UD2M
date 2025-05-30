@@ -68,6 +68,21 @@ class Conditional_sampler:
         x_init = self.RAM(y_ram, self.stacked_physic)
         return utils.image_transform(x_init)
     
+
+    def get_x_init(self, y, x_t, t):
+        if self.d_phys is not None: # Initialize from RAM using both (y, x_t)
+            x_init = self.RAM_Initialization(y, x_t, t)
+        elif self.args.dpir.use_dpir and self.args.task in {"deblur", "sr"}: # Initialize from DPIR (legacy)
+            x_init = self.dpir_model.run(
+                utils.inverse_image_transform(y),
+                self.blur,
+                iter_num = 1
+            )
+            x_init = utils.image_transform(x_init)
+        else: # Initialize from y
+            x_init = y 
+        return x_init
+    
     def sampler(
         self, 
         y:torch.tensor, 
@@ -122,14 +137,18 @@ class Conditional_sampler:
                     x0 = out_val["xstart_pred"].mul(2).add(-1)
                     
                 else:
-                    x_init = self.RAM_Initialization(y, x, torch.tensor(t_i).to(self.device))
+                    x_init = self.get_x_init(y, x, t) # Initialize Unfolded descent
                     max_unfolded_iter = self.max_unfolded_iter
                     obs = {"x_t":x, "y":y, "y_label":y_label}
                     if not self.args.task=="inp":
                         obs["blur"] = self.physics.blur
                     # Modified12 May 25 - always initialize HQS with the same x0 (xt appears through the prox step)
-                    out_val = self.hqs_model.run_unfolded_loop(obs, x_init, torch.tensor(t_i).to(self.device), max_iter = max_unfolded_iter, lambda_sig= lambda_)
-                    x0 = out_val["xstart_pred"].mul(2).add(-1)
+                    if max_unfolded_iter > 0.5:
+                        out_val = self.hqs_model.run_unfolded_loop(obs, x_init, torch.tensor(t_i).to(self.device), max_iter = max_unfolded_iter, lambda_sig= lambda_)
+                        x0 = out_val["xstart_pred"].mul(2).add(-1)
+                    else:
+                        out_val = {"xstart_pred":x_init.add(1).mul(0.5), "eps_pred":self.diffusion.predict_eps_from_xstrat(x, t_i, x_init)} 
+                        x0 = x_init
                     
                 if x_true is not None:
                     psnrs.append(self.metrics.psnr_function(x_true, out_val["xstart_pred"]).cpu().numpy())

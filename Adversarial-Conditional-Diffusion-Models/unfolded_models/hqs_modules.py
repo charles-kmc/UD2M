@@ -8,6 +8,7 @@ import physics as phy
 import models as models
 import deepinv as dinv
 
+
 T_AUG = 10
 class DDNoise(dinv.physics.DecomposablePhysics):
     def __init__(self, scheduler,  t = 100):
@@ -97,8 +98,10 @@ class HQS_models(torch.nn.Module):
         RAM = None,
         RAM_Physics = None,
         RAM_prox = False,
+        cm = True
         ) -> None:
         super().__init__()
+        self.cm = cm
         self.model = model
         self.max_iter = max_iter
         self.diffusion_scheduler = diffusion_scheduler
@@ -226,16 +229,25 @@ class HQS_models(torch.nn.Module):
                 z_input = zest
             
             # Denoising   
-            if checkpoint:
-                def run_model(z, t):
-                    return self.model(z, t, y = y_label)
-                eps = torch.utils.checkpoint.checkpoint(run_model, z_input, tu, use_reentrant=False)
+            if self.cm:
+                if checkpoint:
+                    def run_model(z, t):
+                        return self.model(z, t, y = y_label)
+                    x = torch.utils.checkpoint.checkpoint(run_model, z_input, tu, use_reentrant=False)
+                else:
+                    x = self.model(z_input, tu, y=y_label)
+                eps = self.diffusion_scheduler.predict_eps_from_xstart_cont(z_input, tu, x)
             else:
-                eps = self.model(z_input, tu, y=y_label)
-            eps, _ = torch.split(eps, C, dim=1) if eps.shape == (B, C * 2, *x_t.shape[2:]) else (eps, eps)
-            
-            # estimate of x_start
-            x = self.diffusion_scheduler.predict_xstart_from_eps_cont(z_input, tu, eps)
+                if checkpoint:
+                    def run_model(z, t):
+                        return self.model(z, t, y = y_label)
+                    eps = torch.utils.checkpoint.checkpoint(run_model, z_input, tu, use_reentrant=False)
+                else:
+                    eps = self.model(z_input, tu, y=y_label)
+                eps, _ = torch.split(eps, C, dim=1) if eps.shape == (B, C * 2, *x_t.shape[2:]) else (eps, eps)
+                
+                # estimate of x_start
+                x = self.diffusion_scheduler.predict_xstart_from_eps_cont(z_input, tu, eps)
             if collect_ims:
                 IMSOUT[f"x_{ii}"] = x
                 IMSOUT[f"z_{ii}"] = z_input

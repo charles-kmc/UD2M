@@ -151,10 +151,20 @@ class DiffusionScheduler:
             models.extract_tensor( self.sqrt_1m_alphas_cumprod, t, x_t.shape )
         )
     
+    def predict_eps_from_xstart_cont(self, x_t, t, xstart):
+        assert x_t.shape == xstart.shape, ValueError(f"x_t and eps have different shape ({x_t.shape} != {xstart.shape})")
+        sqrt_alp_cont = self.alpha_cont_diff(t)
+        while len(sqrt_alp_cont.shape) < len(x_t.shape):
+            sqrt_alp_cont = sqrt_alp_cont[..., None]
+        return (x_t - sqrt_alp_cont * xstart) / (1 - sqrt_alp_cont.square()).sqrt()
+    
     # get sequence of timesteps 
-    def get_seq_progress_seq(self, iter_num):
-        # seq = np.linspace(0, self.num_timesteps, iter_num+1)[1:]
-        seq = np.square(np.linspace(0, self.num_timesteps**0.5, iter_num+1)[1:])
+    def get_seq_progress_seq(self, iter_num, n_times = None):
+        if n_times is None:
+            n_times = self.num_timesteps
+        n_times = int(n_times)
+        seq = np.linspace(0, n_times, iter_num+1)[1:]
+        # seq = np.square(np.linspace(0, self.num_timesteps**0.5, iter_num+1)[1:])
         seq = [int(s) for s in list(seq)]
         seq[-1] = seq[-1] - 1
         progress_seq = seq[::max(len(seq)//10,1)]
