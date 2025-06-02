@@ -98,7 +98,7 @@ class HQS_models(torch.nn.Module):
         RAM = None,
         RAM_Physics = None,
         RAM_prox = False,
-        cm = True
+        cm = False
         ) -> None:
         super().__init__()
         self.cm = cm
@@ -110,7 +110,7 @@ class HQS_models(torch.nn.Module):
         self.args = args
         self.num_weights_hqs = self.max_iter if iter_dep_weights else 1
         self.SP_Param = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(0.0, device=device), requires_grad=True) for _ in range(self.num_weights_hqs)])
-        self.LambdaSIG= torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(0.0, device=device), requires_grad=RAM is None) for _ in range(self.num_weights_hqs)])  # Used to augment the denoising step
+        self.LambdaSIG= torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(0.0, device=device), requires_grad=not RAM_prox) for _ in range(self.num_weights_hqs)])  # Used to augment the denoising step
         self.TAUG = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(0.0, device=device), requires_grad=True) for _ in range(self.num_weights_hqs)])  # Used to augment the denoising step
         self.TLAT = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(0.0, device=device), requires_grad=True) for _ in range(self.num_weights_hqs)])  # Used to auhment noise added before the denosiing step
         self.RAM = RAM

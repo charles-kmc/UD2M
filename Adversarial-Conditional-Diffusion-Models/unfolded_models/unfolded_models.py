@@ -56,7 +56,11 @@ class UnfoldedModel(pl.LightningModule):
             self.use_GAN = args.use_GAN
         else:
             self.use_GAN = True
-
+        
+        if hasattr(args, "annealing"):
+            self.annealing = args.annealing
+        else:
+            self.annealing = False
         
         
         
@@ -103,18 +107,31 @@ class UnfoldedModel(pl.LightningModule):
                 self.d_phys, self.diffusion_scheduler
             )
         
-
-        self.hqs_module = HQS_models(
-            self.model,
-            self.physic, 
-            self.diffusion_scheduler, 
-            self.denoising_timestep,
-            self.args,
-            device,
-            RAM = self.RAM if PnP_Forward else None,
-            RAM_Physics = dphys if PnP_Forward else None,
-            cm = args.use_CM
-        )
+        if self.annealing:
+            from unfolded_models.diffpir_modules import DiffPIRModules 
+            self.hqs_module = DiffPIRModules(
+                self.model, 
+                self.physic, 
+                self.diffusion_scheduler, 
+                self.denoising_timestep,
+                self.args,
+                device,
+                max_iter = self.max_unfolded_iter,
+                iter_dep_weights = True,
+                cm = args.use_CM
+            )
+        else:
+            self.hqs_module = HQS_models(
+                self.model,
+                self.physic, 
+                self.diffusion_scheduler, 
+                self.denoising_timestep,
+                self.args,
+                device,
+                RAM = self.RAM if PnP_Forward else None,
+                RAM_Physics = dphys if PnP_Forward else None,
+                cm = args.use_CM
+            )
         # ---> physics
         if self.args.task=="sr" or self.args.task=="deblur":
             self.blur = self.kernels.get_blur()
@@ -146,8 +163,6 @@ class UnfoldedModel(pl.LightningModule):
         self.hqs_module = self.hqs_module.to(device) 
         # self.diffusion_scheduler = self.diffusion_scheduler_(self.device) 
         # self.denoising_timestep = self.denoising_timestep_(self.diffusion_scheduler, self.device) 
-        
-        
     if True: 
         ## ====> Gradient penality
         def compute_gradient_penalty(self, real_samples, fake_samples, y):
@@ -172,19 +187,16 @@ class UnfoldedModel(pl.LightningModule):
             gradients = gradients.view(gradients.size(0), -1)
             gradient_penalty = ((gradients.norm(2, dim=1)) ** 2).mean() # 1/5/25 Modified to Gradient Penalty from Goodfellow et. al.
             return gradient_penalty
-        
         # --- Forward pass
         def forward(self, obs, x_init, t, collect_ims = False):
             out = self.hqs_module.run_unfolded_loop(obs, x_init, t, max_iter = self.max_unfolded_iter, lambda_sig = self.args.lambda_, collect_ims = collect_ims)
             return out
-        
         ## ====> Adversarial loss function: D
         # def adversarial_loss_discriminator(self, fake_pred, real_pred):
         #     adversarial_loss = nn.BCEWithLogitsLoss()#nn.BCELoss()
         #     out = adversarial_loss(fake_pred, real_pred) #
         #     # out = fake_pred.mean() + real_pred.mean()
         #     return out
-
         ## ====> Adversarial loss function: Diffusion model
         def adversarial_loss_diffusion(self, y, gens):
             out = self.discriminator(input=gens, y=y)
@@ -228,7 +240,6 @@ class UnfoldedModel(pl.LightningModule):
         # def drift_penalty(self, real_pred):
         #     return 0.001 * torch.mean(real_pred ** 2)
 
-    
     def _proc_batch(self, batch):
         if isinstance(batch, list):
             if isinstance(batch[1], dict) and "y_label" in batch[1].keys():
@@ -248,10 +259,9 @@ class UnfoldedModel(pl.LightningModule):
         y_ram = dinv.utils.TensorList([utils.inverse_image_transform(y)*min/self.d_phys.noise_model.sigma, xt_init*min/self.stacked_physic.physics_list[1].noise_model.sigma])
         x_init = self.RAM(y_ram, self.stacked_physic)
         return utils.image_transform(x_init)
-    
 
     def get_x_init(self, y, x_t, t):
-        if self.d_phys is not None: # Initialize from RAM using both (y, x_t)
+        if self.d_phys is not None and not self.annealing: # Initialize from RAM using both (y, x_t)
             x_init = self.RAM_Initialization(y, x_t, t)
         elif self.args.dpir.use_dpir and self.args.task in {"deblur", "sr"}: # Initialize from DPIR (legacy)
             x_init = self.dpir_model.run(
@@ -263,7 +273,27 @@ class UnfoldedModel(pl.LightningModule):
         else: # Initialize from y
             x_init = y 
         return x_init
-        
+    
+    def _get_y(self, batch):
+        if self.args.random_sigma:
+            sigma = torch.rand(size = (1,1,1,1),device = self.device)*self.args.physic.sigma_model  # Sample random sigma
+            # Update physics models 
+            self.physic.sigma_model = sigma 
+            self.d_phys.noise_model.update_parameters(sigma = sigma) 
+            self.stacked_physic.physics_list[0].noise_model.update_parameters(sigma = sigma)
+        # ---> observation y 
+        if self.args.task == "deblur":
+            y = self.physic.y(batch, self.blur)
+        elif self.args.task=="sr":
+            y = self.physic.y(batch, self.blur, self.args.physic.sr.sf)
+        elif self.args.task=="inp":
+            y = self.physic.y(batch)
+        elif self.args.task=="ct":
+            y = self.physic.y(batch)
+        else:
+            raise ValueError(f"This task ({self.args.task})is not implemented!!!")
+        return y
+
     ## ====> training penality function
     def training_step(self, batch, batch_idx):
         self.model.train()
@@ -282,16 +312,7 @@ class UnfoldedModel(pl.LightningModule):
         x_t = self.diffusion_scheduler.sample_xt(batch, t, noise=noise_target)
         
         # ---> observation y 
-        if self.args.task == "deblur":
-            y = self.physic.y(batch, self.blur)
-        elif self.args.task=="sr":
-            y = self.physic.y(batch, self.blur, self.args.physic.sr.sf)
-        elif self.args.task=="inp":
-            y = self.physic.y(batch)
-        elif self.args.task=="ct":
-            y = self.physic.y(batch)
-        else:
-            raise ValueError(f"This task ({self.args.task})is not implemented!!!")
+        y = self._get_y(batch)
 
         # ---> initialisation unfolded model=
         x_init = self.get_x_init(y, x_t, t)
@@ -349,6 +370,7 @@ class UnfoldedModel(pl.LightningModule):
             if self.args.train.scale_lpips > 1e-8:
                 g_loss = g_loss +  self.args.train.scale_lpips*self.lpips(xest.add(1).div(2), batch.add(1).div(2)).mean()
             self.log('g_loss', g_loss, prog_bar=True)
+            self.log('sigma_train', self.physic.sigma_model, prog_bar=False)
             for i in range(self.hqs_module.num_weights_hqs):
                 self.log(f"SP_param_{i}", self.hqs_module.SP_Param[i].exp(), prog_bar=False)
                 self.log(f"LambdaSIG_param_{i}", self.hqs_module.LambdaSIG[i].exp(), prog_bar=False)
@@ -423,10 +445,6 @@ class UnfoldedModel(pl.LightningModule):
         # image 
         self.discriminator.eval()
         batch, y_label = self._proc_batch(batch)
-
-
-        
-        
         # Device
         # self._to_device()
         
@@ -437,17 +455,7 @@ class UnfoldedModel(pl.LightningModule):
         noise_target = torch.randn_like(batch)
         x_t = self.diffusion_scheduler.sample_xt(batch, t, noise=noise_target)
         
-        # ---> observation y 
-        if self.args.task == "deblur":
-            y = self.physic.y(batch, self.blur)
-        elif self.args.task=="sr":
-            y = self.physic.y(batch, self.blur, self.args.physic.sr.sf)
-        elif self.args.task=="inp":
-            y = self.physic.y(batch)
-        elif self.args.task=="ct":
-            y = self.physic.y(batch)
-        else:
-            raise ValueError(f"This task ({self.args.task})is not implemented!!!")
+        y = self._get_y(batch)
     
         # ---> initialisation unfolded model
         x_init = self.get_x_init(y, x_t, t)
@@ -494,6 +502,7 @@ class UnfoldedModel(pl.LightningModule):
         g_loss_valid += self.mseLoss(xest, batch).mean()
         
         self.log('test -- g_loss', g_loss_valid, prog_bar=True)
+        self.log('sigma', self.physic.sigma_model, prog_bar=False)
         self.log("mse", self.metrics.mse_function(out["xstart_pred"].detach().cpu(), batch.add(1).div(2).detach().cpu()).item(), prog_bar=True)
         self.log("psnr", self.metrics.psnr_function(out["xstart_pred"].detach().cpu(), batch.add(1).div(2).detach().cpu()).item(), prog_bar=True)
         self.psnr_outputs.append(self.metrics.psnr_function(out["xstart_pred"].detach().cpu(), batch.add(1).div(2).detach().cpu()))

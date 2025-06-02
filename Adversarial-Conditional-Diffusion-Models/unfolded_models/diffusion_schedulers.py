@@ -162,6 +162,8 @@ class DiffusionScheduler:
     def get_seq_progress_seq(self, iter_num, n_times = None):
         if n_times is None:
             n_times = self.num_timesteps
+        elif hasattr(n_times, "__len__") and len(n_times) > 1:
+            n_times = n_times[0]
         n_times = int(n_times)
         seq = np.linspace(0, n_times, iter_num+1)[1:]
         # seq = np.square(np.linspace(0, self.num_timesteps**0.5, iter_num+1)[1:])

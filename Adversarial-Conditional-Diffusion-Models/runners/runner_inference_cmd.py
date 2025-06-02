@@ -25,7 +25,8 @@ class Conditional_sampler:
         solver_type = "ddim",
         classic_sampling:bool=False,
         dphys = None,
-        img_shape = (3,256,256)
+        img_shape = (3,256,256),
+        annealing = False, # Set true for DiffPIR-type algorithm
     ) -> None:
         self.hqs_model = hqs_model
         self.diffusion = diffusion
@@ -37,6 +38,7 @@ class Conditional_sampler:
         self.classic_sampling= classic_sampling
         self.d_phys = dphys
         self.img_shape = img_shape
+        self.annealing = annealing
 
         if dphys is not None:
             from ram import RAM
@@ -70,7 +72,7 @@ class Conditional_sampler:
     
 
     def get_x_init(self, y, x_t, t):
-        if self.d_phys is not None: # Initialize from RAM using both (y, x_t)
+        if self.d_phys is not None and not self.annealing: # Initialize from RAM using both (y, x_t)
             x_init = self.RAM_Initialization(y, x_t, t)
         elif self.args.dpir.use_dpir and self.args.task in {"deblur", "sr"}: # Initialize from DPIR (legacy)
             x_init = self.dpir_model.run(
@@ -137,7 +139,7 @@ class Conditional_sampler:
                     x0 = out_val["xstart_pred"].mul(2).add(-1)
                     
                 else:
-                    x_init = self.get_x_init(y, x, t) # Initialize Unfolded descent
+                    x_init = self.get_x_init(y, x, torch.tensor(t_i).to(self.device)) # Initialize Unfolded descent
                     max_unfolded_iter = self.max_unfolded_iter
                     obs = {"x_t":x, "y":y, "y_label":y_label}
                     if not self.args.task=="inp":

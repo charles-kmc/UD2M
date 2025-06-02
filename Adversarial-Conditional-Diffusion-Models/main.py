@@ -64,6 +64,7 @@ def main():
     args.lambda_ = config.lambda_
     args.date = date
     args.max_unfolded_iter = 3
+    args.random_sigma = config.random_sigma
     
     # logger 
     script_path = script_dir.rsplit("/", 1)[0]
@@ -299,7 +300,7 @@ def main():
                          profiler="simple", 
                          logger=wandb_logger, 
                          benchmark=False,
-                         log_every_n_steps=5,
+                         log_every_n_steps=32,
                          num_nodes=1,
                          limit_train_batches=args.data.number_sample_per_epoch//args.data.train_batch_size,#1000 // 32
                         #  precision="bf16",

@@ -33,9 +33,9 @@ SOLVER_TYPES =  ["ddim"] # huen, ddpm, ddim
 LORA = True
 MAX_UNFOLDED_ITER = [3,]
 NUM_TIMESTEPS = [3,]#[50, 100, 200, 300, 500, 700, 800, 1000]
-etas =[0.2]   # sr=0.8
+etas =[0.8]   # sr=0.8
 T_AUG = 0
-ZETA = [0.4]#[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]#[0.1] #op 0.4 or 0.6 sr = 0.9
+ZETA = [0.9]#[0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]#[0.1] #op 0.4 or 0.6 sr = 0.9
 date_eval = datetime.datetime.now().strftime("%d-%m-%Y")
 
 def main(
@@ -66,7 +66,7 @@ def main(
         if config.RAM_only:
             MAX_UNFOLDED_ITER = [0,]
         else: 
-            MAX_UNFOLDED_ITER = [3,]
+            MAX_UNFOLDED_ITER = [config.max_unfolded_iter,]
 
     
         if args.mode == mode:
@@ -84,6 +84,9 @@ def main(
         #args.dpir.use_dpir = False
         run_name = f"_{args.task}_sampling"
         # lora dir and name
+        if config.save_dir is not None:
+            args.save_checkpoint_dir = config.save_dir
+            args.save_dir = os.path.join(config.save_dir, 'Results')
         if args.task=="inp":
             if args.physic.operator_name=="random":
                 args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, args.physic.operator_name, f"scale_{args.physic.inp.mask_rate}") 
@@ -98,7 +101,12 @@ def main(
         else:
             raise ValueError("Operator not implemented !!")
         
-        args.lora_checkpoint_name = f"lsun_BestPSNR_lora_{args.task}_epoch={ckpt_epoch:03d}.ckpt" #checkpoint_lora_sr_epoch=079
+        if ckpt_epoch > 0:
+            args.lora_checkpoint_name = f"lsun_BestPSNR_lora_{args.task}_epoch={ckpt_epoch:03d}.ckpt" #checkpoint_lora_sr_epoch=079
+        else: 
+            ## Search for final checkpoint 
+            ckpt_epoch = max([int(f.split('=')[1].split('.')[0]) for f in os.listdir(args.lora_checkpoint_dir) if f.startswith("lsun_lora") and f.endswith(".ckpt")])
+            args.lora_checkpoint_name = f"lsun_lora_{args.task}_epoch={ckpt_epoch:03d}.ckpt"
         print(args.lora_checkpoint_dir, args.lora_checkpoint_name)
         # parameters
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu") 
@@ -290,7 +298,7 @@ def main(
                     param_name_folder = "huen"
                 else:
                     raise ValueError(f"Solver {solver_type} do not exists.")
-                                
+                
                 root_dir_results = os.path.join(args.save_dir, f"{args.task}_{use_lora}", f"operator_{args.physic.operator_name}", args.eval_date, solver_type, f"Max_iter_{max_iter}", f"timesteps_{num_timesteps}", param_name_folder, f"lambda_{args.lambda_}")
                 if not load_model:
                     root_dir_results = root_dir_results + "RAM_ONLY"
@@ -540,7 +548,7 @@ def main(
                                 "lpips_init":[lpips_init_temp]
                             })
                             save_dir_metric = os.path.join(save_metric_path, 'metrics_results.csv')
-                            matrics_pd.to_csv(save_dir_metric, mode='a', header=not os.path.exists(save_dir_metric))
+                            matrics_pd.to_csv(save_dir_metric, mode='a' if ii + iii > 0 else 'w', header=ii + iii<0.5)
                             # del matrics_pd
                             s_lpips += lpips_temp
                             s_psnr += psnr_temp
