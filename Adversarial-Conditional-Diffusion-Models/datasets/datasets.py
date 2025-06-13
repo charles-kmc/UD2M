@@ -52,7 +52,8 @@ class GetDatasets:
                 clip_min = -1.0, 
                 clip_max = 1.0,  
                 type_ = "train",
-                transform = "RandomCrop",              
+                transform = "RandomCrop",
+                label = None,              
             ):
         self.dataset_name = dataset_name
         self.dataset_dir = dataset_dir
@@ -71,6 +72,20 @@ class GetDatasets:
         # get all images path
         if self.dataset_dir == "" or self.dataset_dir is None or not os.path.exists(self.dataset_dir):
             raise ValueError(f"The dataset directory {self.dataset_dir} is empty!!")
+        elif label is not None:
+            # Load ILSVRC labels and filter validation set to match only the specified label
+            # Load ISLVRC2010_validation_ground_truth.txt 
+            with open("/users/js3006/Conditional-Diffusion-Models-for-IVP/Adversarial-Conditional-Diffusion-Models/datasets/ILSVRC2012_validation_ground_truth.txt", "r") as file:
+                labels = file.readlines()
+            labels = [int(l.strip()) for l in labels]
+            self.ref_images = []
+            self.dataset_dir = "/mnt/scratch/users/applied_computational_math/inet2012_val"
+            for i, lab in enumerate(labels):
+                if (lab - int(label))**2 < 0.1:
+                    img_path = os.path.join(self.dataset_dir, f"ILSVRC2012_val_{i+1:08d}.JPEG")
+                    if os.path.exists(img_path):
+                        self.ref_images.append(img_path)
+            print("Using images", self.ref_images)
         else:
             if dataset_name == "ImageNet":
                 self.ref_images = glob.glob(os.path.join(self.dataset_dir , '*.JPEG'))
@@ -123,7 +138,6 @@ class GetDatasets:
             image = utils.image_transform(image)
         
         return image
-        
 
 # get data loader   
 def get_data_loader(

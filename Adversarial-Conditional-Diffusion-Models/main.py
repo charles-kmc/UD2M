@@ -248,7 +248,7 @@ def main():
     )
     
     # model
-    pl_model = um.UnfoldedModel(physic, kernels, args.num_gpus, args, device=device, wandb_logger=wandb_logger, dphys = dinv_physic, PnP_Forward=False)
+    pl_model = um.UnfoldedModel(physic, kernels, args.num_gpus, args, learn_RAM = not config.freeze_ram, device=device, wandb_logger=wandb_logger, dphys = dinv_physic, PnP_Forward=False)
     if args.task=="sr":
         pth = os.path.join(args.save_checkpoint_dir, f"{args.task}", date, f"factor_{args.physic.sr.sf}")
     elif args.task=="deblur":
@@ -293,7 +293,7 @@ def main():
     # --- >> Trainer module
     trainer = pl.Trainer(accelerator="gpu", 
                          devices=args.num_gpus, 
-                         strategy='ddp_find_unused_parameters_true',
+                         strategy='ddp',
                          max_epochs=args.train.num_epochs, 
                          callbacks=[checkpoint_callback_epoch, psnr_callback_epoch],
                          num_sanity_val_steps=2, 

@@ -23,8 +23,9 @@ from metrics.coverage.coverage_function import coverage_eval
 from metrics.metrics import Metrics
 
 
+propram = 1
+frozen_ram = propram < 1e-8
 max_images = 300
-max_iter = 8
 ddpm_param = 1
 
 stochastic_model = False
@@ -43,7 +44,6 @@ def main(
     solver_type:str, 
     ddpm_param:float = 1.,
     date_eval:str = date_eval, 
-    max_iter:int = 1, 
     eta:float=0.0
 ):
     with torch.no_grad():
@@ -56,6 +56,7 @@ def main(
         print(os.path.join(script_dir,"configs", config.config_file))
         with open(os.path.join(script_dir, "configs", config.config_file), 'r') as file:
             config_dict = yaml.safe_load(file)
+        max_iter = config.num_samples
         args = utils.dict_to_dotdict(config_dict)
         args.task = config.task
         args.mode = mode
@@ -87,6 +88,7 @@ def main(
         if config.save_dir is not None:
             args.save_checkpoint_dir = config.save_dir
             args.save_dir = os.path.join(config.save_dir, 'Results')
+            os.makedirs(args.save_dir, exist_ok=True)
         if args.task=="inp":
             if args.physic.operator_name=="random":
                 args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, args.physic.operator_name, f"scale_{args.physic.inp.mask_rate}") 
@@ -97,7 +99,7 @@ def main(
         elif args.task=="deblur":
             args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, args.physic.operator_name) 
         elif args.task=="sr":
-            args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, f"factor_{args.physic.sr.sf}") 
+            args.lora_checkpoint_dir = bf.join(args.save_checkpoint_dir, args.task, ckpt_date, f"factor_4") 
         else:
             raise ValueError("Operator not implemented !!")
         
@@ -155,7 +157,7 @@ def main(
                         )
                 # data
                 dir_test = "/mnt/scratch/users/applied_computational_math/LSUN/" #/users/cmk2000/sharedscratch/Datasets/testsets/ffhq or imageffhq
-                datasets = GetDatasets(dir_test, args.im_size, dataset_name = "LSUN",type_ = "val", transform="CentreCrop")
+                datasets = GetDatasets(dir_test, args.im_size, dataset_name = "LSUN",type_ = "val", transform="CentreCrop", label = config.data_label)
                 testset = DataLoader(datasets, batch_size=8, shuffle=False, num_workers=4)
                 print(len(datasets))
                 # -- model
@@ -229,7 +231,7 @@ def main(
                     dinv_physic =   Downsampling(
                         filter = "bicubic",
                         img_size = (3, 256, 256),
-                        factor = args.physic.sr.sf,
+                        lpips = args.physic.sr.sf,
                         device = device,
                         noise_model = GaussianNoise(
                             sigma= args.physic.sigma_model,
@@ -244,7 +246,8 @@ def main(
                     diffusion_scheduler, 
                     denoising_timestep,
                     args,
-                    device=device
+                    device=device,
+                    max_iter = max_unfolded_iter
                 )
                 if load_model:
                     # Load HQS_model weights
@@ -262,6 +265,8 @@ def main(
                 for name, param in hqs_module.named_parameters():
                     if param.requires_grad:
                         print(name, param.data)
+                
+                print("Unfolded iterations: ", hqs_module.max_iter)
                     
                 # sampler
                 diffsampler = runners.Conditional_sampler(
@@ -274,7 +279,38 @@ def main(
                     dphys = dinv_physic,
                 )
                 
-                if load_model:
+                if load_model and not frozen_ram:
+                    VALS = []
+                    KEYS = []
+                    NUMELS = []
+                    RELCHANGE = []
+                    # Profile RAM parameter shift
+                
+                    for k, v in diffsampler.RAM.named_parameters():
+                        # Store L2 distance between loaded and current parameters
+                        if k in ram_dict:
+                            VALS.append(torch.norm(v - ram_dict[k]).item())
+                            KEYS.append(k)
+                            NUMELS.append(v.numel())
+                            RELCHANGE.append((torch.norm(v - ram_dict[k]) / torch.norm(v)).item())
+                    # Sort by relative change 
+                    sorted_indices = np.argsort(RELCHANGE)
+                    sorted_keys = np.array(KEYS)[sorted_indices]
+                    # Store final p% of parameters
+                    # Save vals as csv file
+                    vals_df = pd.DataFrame({
+                        "key": KEYS,
+                        "numel": NUMELS,
+                        "L2_distance": VALS,
+                        "relative_change": RELCHANGE
+                    })
+                    psave = 1 - propram
+                    vals_df.to_csv(os.path.join(args.save_dir, f"l2_distances_{args.task}_{args.physic.operator_name}_{args.eval_date}.csv"), index=False)
+                    
+                    if propram < 1 - 1e-8:
+                        sorted_numels = [NUMELS[i] for i in sorted_indices[int(psave*len(sorted_keys)):]]
+                        print(f"Proportion of pruned RAM: {sum(sorted_numels) / sum(NUMELS)}")
+                        ram_dict = {k: ram_dict[k] for k in sorted_keys[int(psave*len(sorted_keys)):]}
                     print("Loading parameters for RAM module")
                     print(*[k for k in ram_dict.keys()], sep="\n")
                     diffsampler.RAM.load_state_dict(ram_dict, strict=False)
@@ -299,11 +335,17 @@ def main(
                 else:
                     raise ValueError(f"Solver {solver_type} do not exists.")
                 
-                root_dir_results = os.path.join(args.save_dir, f"{args.task}_{use_lora}", f"operator_{args.physic.operator_name}", args.eval_date, solver_type, f"Max_iter_{max_iter}", f"timesteps_{num_timesteps}", param_name_folder, f"lambda_{args.lambda_}")
+                root_dir_results = os.path.join(args.save_dir, f"{args.task}_{use_lora}", f"operator_{args.physic.operator_name}", args.eval_date, solver_type, f"Max_iter_{max_iter}", f"timesteps_{num_timesteps}", f"Unfolded_steps_{config.max_unfolded_iter}", param_name_folder, f"lambda_{args.lambda_}", f"sigma_{args.physic.sigma_model}")
                 if not load_model:
                     root_dir_results = root_dir_results + "RAM_ONLY"
                 if args.init_prev:
                     root_dir_results = root_dir_results + "init_prev"
+                if frozen_ram: 
+                    root_dir_results = root_dir_results + "frozen_ram"
+                elif propram < 1:
+                    root_dir_results = root_dir_results + f"propram_{propram}"
+                if config.data_label is not None:
+                    root_dir_results = os.path.join(root_dir_results, f"data_label_{config.data_label}")
                 if args.evaluation.coverage or args.evaluation.metrics:
                     save_metric_path = os.path.join(root_dir_results, "metrics_results")
                     os.makedirs(save_metric_path, exist_ok=True)
@@ -564,4 +606,4 @@ if __name__ == "__main__":
     for solver in SOLVER_TYPES:
         for steps in NUM_TIMESTEPS:
             for eta in etas:# [0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1]:
-                args = main(steps, solver, max_iter=max_iter,eta= eta)
+                args = main(steps, solver, eta= eta)
