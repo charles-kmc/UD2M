@@ -68,14 +68,6 @@ class Kernels:
         self.std = std
         self.sf = sf
         
-        # motion kernel
-        # if mode == "train":
-        #     self.path_motion_kernel_train = os.path.join(path_motion_kernel, "training_set")
-        #     self.list_motion_kernel = os.listdir(self.path_motion_kernel_train)
-        # else:
-        #     self.path_motion_kernel_val = os.path.join(path_motion_kernel, "validation_set")
-        #     self.list_motion_kernel = os.listdir(self.path_motion_kernel_val)
- 
     def get_blur(self, seed=None):
         if self.operator_name == "gaussian":
             blur_kernel = self._gaussian_kernel(self.kernel_size, std = self.std).to(self.device)
@@ -86,9 +78,9 @@ class Kernels:
         elif self.operator_name == "anisotropic":
             blur_kernel = self._anisotropic_kernel(self.kernel_size).to(self.device)
         elif self.operator_name  == "motion":
-            blur_kernel = self._motion_kernel().to(self.device)
+            blur_kernel = self._motion_kernel(self.kernel_size).to(self.device)
         elif self.operator_name == "uniform_motion":
-            blur_kernel = self._uniform_motion_kernel(self.kernel_size).to(self.device)
+            blur_kernel = self._uniform_motion_kernel().to(self.device)
         elif self.operator_name == "bicubic":
             blur_kernel = bicubic_filter(self.sf).to(self.device)
         else:
@@ -103,15 +95,15 @@ class Kernels:
         kernel = torch.matmul(kernel[:,None],kernel[None,:])/torch.sum(kernel)**2
         return kernel
 
-    def _uniform_motion_kernel(self, kernel_size):
-        self.uniform_kernel_generator = MotionBlurGenerator((kernel_size,kernel_size), num_channels=1)#UniformMotionBlurGenerator(kernel_size=(kernel_size,kernel_size))
+    def _motion_kernel(self, kernel_size):
+        self.motion_kernel_generator = MotionBlurGenerator((kernel_size,kernel_size), num_channels=1)#UniformMotionBlurGenerator(kernel_size=(kernel_size,kernel_size))
         if self.mode == "inference":
             torch.random.manual_seed(1675)
         else:
             pass
-        return self.uniform_kernel_generator.step(sigma=0.5, l=0.3)["filter"].squeeze()
-    
-    def _uniform_motion_kernel_new(self, kernel_size):
+        return self.motion_kernel_generator.step(sigma=0.5, l=0.1)["filter"].squeeze()
+
+    def _motion_kernel_new(self, kernel_size):
         generator = UniformMotionBlurGenerator((kernel_size, kernel_size))         
         if self.mode == "inference":
             torch.random.manual_seed(1675)
@@ -134,7 +126,7 @@ class Kernels:
         w = w / np.sum(w)
         return torch.Tensor(w)
     
-    def _motion_kernel(self):
+    def _uniform_motion_kernel(self):
         # defined transforms 
         transforms_kernel = transforms.Compose([
                 transforms.Resize((self.kernel_size, self.kernel_size)),
@@ -151,15 +143,25 @@ class Kernels:
         kernel_torch /= kernel_torch.sum()
         return kernel_torch
     
-    def _gaussian_kernel(self, kernel_size, std = 3.0):
+    def _gaussian_kernel(self, kernel_size, std = 10.0):
         c = int((kernel_size - 1)/2)
-        v = torch.arange(-kernel_size + c, kernel_size - c, dtype = self.dtype).reshape(-1,1)
+        v = torch.arange(-kernel_size + c+1, kernel_size - c, dtype = self.dtype).reshape(-1,1)
         vT = v.T
-        h = torch.exp(-0.5*(v**2 + vT**2)/(2*std))
+        h = torch.exp(-0.5*(v**2 + vT**2)/(std))
         eps = np.finfo(np.float32).resolution
         h[h < eps * h.max()] = 0
         h /= torch.sum(h.ravel())
         return h 
+    
+    def _gaussian_kernel_(self, kernel_size, std = 10.0):
+        c = int((kernel_size - 1)/2)
+        v = torch.arange(-kernel_size + c+1, kernel_size - c, dtype = self.dtype).reshape(-1,1)
+        func = lambda x: torch.exp(-0.5*(x**2)/(std))
+        val = torch.stack([func(a) for a in v])
+        h = torch.zeros(kernel_size, kernel_size)
+        h[c,:] = val.reshape(-1)
+        h /= torch.sum(h.ravel())
+        return h
         
     def _uniform_kernel(self, kernel_size):
         exp = torch.ones(kernel_size, kernel_size).to(self.dtype)
@@ -350,7 +352,7 @@ class Inpainting:
         self.box_size = int(box_proportion * im_size)
         
         self.Mask = self.get_mask(index_ii=index_ii, index_jj=index_jj)
-    
+        
     def get_mask(self, index_ii=None, index_jj=None):
         mask = torch.ones((self.im_size,self.im_size), device=self.device)
         mask = mask.squeeze()
@@ -366,6 +368,7 @@ class Inpainting:
                     index_jj = torch.randint(0, mask.shape[-1] - self.box_size , (1,)).item()
                 if self.mode=="inference":
                     index_ii,index_jj = 48,34
+            index_ii,index_jj = 64,64
             print(index_ii, index_jj, self.box_size)
             mask[..., index_ii:self.box_size+index_ii, index_jj:self.box_size+index_jj] = box
         else:
@@ -398,31 +401,35 @@ class Inpainting:
         assert x_t.shape == x.shape == y.shape, "x_t, y and x should have the same shape"
         # ---- Precision  operator ----
         inv_precision_matrix = lambda x: self.precision(params["sigma_model"], params["sigma_t"], params["rho"], params["lambda_sig"]) * x
-        para_temp = params["lambda_sig"]*params["sigma_model"]**2 if params["sigma_model"]!=0 else 1
+        para_temp = params["lambda_sig"]*params["sigma_model"]**2 
         
         # ---- Solving the linear system Ax = b ----
         temp = self.Mask * y / para_temp +  x / params["rho"]**2 +  x_t / (params["sigma_t"]**2 * params["sqrt_alpha_comprod"]) 
         zest = inv_precision_matrix(temp)
-        # zest[:,:,self.Mask.to(torch.bool)] = y[:,:,self.Mask.to(torch.bool)]#+0.4*zest[:,:,self.Mask.to(torch.bool)] 
         return zest      
 
     # ---- Inpainting operator ----
-    def Ax(self, x:torch.Tensor)->torch.Tensor:
+    def A(self, x:torch.Tensor)->torch.Tensor:
         Mask = self.Mask
         return x * Mask
     
-    def ATx(self, x:torch.Tensor)->torch.Tensor:
-        return self.Ax(x)
+    def AT(self, x:torch.Tensor)->torch.Tensor:
+        return self.A(x)
     
     def y(self, x:torch.Tensor)->torch.Tensor:
-        if not self.scale_image:
-            x0 = inverse_image_transform(x)
-        else:
-            x0 = x
-        x0_ = x0 + self.sigma_model * torch.randn_like(x0)
-        out = self.Ax(x0_)
-        return out
-    
+        x = torch.clamp(x.add(1).div(2), 0, 1)
+        y = x + self.sigma_model/2 * torch.randn_like(x)
+        y = self.A(y)
+        y = image_transform(y)
+        return y
+
+    # def yy(self, x:torch.Tensor)->torch.Tensor:
+    #     if not self.scale_image:
+    #         x = inverse_image_transform(x)
+    #     y = x + self.sigma_model * torch.randn_like(x)
+    #     y = self.A(y)
+    #     return y
+
 ## ====> Superresolution module
 class SuperResolution:
     def __init__(
@@ -469,7 +476,7 @@ class SuperResolution:
         FFT_h[torch.abs(FFT_h)<n_ops*2.22e-6] = torch.tensor(0)
         return FFT_h[None, None, ...]
     
-    def Ax(self, x):
+    def A(self, x):
         if not hasattr(self, "pre_compute"):
             raise ValueError("pre_compute doesn't exists!!")
         FFT_x = torch.fft.fft2(x, dim = (-2,-1))
@@ -479,7 +486,7 @@ class SuperResolution:
         return ax
     
     # forward operator
-    def ATx(self, x):
+    def AT(self, x):
         if not hasattr(self, "pre_compute"):
             raise ValueError("pre_compute doesn't exists!!")
         FFT_x = torch.fft.fft2(x, dim = (-2,-1))
@@ -490,15 +497,13 @@ class SuperResolution:
  
     def y(self, x:torch.Tensor, blur:torch.Tensor, sf:int)->torch.Tensor:
         self.pre_compute = {}
-        self.sf, self.blur, im_size = sf,blur,x.shape
+        self.sf, self.blur, im_size = sf, blur, x.shape
         if not self.scale_image:
             x = inverse_image_transform(x)
-      
         # observation model   
         FFT_h = self.blur2A(im_size)  
         self.pre_compute["FFT_h"]=FFT_h
-        
-        Hx = self.Ax(x)
+        Hx = self.A(x)
         Lx = self.downsample(Hx)
         y_ =  Lx + self.sigma_model * torch.randn_like(Lx)
                 

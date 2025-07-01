@@ -55,8 +55,10 @@ mkdir -p "$RESULTS_DIR1"
 #  Application launch commands
 #-------------------------------
 # Running python scripts
-#python3 compute_fid.py > "$RESULTS_DIR"_out_sample_dif.output 2> "$RESULTS_DIR"_err_sample_dif.error
-python3 compute_fid.py > "$RESULTS_DIR"_eval.output 2> "$RESULTS_DIR"_eval.error
+python3 fid.py \
+    -d "/users/cmk2000/sharedscratch/CKM/Regularised_CDM/Results_RAM_unfolded_iter_3_rank_5_paper/ImageNet/deblur_lora/operator_motion_5/var_0.01/17-06-2025/ddim/timesteps_3/zeta_0.9/eta_0.8/lambda_4.0" \
+    > "$RESULTS_DIR"_out_sample_dif_fid.output \
+    2> "$RESULTS_DIR"_err_sample_dif_fid.error
 
 # Final message
 echo "Finish!!"

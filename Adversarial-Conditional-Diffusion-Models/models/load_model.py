@@ -158,6 +158,7 @@ def load_trainable_params(model, args):
     lora_checkpoint_name = args.lora_checkpoint_name
     filepath = bf.join(lora_checkpoint_dir, lora_checkpoint_name)
     trainable_state_dict = torch.load(filepath, map_location=device)
+  
     try:
         model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)  
     except:
@@ -183,16 +184,20 @@ def adapter_lora_model(args):
         # frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
         # model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
         # target_modules = ["qkv", "proj_out"]
-    elif args.data.dataset_name=="FFHQ":
-        frozen_model_name = 'diffusion_ffhq_10m' 
-        frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
-        model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
+    elif args.data.dataset_name in ["FFHQ", "ImageNet"]:
+        try:
+            frozen_model_name = 'diffusion_ffhq_10m' #if args.data.dataset_name=="FFHQ" else '256x256_diffusion_uncond'
+            frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
+            model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
+        except:
+            frozen_model_name = 'diffusion_ffhq_10m' 
+            frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
+            model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
         target_modules = ["qkv", "proj_out"]
     elif args.data.dataset_name=="Imagenet64":
         frozen_model_name = 'diffusion64' 
         frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
         model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
-
         target_modules = ["qkv", "proj_out"]
     else:
         raise ValueError(f"We don't have a pre-trained model for this dataset: {args.dataset_name}")
@@ -202,7 +207,6 @@ def adapter_lora_model(args):
     if args.model.use_lora:
         utils.LoRa_model(model, target_layer=target_modules, rank=args.model.rank)
         # ---> Gradient activation 
-        # LoRA layers
         for name, params in model.named_parameters():
             if "lora" in name:
                 params.requires_grad = True
@@ -212,15 +216,7 @@ def adapter_lora_model(args):
         if args.data.dataset_name=="LSUN":
             for param in model.conv_out.parameters():
                 param.requires_grad_(True)
-        elif args.data.dataset_name=="FFHQ":      
+        elif args.data.dataset_name in ["FFHQ", "ImageNet64", "ImageNet"]:
             for param in model.out.parameters():
                 param.requires_grad_(True)
-        elif args.data.dataset_name=="imaegenet64":      
-            for param in model.out.parameters():
-                param.requires_grad_(True)
-    
-        # for name, param in model.named_parameters():
-        #     if "output_blocks.2.0.out_layers.3" in name:
-        #         param.requires_grad_(True)
-    
     return model

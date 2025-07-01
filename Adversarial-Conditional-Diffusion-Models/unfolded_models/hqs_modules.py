@@ -27,7 +27,6 @@ class DDNoise(dinv.physics.DecomposablePhysics):
             self.set_t(t)
         return super().forward(x, self.mask)
 
-
 class TrainableGaussianNoise(dinv.physics.GaussianNoise):
     def __init__(self, sigma):
         super().__init__(sigma)
@@ -67,11 +66,8 @@ class StackedJointPhysics(dinv.physics.StackedLinearPhysics):
     def A_adjoint(self, y, **kwargs) -> torch.Tensor:
         r"""
         Computes the adjoint of the stacked operator, defined as
-
         .. math::
-
             A^{\top}y = \sum_{i=1}^{n} A_i^{\top}y_i.
-
         :param deepinv.utils.TensorList y: measurements
         """
         min = torch.min(torch.tensor([p.noise_model.sigma for p in self.physics_list]))
@@ -90,22 +86,22 @@ class HQS_models(torch.nn.Module):
         physic:Union[phy.Deblurring, phy.Inpainting, phy.SuperResolution], 
         diffusion_scheduler:DiffusionScheduler, 
         get_denoising_timestep:GetDenoisingTimestep,
-        args,
+        args, 
         device,
-        max_iter:int = 3,
+        max_unfolded_iter:int = 1,
         iter_dep_weights=False,
         RAM = None,
         RAM_Physics = None,
         RAM_prox = False,
-        ) -> None:
+        ) -> None: 
         super().__init__()
         self.model = model
-        self.max_iter = max_iter
+        self.max_unfolded_iter = args.max_unfolded_iter
         self.diffusion_scheduler = diffusion_scheduler
         self.physic = physic
         self.get_denoising_timestep = get_denoising_timestep
         self.args = args
-        self.num_weights_hqs = self.max_iter if iter_dep_weights else 1
+        self.num_weights_hqs = self.max_unfolded_iter if iter_dep_weights else 1
         self.SP_Param = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(0.0, device=device), requires_grad=True) for _ in range(self.num_weights_hqs)])
         self.LambdaSIG= torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(0.0, device=device), requires_grad=RAM is None) for _ in range(self.num_weights_hqs)])  # Used to augment the denoising step
         self.TAUG = torch.nn.ParameterList([torch.nn.Parameter(torch.tensor(0.0, device=device), requires_grad=True) for _ in range(self.num_weights_hqs)])  # Used to augment the denoising step
@@ -141,7 +137,6 @@ class HQS_models(torch.nn.Module):
             out = {"zest":zest}
         else:
             raise ValueError("Task not implemented!!")
-        
         return out
 
 
@@ -151,24 +146,23 @@ class HQS_models(torch.nn.Module):
         self.RAM_physics.set_t(t)
         self.RAM_physics.set_rho(self.params["rho"])
         xt_init = (xt.clone() + self.RAM_physics.physics_list[1].alphas_cumprod[t].sqrt())/2 
-        min_sig = torch.min(torch.tensor([p.noise_model.sigma for p in self.RAM_physics.physics_list]))
+        min = torch.min(torch.tensor([p.noise_model.sigma for p in self.RAM_physics.physics_list]))
         y_ram = dinv.utils.TensorList([
-            utils.inverse_image_transform(y)*min_sig/self.RAM_physics.physics_list[0].noise_model.sigma, 
-            xt_init*min_sig/self.RAM_physics.physics_list[1].noise_model.sigma,
-            utils.inverse_image_transform(z)*min_sig/self.RAM_physics.physics_list[2].noise_model.sigma,
+            utils.inverse_image_transform(y)*min/self.RAM_physics.physics_list[0].noise_model.sigma, 
+            xt_init*min/self.RAM_physics.physics_list[1].noise_model.sigma,
+            utils.inverse_image_transform(z)*min/self.RAM_physics.physics_list[2].noise_model.sigma,
         ]
         )
         x_hat = self.RAM(y_ram, self.RAM_physics)
         return utils.image_transform(x_hat)
-    
-    
+      
     def run_unfolded_loop(
         self, 
         obs:dict,
         x:torch.Tensor, 
         t:int, 
         lambda_sig:float = 1.0,
-        checkpoint = True,
+        checkpoint = False,  
         collect_ims = False,
         **kwargs
     ) -> dict:
@@ -179,14 +173,18 @@ class HQS_models(torch.nn.Module):
         y_label = self.obs["y_label"] if "y_label" in self.obs.keys() else None
         IMSOUT = {}
         
-        
-        for ii in range(self.max_iter):
+        # x = x / models.extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t_denoising, x_t.shape).ravel()[0]
+        for ii in range(self.max_unfolded_iter):
             ind_ii = ii % self.num_weights_hqs
             # parameters
             sigma_t = models.extract_tensor(self.diffusion_scheduler.sigmas, t, x_t.shape).ravel()[0]
-            lambda_sig = self.LambdaSIG[ind_ii].exp() 
-            rho, t_denoising, ty = self.get_denoising_timestep.get_z_timesteps(t, self.physic.sigma_model, x_t.shape, T_AUG = 1000*self.TAUG[ind_ii], sp = self.SP_Param[ind_ii].exp())
+            if self.args.learned_lambda_sig:
+                lambda_sig = self.LambdaSIG[ind_ii].exp() 
+            else:
+                lambda_sig = self.args.lambda_
+            rho, t_denoising, ty = self.get_denoising_timestep.get_z_timesteps(t, self.physic.sigma_model, x_t.shape, T_AUG = 1000*self.TAUG[ind_ii], sp = self.SP_Param[ind_ii].exp(), task=self.args.task)
             sqrt_alpha_comprod = models.extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t, x_t.shape).ravel()[0]    
+            
             self.params = {
                 "sigma_model":self.physic.sigma_model, 
                 "sigma_t":sigma_t, 
@@ -195,61 +193,46 @@ class HQS_models(torch.nn.Module):
                 "lambda_sig":lambda_sig,
                 "ds_max_iter":5,
             }
-            if self.args.task=="ct":
-                self.params["max_iter_algo"] = self.args.physic.ct.max_iter_algo
-                self.params["step_algo"] =  self.args.physic.ct.step_algo
-
-            
-        
             # --- initialisation
-            # x = x / models.extract_tensor(self.diffusion_scheduler.sqrt_alphas_cumprod, t_denoising, x_t.shape).ravel()[0]
-            # prox step
-            if ii==self.max_iter-1 and self.args.mode!="train":
-                self.params["lambda_sig"]=lambda_sig
-            elif ii==self.max_iter-2 and self.args.mode!="train":
-                self.params["lambda_sig"]=lambda_sig
-            else:
-                pass
             out = self.proxf_update(x, t)
             zest = out["zest"]
+            
             
             # noise prediction
             if self.args.pertub:
                 noise = torch.randn_like(zest)
-                val = 1 * torch.ones_like(t_denoising).long()
+                val = torch.ones_like(t_denoising).long()
                 max_val = 1000 * torch.ones_like(t_denoising).long()
-                tu = torch.clamp(t_denoising + 1000*self.TLAT[ind_ii], val, max_val) 
-                z_input = self.diffusion_scheduler.sample_xt_cont(zest, tu, noise=noise)
-                # if self.args.use_wandb:
-                #     wandb.log({"t_denoiser":t_denoising.ravel()[0]})
+                tu = torch.clamp(t_denoising + 1000*self.TLAT[ind_ii], val, max_val).long()
+                z_input = self.diffusion_scheduler.sample_xt(zest, tu, noise=noise)
             else:
                 z_input = zest
-            
-            # Denoising   
-            if checkpoint:
+                tu = t_denoising.long()
+                        
+            # check if z_input is double
+            z_input = z_input.float()
+
+            # Denoising
+            if checkpoint and False:
                 def run_model(z, t):
-                    return self.model(z, t, y = y_label)
+                    return self.model(z, t, y=y_label)
                 eps = torch.utils.checkpoint.checkpoint(run_model, z_input, tu, use_reentrant=False)
             else:
                 eps = self.model(z_input, tu, y=y_label)
             eps, _ = torch.split(eps, C, dim=1) if eps.shape == (B, C * 2, *x_t.shape[2:]) else (eps, eps)
             
             # estimate of x_start
-            x = self.diffusion_scheduler.predict_xstart_from_eps_cont(z_input, tu, eps)
+            x = self.diffusion_scheduler.predict_xstart_from_eps(z_input, tu, eps)
             if collect_ims:
                 IMSOUT[f"x_{ii}"] = x
                 IMSOUT[f"z_{ii}"] = z_input
                 IMSOUT[f"eps_{ii}"] = eps
 
-            
             x_0 = x.add(1).div(2)
             x_0 = torch.clamp(x_0, 0.0, 1.0)
-            
-            if self.args.task=="inp" and ii<self.max_iter-1:
+           
+            if self.args.task=="inp" and ii < self.max_unfolded_iter-2:
                 x = (1-self.physic.Mask)*x + (self.physic.Mask)*y
-        
-        pred_eps = self.diffusion_scheduler.predict_eps_from_xstrat(x_t, t, x)
-        if False:
-            wandb.log({"max x":x.max(),"min x":x.min()})
-            wandb.log({"max eps":eps.max(),"min eps":eps.min()})
+        pred_eps = self.diffusion_scheduler.predict_eps_from_xstart(x_t, t, x)
+
         return {"xstart_pred":x_0, "aux":torch.clamp(zest.add(1).div(2),0,1), "z_input":z_input, "eps_pred":pred_eps,"eps_z":eps, "IMDICT":IMSOUT}

@@ -16,33 +16,6 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning, module="PIL.Image")
 
 
-def fast_scan_webps(root_dir):
-    webp_paths = []
-    stack = [root_dir]
-    pth = "/users/cmk2000/sharedscratch/Datasets/LSUN/infos"
-    os.makedirs(pth, exist_ok=True)
-    df = pd.DataFrame(columns=["img_path"])
-    while stack:
-        current = stack.pop()
-        try:
-            with os.scandir(current) as it:
-                for entry in it:
-                    if entry.is_dir(follow_symlinks=False):
-                        stack.append(entry.path)
-                    elif entry.name.lower().endswith(".webp"):
-                        #webp_paths.append(Path(entry.path))
-                        temp_df = pd.DataFrame({"img_path": [Path(entry.path)]})
-                        save_dir = os.path.join(pth,"lsun_bedroom_paths.csv")
-                        temp_df.to_csv(save_dir, mode='a', header=not os.path.exists(save_dir))
-    
-                        # df_new = pd.DataFrame({"img_path": webp_paths})
-                        # df = pd.concat([df, df_new], ignore_index=True)
-                        # df.to_csv(os.path.join(pth,"lsun_bedroom_infos.csv"), index=False)
-        except Exception as e:
-            print(f"Error scanning {current}: {e}")
-
-    return webp_paths
-
 class GetDatasets:
     def __init__(
                 self, 
@@ -64,34 +37,24 @@ class GetDatasets:
         # transformer
         self.transform = v2.Compose([
             v2.ToTensor(), 
-            v2.RandomCrop((self.im_size, self.im_size)) if transform == "RandomCrop" else v2.CenterCrop((self.im_size, self.im_size)),
-            #v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            v2.Resize((self.im_size, self.im_size)),
         ])
         
         # get all images path
-        if self.dataset_dir == "" or self.dataset_dir is None or not os.path.exists(self.dataset_dir):
+        if self.dataset_dir == "":# or self.dataset_dir is None or not os.path.exists(self.dataset_dir):
             raise ValueError(f"The dataset directory {self.dataset_dir} is empty!!")
         else:
             if dataset_name == "ImageNet":
-                self.ref_images = glob.glob(os.path.join(self.dataset_dir , '*.JPEG'))
+                self.ref_images = glob.glob(os.path.join(self.dataset_dir ,self.type, self.type, '*.JPEG')) + glob.glob(os.path.join(self.dataset_dir ,self.type, self.type, '*.png'))
+                # self.ref_images = sorted(glob.glob('/users/cmk2000/sharedscratch/Datasets/Test/ImageNet/val/val' + '/*.png', recursive=True)) 
             elif dataset_name == "FFHQ":
-                self.ref_images = glob.glob(os.path.join(self.dataset_dir , '*.png'))
+                self.ref_images = glob.glob(os.path.join(self.dataset_dir ,self.type, self.type, '*.png')) + glob.glob(os.path.join(self.dataset_dir ,self.type, self.type, '*.jpg'))
             elif dataset_name == "LSUN":
-                if self.type == "train":
-                    data_dir = "/mnt/scratch/users/applied_computational_math/LSUN/bedroom_train"
-                    data_df = pd.read_csv(os.path.join(data_dir,"lsun_bedroom.csv"))
-                    self.ref_images = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.webp')]
-                elif self.type == "val":
-                    data_dir = "/mnt/scratch/users/applied_computational_math/LSUN/bedroom_val"
-                    data_df = pd.read_csv(os.path.join(data_dir,"lsun_bedroom.csv"))
-                    self.ref_images = [os.path.join(data_dir, f) for f in os.listdir(data_dir) if f.endswith('.webp')]
-
-                else:
-                    raise ValueError(f"This type {self.type} is not yet implemented !!")
-                print(f"Number of images in {dataset_name} dataset: {len(self.ref_images)}")
-                # self.ref_images = fast_scan_webps(Path(data_dir))
-            elif dataset_name == "CT":
-                self.ref_images = glob.glob(os.path.join(self.dataset_dir , '*.tif'))
+                lists_paths_dir = f"/users/cmk2000/sharedscratch/Datasets/LSUN/bedroom_{subset_data}_paths.csv"
+                if os.path.exists(lists_paths_dir):
+                    with open(lists_paths_dir, 'r') as f:  
+                        self.ref_images = [line.split("\n")[0] for line in f.readlines()]
+                    self.ref_images = self.ref_images[1:]
             else:
                 raise ValueError(f"This dataset {dataset_name} is not yet implemented !!")
         

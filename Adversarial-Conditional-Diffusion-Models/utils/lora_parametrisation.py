@@ -57,7 +57,7 @@ def LoRa_model(model, target_layer, rank = 2):
     apply_lora_parametrization(model, target_layer, rank)
     print(f'Number of Layers frozen: {num_frozen_layers(model)}')
     total_parameters_non_lora, total_parameters_lora = total_parameters(model)
-    print(f"Total trainable parameters of the model: {total_parameters_non_lora} (non-LoRa) vs {total_parameters_lora} (LoRa) Ratio: {(total_parameters_lora/total_parameters_non_lora)*100:.2f}% of the original model")
+    print(f"Total parameters of the model: {total_parameters_non_lora} (non-LoRa) vs {total_parameters_lora} (LoRa) Ratio: {(total_parameters_lora/total_parameters_non_lora)*100:.2f}% of the original model")
 
 def total_parameters(model):
     n_frozen = 0

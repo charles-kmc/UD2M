@@ -158,7 +158,7 @@ def main(
                         print(params[1,:])
                         break
                     
-                    device = args.device
+                device = args.device
                 lora_checkpoint_dir = args.lora_checkpoint_dir
                 lora_checkpoint_name = args.lora_checkpoint_name
                 filepath = bf.join(lora_checkpoint_dir, lora_checkpoint_name)

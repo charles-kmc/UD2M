@@ -75,15 +75,15 @@ class Kernels:
             if seed is not None:
                 set_seed(seed)
             blur_kernel = self._uniform_kernel(self.kernel_size).to(self.device)
-        elif self.operator_name  == "motion":
-            blur_kernel = self._motion_kernel().to(self.device)
-        elif self.operator_name == "uniform_motion":
-            blur_kernel = self._uniform_motion_kernel(self.kernel_size).to(self.device)
+        elif self.operator_name  == "uniform_motion":
+            blur_kernel = self._uniform_motion_kernel().to(self.device)
+        elif self.operator_name == "motion":
+            blur_kernel = self._motion_kernel(self.kernel_size).to(self.device)
         else:
             raise ValueError(f"Blur type {self.operator_name } not implemented !!")
         return blur_kernel.squeeze()
 
-    def _uniform_motion_kernel(self, kernel_size):
+    def _motion_kernel(self, kernel_size):
         self.uniform_kernel_generator = MotionBlurGenerator((kernel_size,kernel_size), num_channels=1)#UniformMotionBlurGenerator(kernel_size=(kernel_size,kernel_size))
         if self.mode == "inference":
             torch.random.manual_seed(1675)
@@ -91,7 +91,7 @@ class Kernels:
             pass
         return self.uniform_kernel_generator.step(sigma=0.5, l=0.5)["filter"].squeeze()
 
-    def _motion_kernel(self):
+    def _uniform_motion_kernel(self):
         # defined transforms 
         transforms_kernel = transforms.Compose([
                 transforms.Resize((self.kernel_size, self.kernel_size)),

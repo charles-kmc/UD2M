@@ -10,7 +10,7 @@
 #SBATCH -o o_train_dif.output
 #SBATCH -e e_train_dif.error
 ## Job name
-#SBATCH -J CDM
+#SBATCH -J CDM_INP
 ## Run time: "hours:minutes:seconds", "days-hours"
 #SBATCH --time=140:00:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu

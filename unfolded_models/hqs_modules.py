@@ -101,7 +101,7 @@ class HQS_models:
             # estimate of x_start
             x = self.diffusion_scheduler.predict_xstart_from_eps(z_input, t_denoising, eps)
             if self.args.task=="inp":
-                x = self.physic.Mask*x + (1-self.physic.Mask)*y
+                x = self.physic.Mask*y + (1-self.physic.Mask)*x
             x_0 = utils.inverse_image_transform(x)
             x_0 = torch.clamp(x_0, 0.0, 1.0)
             

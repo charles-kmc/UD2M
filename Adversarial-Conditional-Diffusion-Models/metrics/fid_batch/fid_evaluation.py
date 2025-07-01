@@ -4,7 +4,7 @@ import os
         
 from .utils import create_batches
 
-def Fid_evatuation(dir_results, device, mmse_sample = True, last_sample = True, init_sample = True, method = "ours"):
+def Fid_evatuation(dir_results, device, mmse_sample = True, last_sample = False, init_sample = False, method = "ours"):
     """
     Calculate the Fréchet Inception Distance (FID) between the target and estimated images.
 

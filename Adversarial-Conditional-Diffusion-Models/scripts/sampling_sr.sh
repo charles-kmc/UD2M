@@ -2,7 +2,7 @@
 
 ################# Part-1 Slurm directives ####################
 ## Working dir
-#SBATCH -D "/users/cmk2000/cmk2000/Deep learning models/LLMs/Regularised_CDM"
+#SBATCH -D "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/Adversarial-Conditional-Diffusion-Models"
 ## Environment variables
 #SBATCH --export=ALL
 ## Output and Error Files

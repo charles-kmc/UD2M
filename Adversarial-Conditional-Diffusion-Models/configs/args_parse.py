@@ -5,21 +5,23 @@ def configs(mode="train"):
     parser.add_argument("--config_file", type=str, required=True, help="configs file")
     parser.add_argument("--task", type=str, required=True, help="Task we are solving")
     parser.add_argument("--operator_name", type=str, required=True, help="Type of operator used!!")
-    parser.add_argument("--max_unfolded_iter", type=int, required=True, help="Type of operator used!!")
+    parser.add_argument("--max_unfolded_iter", type=int, default=3, help="Type of operator used!!")
+    parser.add_argument("--kernel_size", type=int, default=3, help="Kernel size!!")
+    parser.add_argument("--learned_lambda_sig", type=bool, default=True, help="Whether to learn lambda and sigma or not!!")
     parser.add_argument("--lambda_", type=float, required=True, help="parameter controlling data consistency step!!")
-    parser.add_argument("--dataset", type=str, default="FFHQ", help="Dataset!!")
-    if mode == "inference":
-        parser.add_argument("--ckpt_epoch", type=int, required=True, help="Epoch where the model is resumed")
-        parser.add_argument("--sigma_model", type=float, required=True, help="Noise variance of the model")
-        parser.add_argument("--ckpt_date", type=str, required=True, help="Date when the checkpoint was save")
-        parser.add_argument("--total_steps", type=int, required=True, help="Total timesteps")
-        parser.add_argument("--num_timesteps", type = int, required=True, help="Number of timesteps")
+    parser.add_argument("--dataset_name", type=str, required=True, help="Dataset name!!")
+    parser.add_argument("--sigma_model", type=float, required=True, help="Noise variance of the model")
+    parser.add_argument("--use_RAM", type=bool, default=True, help="Whether to use RAM or not")
+
+    if mode!="train":
+        parser.add_argument("--num_timesteps", type=int, required=True, help="Number of timesteps for inference")
+        parser.add_argument("--max_images", type=int, required=True, help="Maximum number of images to process")
         parser.add_argument("--init_prev", action="store_true", help="Use the previous estimate as initialization")
+        parser.add_argument("--ckpt_name", type=str, default=None, help="checkpoint name")
+        parser.add_argument("--ckpt_dir", type=str, default=None, help="Checkpoint directory")
     config = parser.parse_args()
     
     if config.task == "inp":
         config.use_dpir = False
     return config
-
-
 
