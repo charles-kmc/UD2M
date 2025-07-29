@@ -1,4 +1,4 @@
-# [Denoising Diffusion Models for Plug-and-Play Image Restoration](https://arxiv.org/abs/2305.08995)
+# [Learning few-step posterior samplers by unfolding and distillation of diffusion models](https://arxiv.org/abs/2305.08995)
 
 [Charlesquin Kemajou Mbakam](https://yuanzhi-zhu.github.io/about/), [Jonny Spence](), [Marcelo Pereyra]().
 
