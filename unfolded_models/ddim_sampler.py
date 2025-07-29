@@ -10,29 +10,26 @@ import wandb
 import copy
 import yaml
 import blobfile as bf
+from typing import Union
 
-from utils.utils import Metrics, inverse_image_transform, image_transform, delete
 from DPIR.dpir_models import DPIR_deb
-from args_unfolded_model import args_unfolded
-from utils_lora.lora_parametrisation import LoRa_model
+from configs import configs
 from datasets.datasets import Datasets
-from .unfolded_model import (
-    extract_tensor,
-    get_rgb_from_tensor,
-    DiffusionScheduler,
-    physics_models, 
-    HQS_models,
-    GetDenoisingTimestep,
-)
+
+import physics as phy
+from DPIR.dpir_models import DPIR_deb
+import unfolded_models as ums
+import utils as utils
+import models as models
 
 
 
 class DDIM_SAMPLER:
     def __init__(
         self, 
-        hqs_model:HQS_models, 
-        physics:physics_models, 
-        diffusion:DiffusionScheduler,
+        hqs_model:ums.HQS_models, 
+        physics:Union[phy.Deblurring,phy.Inpainting,phy.SuperResolution], 
+        diffusion:ums.DiffusionScheduler,
         device,
         args,
         max_unfolded_iter:int = 3,
@@ -54,10 +51,8 @@ class DDIM_SAMPLER:
         )
         
         # metric
-        self.metrics = Metrics(self.device)
-
-        # Huen sampler 
-        huen_module = Huen_SAMPLER()
+        self.metrics = utils.Metrics(self.device)
+    
     def sampler(
         self, 
         y:torch.tensor, 
@@ -79,9 +74,9 @@ class DDIM_SAMPLER:
             x = torch.randn_like(y)
 
             if self.args.dpir.use_dpir:
-                y_ = inverse_image_transform(y)
+                y_ = utils.inverse_image_transform(y)
                 x0 = self.dpir_model.run(y_, self.physics.blur_kernel, iter_num = 1) #y.clone()
-                x0 = image_transform(x0)
+                x0 = utils.image_transform(x0)
             else:
                 x0 = y.clone()
                 
@@ -95,7 +90,7 @@ class DDIM_SAMPLER:
                 t_i = seq[ii]
                 # unfolding: xstrat_pred, eps_pred, auxiliary variable
                 out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter)
-                x0 = image_transform(out_val["xstart_pred"])
+                x0 = utils.image_transform(out_val["xstart_pred"])
                 if x_true:
                     psnrs.append(self.metrics.psnr_function(x_true, out_val["xstart_pred"]))
                 
@@ -105,14 +100,14 @@ class DDIM_SAMPLER:
                         x = diffusionsolver.ddim_solver(x0, out_val["eps_pred"], ii, eta, zeta)
                     elif self.solver_type == "ddpm":
                         x = diffusionsolver.ddpm_solver(x, out_val["eps_pred"], ii, ddpm_param = self.args.ddpm_param)
-                    elif self.solver == "huen":
+                    elif self.solver_type == "huen":
                         x, d_old = diffusionsolver.huen_solver(x, out_val["eps_pred"], ii) 
                         
                         tiim1 = self.seq[ii + 1]  
-                        beta_tiim1 = extract_tensor(self.diffusion.betas, tiim1, x.shape)
+                        beta_tiim1 = models.extract_tensor(self.diffusion.betas, tiim1, x.shape)
                         if beta_tiim1 !=0:
                             out_val = self.hqs_model.run_unfolded_loop( y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter)
-                            x0 = image_transform(out_val["xstart_pred"])
+                            x0 = utils.image_transform(out_val["xstart_pred"])
                             iim1 = ii + 1
                             x = diffusionsolver.huen_solver(x0, x, iim1, d_old=d_old)
                     else:
@@ -122,16 +117,16 @@ class DDIM_SAMPLER:
     
                 # save the process
                 if self.args.save_progressive and (seq[ii] in progress_seq):
-                    x_show = get_rgb_from_tensor(inverse_image_transform(x))      #[0,1]
+                    x_show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x))      #[0,1]
                     progress_img.append(x_show)
-                    delete([x_show])
+                    utils.delete([x_show])
             
             if self.args.save_progressive:   
                 img_total = cv2.hconcat(progress_img)
                 if self.args.use_wandb and self.args.save_wandb_img:
                     image_wdb = wandb.Image(img_total, caption=f"progress sequence for im {im_name}", file_type="png")
                     wandb.log({"pregressive":image_wdb})
-                    delete([progress_img])
+                    utils.delete([progress_img])
         
         out_val["progress_img"] = img_total
         if x_true:
@@ -142,7 +137,7 @@ class DiffusionSolver:
     def __init__(
         self, 
         seq, 
-        diffusion:DiffusionScheduler, 
+        diffusion:ums.DiffusionScheduler, 
     ):
         self.seq = seq
         self.diffusion = diffusion
@@ -189,7 +184,7 @@ class DiffusionSolver:
         if d_old is not None:
             d_new = (d_new + d_old) / 2  
         x_tiim1 = (x_t - beta_t.sqrt() * d_new) / (1 - beta_t).sqrt()
-        beta_t = extract_tensor(self.diffusion.betas, t_ii, x_t.shape)
+        beta_t = ums.extract_tensor(self.diffusion.betas, t_ii, x_t.shape)
         return (x_tiim1, d_new) if d_old is None else x_tiim1
     
     
@@ -213,7 +208,7 @@ class Huen_SAMPLER:
     def predict_xstart_from_eps(self, x_t, t, eps):
         assert x_t.shape == eps.shape, ValueError(f"x_t and eps have different shape ({x_t.shape} != {eps.shape})")
         return (
-            (x_t - extract_tensor( self.sigma_ts, t, x_t.shape ) * eps) 
+            (x_t - ums.extract_tensor( self.sigma_ts, t, x_t.shape ) * eps) 
         )
         
     def _linearScheduler(self):
@@ -239,8 +234,8 @@ class Huen_SAMPLER:
     # TODO replace ii with tii 
     def huen_solver(self, x_tii, eps, ii, d_old=None, scaling=None):
         tii = self.seq[ii]
-        sigma_tii = extract_tensor(self.sigma_ts,tii, x_tii.shape)
-        sigma_prime_tii = extract_tensor(self.sigma_prime_ts,tii, x_tii.shape)
+        sigma_tii = ums.extract_tensor(self.sigma_ts,tii, x_tii.shape)
+        sigma_prime_tii = ums.extract_tensor(self.sigma_prime_ts,tii, x_tii.shape)
         x_pred = self.predict_xstart_from_eps(x_tii, tii, eps)
         
         d_new = (sigma_prime_tii/sigma_tii)*(x_tii - x_pred)
@@ -260,8 +255,8 @@ class Huen_SAMPLER:
         
     def huen_solver(self, x_tii, eps, ii, d_old=None, scaling=None):
         tii = self.seq[ii]
-        sigma_tii = extract_tensor(self.sigma_ts,tii, x_tii.shape)
-        sigma_prime_tii = extract_tensor(self.sigma_prime_ts,tii, x_tii.shape)
+        sigma_tii = ums.extract_tensor(self.sigma_ts,tii, x_tii.shape)
+        sigma_prime_tii = ums.extract_tensor(self.sigma_prime_ts,tii, x_tii.shape)
         x_pred = self.predict_xstart_from_eps(x_tii, tii, eps)
         
         d_new = (sigma_prime_tii/sigma_tii)*(x_tii - x_pred)
@@ -278,24 +273,3 @@ class Huen_SAMPLER:
             return x_tiim1, d_new, (tiim1 - tii)
         else: 
             return x_tiim1
-# load lara weights                
-def load_trainable_params(model, epoch, args):
-    checkpoint_dir = bf.join(args.path_save, args.task, "Checkpoints", args.date)
-    filename = f"LoRA_model_{args.task}_{(epoch):03d}.pt"
-    filepath = bf.join(checkpoint_dir, filename)
-    
-    trainable_state_dict = torch.load(filepath)
-    model.load_state_dict(trainable_state_dict["model_state_dict"], strict=False)               
-    
-    return model
-
-# load yaml file 
-def load_yaml(save_checkpoint_dir, epoch, date, task):
-    dir_ = bf.join(save_checkpoint_dir, date)
-    filename = f"LoRA_model_{task}_{(epoch):03d}.yaml"
-    filepath = bf.join(dir_, filename)
-    with open(filepath, 'r') as f:
-        args = yaml.safe_load(f)
-    
-    return args
-

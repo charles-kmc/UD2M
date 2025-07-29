@@ -5,38 +5,25 @@ import copy
 
 # The following code is used to parametrise the layer
 class LoRaParametrisation(nn.Module):
-    def __init__(self, in_channel, out_channel, dtype, rank = 2, alpha = 1, device = "cpu"):
+    def __init__(self, in_channel, out_channel, dtype, rank, alpha = 1.5):
         super(LoRaParametrisation, self).__init__()
         self.in_channel = in_channel
         self.out_channel = out_channel
         self.dtype = dtype
         self.rank = rank
-        self.device = device
         self.alpha = alpha
-        self.lora_A = nn.Parameter(
-            torch.zeros(
-                self.in_channel, 
-                self.rank, 
-                device = self.device, 
-                dtype = self.dtype, 
-                requires_grad=True
-            )
-        )
-        self.lora_B = nn.Parameter(
-            torch.zeros(
-                self.rank, 
-                self.out_channel, 
-                device = self.device,
-                dtype = self.dtype, 
-                requires_grad=True
-            )
-        )
+        size_A = (self.in_channel, self.rank)
+        size_B = (self.rank, self.out_channel)
+        self.lora_A = nn.Parameter(torch.zeros(size=size_A, dtype = self.dtype, requires_grad=True))
+        self.lora_B = nn.Parameter(torch.zeros(size=size_B, dtype = self.dtype, requires_grad=True))
         
         # Verify requires_grad
         assert self.lora_A.requires_grad
         assert self.lora_B.requires_grad
-        nn.init.normal_(self.lora_A, mean = 0, std = 1)
-        nn.init.zeros_(self.lora_B)
+        nn.init.xavier_normal_(self.lora_A)
+        nn.init.xavier_normal_(self.lora_B)
+        # nn.init.normal_(self.lora_A, mean = 0, std = 1)
+        # nn.init.zeros_(self.lora_B)
         self.scale = self.alpha / self.rank
         self.enabled = True
         
@@ -48,29 +35,29 @@ class LoRaParametrisation(nn.Module):
             return original_weights + lora_update
         return original_weights
 
-def layer_parametrisation(layer, device, rank = 2):
+def layer_parametrisation(layer, rank=2):
     in_channel, out_channel = layer.weight.squeeze().shape
     dtype = layer.weight.dtype
     return LoRaParametrisation(
         in_channel, 
         out_channel, 
         dtype, 
-        device = device, 
         rank = rank
     )
 
-def apply_lora_parametrization(model, target_layer, rank, device):
+def apply_lora_parametrization(model, target_layer, rank):
     for name, layer in model.named_modules():
     #    Check if the layer name ends with "qkv" or "proj_out"
         if name.endswith(tuple(target_layer)):
-            P.register_parametrization(layer, "weight", layer_parametrisation(layer,  device, rank=rank))           
+            print(f"Applying LoRA to {name}")
+            P.register_parametrization(layer, "weight", layer_parametrisation(layer, rank=rank))           
 
-def LoRa_model(model, target_layer, device, rank = 2):
+def LoRa_model(model, target_layer, rank = 2):
     # Apply LoRA parametrization to input blocks
-    apply_lora_parametrization(model, target_layer, rank, device)
+    apply_lora_parametrization(model, target_layer, rank)
     print(f'Number of Layers frozen: {num_frozen_layers(model)}')
     total_parameters_non_lora, total_parameters_lora = total_parameters(model)
-    print(f"Total trainable parameters of the model: {total_parameters_non_lora} (non-LoRa) vs {total_parameters_lora} (LoRa) Ratio: {(total_parameters_lora/total_parameters_non_lora)*100:.2f}% of the original model")
+    print(f"Total parameters of the model: {total_parameters_non_lora} (non-LoRa) vs {total_parameters_lora} (LoRa) Ratio: {(total_parameters_lora/total_parameters_non_lora)*100:.2f}% of the original model")
 
 def total_parameters(model):
     n_frozen = 0

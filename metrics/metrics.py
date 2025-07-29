@@ -1,11 +1,13 @@
 from torchmetrics.image import StructuralSimilarityIndexMeasure 
 import torch 
-import math
-import os 
-import logging
 from torchviz import make_dot 
 import lpips
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity 
+import numpy as np
+import os
+from typing import Optional
+from skimage.metrics import peak_signal_noise_ratio, structural_similarity
+
 
 class Metrics():
     def __init__(self, device):
@@ -14,6 +16,7 @@ class Metrics():
         self.loss_fn_vgg = LearnedPerceptualImagePatchSimilarity(net_type='squeeze').to(device)
         self.ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(self.device)
         self.l1_loss = torch.nn.L1Loss().to(device)
+    # --- mse
     # --- mse
     def mse_function(self,x,y):
         mse_val = self.mse(x,y)
@@ -51,3 +54,50 @@ class Metrics():
             L_tensor.append(x)
         
         return L_tensor
+    
+    
+
+def psnr(gt: np.ndarray, pred: np.ndarray, maxval: Optional[float] = None) -> np.ndarray:
+    if maxval is None:
+        maxval = gt.max()
+    psnr_val = peak_signal_noise_ratio(gt, pred, data_range=maxval)
+
+    return psnr_val
+
+
+def snr(gt: np.ndarray, pred: np.ndarray) -> np.ndarray:
+    """Compute the Signal to Noise Ratio metric (SNR)"""
+    noise_mse = np.mean((gt - pred) ** 2)
+    snr = 10 * np.log10(np.mean(gt ** 2) / noise_mse)
+
+    return snr
+
+
+def mse(gt: np.ndarray, pred: np.ndarray) -> np.ndarray:
+    """Compute the Signal to Noise Ratio metric (SNR)"""
+    noise_mse = np.mean((gt - pred) ** 2)
+
+    return noise_mse
+
+
+def ssim(
+        gt: np.ndarray, pred: np.ndarray, maxval: Optional[float] = None, multichannel: bool = False
+) -> np.ndarray:
+    """Compute Structural Similarity Index Metric (SSIM)"""
+    # if not gt.ndim == 3:
+    #   raise ValueError("Unexpected number of dimensions in ground truth.")
+    if not gt.ndim == pred.ndim:
+        raise ValueError("Ground truth dimensions does not match pred.")
+
+    maxval = gt.max() if maxval is None else maxval
+
+    if multichannel:
+        ssim = structural_similarity(
+            gt, pred, data_range=maxval, channel_axis=2
+        )
+    else:
+        ssim = structural_similarity(
+            gt, pred, data_range=maxval
+        )
+
+    return ssim
