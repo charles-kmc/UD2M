@@ -7,15 +7,16 @@
 #SBATCH --export=ALL
 ## Output and Error Files
 ##SBATCH -o job-%j.output
-#SBATCH -o o_train_dif.output
-#SBATCH -e e_train_dif.error
+#SBATCH -o o_sample_dif.output
+#SBATCH -e e_sample_dif.error
 ## Job name
-#SBATCH -J CDM_SR4
+#SBATCH -J Inf_JPEG
 ## Run time: "hours:minutes:seconds", "days-hours"
-#SBATCH --time=140:00:00
+#SBATCH --time=10:00:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
 #SBATCH --mem-per-cpu=10000
 ## GPU requirements
+#SBATCH --qos=prilimits
 #SBATCH --gres gpu:1
 ##SBATCH --ntasks=32
 ## Specify partition
@@ -43,11 +44,6 @@ else
     exit 1
 fi
 
-###parameters
-dataset_name="LSUN"
-task="sr"
-sigma_model=0.01
-
 #===========================
 #  Create results directory
 #---------------------------
@@ -61,22 +57,38 @@ mkdir -p "$RESULTS_DIR1"
 #-------------------------------
 # Running python scripts
 
-
-python3 main.py \
-                --task $task \
-                --operator_name "gaussian" \
-                --lambda_ 0.1 \
-                --config_file "fine_tuning_lmodel.yaml" \
-                --dataset_name $dataset_name \
-                --sigma_model $sigma_model \
-                --max_unfolded_iter 3 \
-                --kernel_size 3 \
-                --learned_lambda_sig True \
-                --use_RAM True \
-                --sigma_model $sigma_model \
-            > "$RESULTS_DIR"_out_train_dif.output \
-            2> "$RESULTS_DIR"_err_train_dif.error
-
+fid_eval=0
+sigma=0.01
+dataset_name="ImageNet"
+ckpt_dir=path/to/ckpt
+ckpt_name=checkpoint_name
+task="jpeg"
+for lamb in 1 ; do
+    if [ $fid_eval -eq 0 ]; then
+        echo "Running CDM with lambda: $lamb and sigma: $sigma"
+        python3 sample.py   --task $task \
+                            --operator_name "gaussian" \
+                            --lambda_ $lamb \
+                            --sigma_model $sigma  \
+                            --config_file "imagenet_configs_jpeg.yaml" \
+                            --dataset $dataset_name \
+                            --ckpt_dir $ckpt_dir \
+                            --ckpt_name $ckpt_name \
+            > "$RESULTS_DIR"_out_sample_dif.output \
+            2> "$RESULTS_DIR"_err_sample_dif.error
+        
+    elif [ $fid_eval = 1 ]; then
+        echo "Computing FID: lambda: $lamb and sigma: $sigma"
+        python3 fid.py \
+                    -d path/to/generated/data/and/ground/truth \
+                > "$RESULTS_DIR"_out_fid.output \
+                2> "$RESULTS_DIR"_err_fid.error
+    else
+        echo "The script did not run properly. Please check the parameters. We have two options: fid_eval=0 or fid_eval=1"
+        echo "Option 1: fid_eval=0 for sampling."
+        echo "Option 2: fid_eval=1 for FID evaluation."
+    fi
+done
 
 # Final message
 echo "Finish!!"

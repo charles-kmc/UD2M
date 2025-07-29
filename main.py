@@ -12,11 +12,9 @@ from models.load_model import load_frozen_model
 from datasets.datasets import GetDatasets
 from datasets.get_datasets import get_dataset, get_dataloader
 from configs.args_parse import configs
-
 import unfolded_models as um
 import physics as phy
 import utils as utils
-
 from lsun_diffusion.pytorch_diffusion.ckpt_util import get_ckpt_path
 
 import pytorch_lightning as pl
@@ -47,11 +45,10 @@ def main():
     args.task = config.task
     args.date = date
 
-
     # logger 
     log_dir = os.path.join(script_dir, f"Logs", date)
     os.makedirs(log_dir, exist_ok=True)
-    logger = utils.get_loggers(log_dir, f"log_unfolded.log")
+    logger = utils.get_loggers(log_dir, f"ud2m.log")
     
     # device 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -159,15 +156,13 @@ def main():
             raise ValueError(f"This task ({args.task})is not implemented!!!")
     
         wandb_logger = WandbLogger(
-            project=f"A-CDM_ram{args.use_RAM} {args.task} {args.physic.operator_name} {args.data.dataset_name}",  
-            name=date+"_"+args.task+"_lambda"+str(args.lambda_),
+            project=f"UD2M_ram{args.use_RAM} {args.task} {args.physic.operator_name} {args.data.dataset_name}",  
+            name=date+"_"+args.task,
             log_model=False,
-            dir=os.path.join(args.save_checkpoint_dir, 'wandb', date),
             config={
-                "sigma_model": args.physic.sigma_model,
-                "use_lora": args.model.use_lora,
                 "model": "Deep Unfolding",
                 "Structure": "HQS",
+                "dataset": f"{args.data.dataset_name}",
             },
         )
     
@@ -182,7 +177,7 @@ def main():
         )
         pth = os.path.join(
             args.save_checkpoint_dir, 
-            f"ckpts_RAM_unfolded_generalised_{args.task}", 
+            f"ckpts_RAM_ud2m_generalised_{args.task}", 
         )
         str_lora="lora"
     else:
@@ -198,9 +193,9 @@ def main():
         )
             
         if args.use_RAM:
-            root_ram = f"ckpts_RAM_unfolded_{args.task}"
+            root_ram = f"ckpts_RAM_ud2m_{args.task}"
         else:
-            root_ram = f"ckpts_unfolded_{args.task}"
+            root_ram = f"ckpts_ud2m_{args.task}"
 
         root_ckpt = os.path.join(
             args.save_checkpoint_dir, 

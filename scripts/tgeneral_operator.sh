@@ -2,7 +2,7 @@
 
 ################# Part-1 Slurm directives ####################
 ## Working dir
-#SBATCH -D "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/Adversarial-Conditional-Diffusion-Models"
+#SBATCH -D "working directory path"
 ## Environment variables
 #SBATCH --export=ALL
 ## Output and Error Files
@@ -12,7 +12,7 @@
 ## Job name
 #SBATCH -J CDM_General_Operator
 ## Run time: "hours:minutes:seconds", "days-hours"
-#SBATCH --time=140:00:00
+#SBATCH --time=15:00:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
 #SBATCH --mem-per-cpu=10000
 ## GPU requirements
@@ -46,7 +46,7 @@ fi
 #===========================
 #  Create results directory
 #---------------------------
-RESULTS_DIR1="/users/cmk2000/cmk2000/Deep learning models/LLMs/Z_logs/Logger_${SLURM_JOB_NAME}"
+RESULTS_DIR1=""
 RESULTS_DIR=$RESULTS_DIR1"/${SLURM_JOB_ID}"
 echo "Your results will be stored in: $RESULTS_DIR"
 mkdir -p "$RESULTS_DIR1"
@@ -70,7 +70,6 @@ python3 main.py \
                 --use_RAM True \
             > "$RESULTS_DIR"_out_train_dif.output \
             2> "$RESULTS_DIR"_err_train_dif.error
-
 
 # Final message
 echo "Finish!!"

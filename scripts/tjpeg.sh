@@ -10,16 +10,18 @@
 #SBATCH -o o_train_dif.output
 #SBATCH -e e_train_dif.error
 ## Job name
-#SBATCH -J CDM_INP
+#SBATCH -J CDjpeg
 ## Run time: "hours:minutes:seconds", "days-hours"
-#SBATCH --time=140:00:00
+#SBATCH --time=150:00:00
 ## Memory limit (in megabytes). Total --mem or amount per cpu --mem-per-cpu
 #SBATCH --mem-per-cpu=10000
 ## GPU requirements
+#SBATCH --qos=prilimits
 #SBATCH --gres gpu:1
 ##SBATCH --ntasks=32
 ## Specify partition
 #SBATCH -p gpu
+
 
 ################# Part-2 Shell script ####################
 #===============================
@@ -43,6 +45,8 @@ else
     exit 1
 fi
 
+# get number of nodes specified above
+
 #===========================
 #  Create results directory
 #---------------------------
@@ -54,8 +58,35 @@ mkdir -p "$RESULTS_DIR1"
 #===============================
 #  Application launch commands
 #-------------------------------
-# Running python scripts
-python3 main.py --task "deblur" --operator_name "uniform_motion" --lambda_ 0.5 --config_file "fine_tuning_lmodel.yaml" --dataset "LSUN" > "$RESULTS_DIR"_out_train_dif.output 2> "$RESULTS_DIR"_err_train_dif.error
+dataset_name="ImageNet"
+task="jpeg"
+
+if [ "$dataset_name" = "LSUN" ]; then
+echo "Start training our method on $dataset_name with noise variance 0.01^2 ..."
+    python3 train.py \
+                    --task $task \
+                    --operator_name "gaussian" \
+                    --lambda_ 0.4 \
+                    --config_file "fine_tuning_lmodel.yaml" \
+                    --dataset $dataset_name \
+                    --sigma_model 0.01 \
+                > "$RESULTS_DIR"_out_train_dif_"$task".output \
+                2> "$RESULTS_DIR"_err_train_dif_"$task".error
+
+elif [ "$dataset_name" = "ImageNet" ]; then
+    echo "Start training our method on $dataset_name with noise variance 0.01^2 ..."
+    python3 train.py \
+                    --task $task \
+                    --operator_name "gaussian" \
+                    --lambda_ 1 \
+                    --config_file "imagenet_configs_jpeg.yaml" \
+                    --dataset $dataset_name \
+                    --sigma_model 0.01 \
+                > "$RESULTS_DIR"_out_train_dif_"$task".output \
+                2> "$RESULTS_DIR"_err_train_dif_"$task".error
+else
+    echo "Not yet implemented for $dataset_name !!"
+fi
 
 # Final message
 echo "Finish!!"

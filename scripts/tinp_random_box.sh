@@ -2,7 +2,7 @@
 
 ################# Part-1 Slurm directives ####################
 ## Working dir
-#SBATCH -D "/users/cmk2000/cmk2000/Deep learning models/LLMs/Conditional-Diffusion-Models-for-IVP/Adversarial-Conditional-Diffusion-Models"
+#SBATCH -D "working directory path"
 ## Environment variables
 #SBATCH --export=ALL
 ## Output and Error Files
@@ -52,7 +52,7 @@ operator_name="box"
 #===========================
 #  Create results directory
 #---------------------------
-RESULTS_DIR1="/users/cmk2000/cmk2000/Deep learning models/LLMs/Z_logs/Logger_${SLURM_JOB_NAME}_${dataset_name}_${task}"
+RESULTS_DIR1=""
 RESULTS_DIR=$RESULTS_DIR1"/${SLURM_JOB_ID}"
 echo "Your results will be stored in: $RESULTS_DIR"
 mkdir -p "$RESULTS_DIR1"
