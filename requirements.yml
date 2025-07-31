@@ -1,4 +1,4 @@
-name: dmog_env39
+name: UDDM
 channels:
   - conda-forge
   - defaults

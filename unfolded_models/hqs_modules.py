@@ -96,7 +96,7 @@ class HQS_models(torch.nn.Module):
         ) -> None: 
         super().__init__()
         self.model = model
-        self.max_unfolded_iter = args.max_unfolded_iter
+        self.max_unfolded_iter = max_unfolded_iter
         self.diffusion_scheduler = diffusion_scheduler
         self.physic = physic
         self.get_denoising_timestep = get_denoising_timestep
@@ -210,12 +210,7 @@ class HQS_models(torch.nn.Module):
             z_input = z_input.float()
 
             # Denoising
-            if checkpoint and False:
-                def run_model(z, t):
-                    return self.model(z, t, y=y_label)
-                eps = torch.utils.checkpoint.checkpoint(run_model, z_input, tu, use_reentrant=False)
-            else:
-                eps = self.model(z_input, tu, y=y_label)
+            eps = self.model(z_input, tu, y=y_label)
             eps, _ = torch.split(eps, C, dim=1) if eps.shape == (B, C * 2, *x_t.shape[2:]) else (eps, eps)
             
             # estimate of x_start

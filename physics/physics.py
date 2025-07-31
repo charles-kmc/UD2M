@@ -289,7 +289,6 @@ class Deblurring:
             FFT_hch = self.pre_compute["FFT_hch"]
             FFTx = torch.fft.fft2(x, dim=(-2,-1))
             FFTx_t = torch.fft.fft2(x_t, dim=(-2,-1))
-            
             temp = FFT_hcy / (params["lambda_sig"]*params["sigma_model"]**2) + FFTx / params["rho"]**2 + FFTx_t  / (params["sigma_t"]**2 * params["sqrt_alpha_comprod"])
             prec_temp = self._precision(FFT_hch, params["sigma_model"], params["rho"], params["sigma_t"], params["lambda_sig"])
             zest = torch.real(torch.fft.ifft2(temp * prec_temp, dim = (-2,-1)))

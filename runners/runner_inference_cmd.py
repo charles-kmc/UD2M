@@ -51,14 +51,16 @@ class Conditional_sampler:
             self.stacked_physic = StackedJointPhysics(
                 self.d_phys, self.diffusion
             )
-        
-        # DPIR model
-        self.dpir_model = DPIR_deb(
-            device = self.device, 
-            model_name = self.args.dpir.model_name, 
-            pretrained_pth=self.args.dpir.pretrained_pth
-        )
-        
+        elif hasattr(self.args, "dpir_model_name"):
+            # DPIR model
+            self.dpir_model = DPIR_deb(
+                device = self.device, 
+                model_name = self.args.dpir.model_name, 
+                pretrained_pth=self.args.dpir.pretrained_pth
+            )
+        else: 
+            self.args.dpir.use_dpir = False
+            
         # metric
         self.metrics = utils.Metrics(self.device)
     
@@ -140,7 +142,7 @@ class Conditional_sampler:
                         
                 if x_true is not None:
                     psnrs.append(self.metrics.psnr_function(x_true, out_val["xstart_pred"]).cpu().numpy())
-                    if self.args.use_wandb:
+                    if hasattr(self.args, "use_wandb") and self.args.use_wandb:
                         wandb.log({f"progression of the psnr in the reverse process {im_name}":self.metrics.psnr_function(x_true, out_val["xstart_pred"])})
                 
                 # sample from the predicted noise
@@ -154,7 +156,7 @@ class Conditional_sampler:
                         tiim1 = self.seq[ii + 1]  
                         beta_tiim1 = models.extract_tensor(self.diffusion.betas, tiim1, x.shape)
                         if beta_tiim1 !=0:
-                            out_val = self.hqs_model.run_unfolded_loop(y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter)
+                            out_val = self.hqs_model.run_unfolded_loop(y, x0, x, torch.tensor(t_i).to(self.device), max_iter = self.max_unfolded_iter, lambda_sig=lambda_)
                             x0 = utils.image_transform(out_val["xstart_pred"])
                             iim1 = ii + 1
                             x = diffusionsolver.huen_solver(x0, x, iim1, d_old=d_old)
@@ -169,25 +171,26 @@ class Conditional_sampler:
                     x_init=x0.clone()  # save x_init for the next iteration
                     
                 # save the process
-                if self.args.save_progressive and (seq[ii] in progress_seq):
+                if (seq[ii] in progress_seq):
                     x_show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x[0].unsqueeze(0)))      #[0,1]
                     x_0show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x0[0].unsqueeze(0)))      #[0,1]
                     progress_img.append(x_show)
                     progress_zero.append(x0[0])
                     utils.delete([x_show])
-            
-            if self.args.save_progressive:   
+
+            if hasattr(self.args, "save_progressive") and self.args.save_progressive:
                 img_total = cv2.hconcat(progress_img)
                 # img_zero_total = cv2.hconcat(progress_zero)
                 if self.args.use_wandb and self.args.save_wandb_img:
                     image_wdb = wandb.Image(img_total, caption=f"progress sequence for im {im_name}", file_type="png")
-                    wandb.log({"pregressive":image_wdb})
+                    wandb.log({"progressive":image_wdb})
                     utils.delete([progress_img])
                     
         out_val["xstart_pred"] = utils.inverse_image_transform(x)
-        out_val["progress_img"] = img_total
+        out_val["progress_img"] = cv2.hconcat(progress_img)
         out_val["progress_zero"] = progress_zero
         out_val["x_init"] = utils.inverse_image_transform(x_init)
+        out_val["progress_list"] = progress_img
         if x_true is not None:
             out_val["psnrs"] = psnrs
         return out_val

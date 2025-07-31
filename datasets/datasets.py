@@ -25,7 +25,7 @@ class GetDatasets:
                 clip_min = -1.0, 
                 clip_max = 1.0,  
                 type_ = "train",
-                transform = "RandomCrop",              
+                transform = None,              
             ):
         self.dataset_name = dataset_name
         self.dataset_dir = dataset_dir
@@ -38,7 +38,7 @@ class GetDatasets:
         self.transform = v2.Compose([
             v2.ToTensor(), 
             v2.Resize((self.im_size, self.im_size)),
-        ])
+        ]) if transform is None else transform
         
         # get all images path
         if self.dataset_dir == "":# or self.dataset_dir is None or not os.path.exists(self.dataset_dir):
@@ -55,6 +55,8 @@ class GetDatasets:
                     with open(lists_paths_dir, 'r') as f:  
                         self.ref_images = [line.split("\n")[0] for line in f.readlines()]
                     self.ref_images = self.ref_images[1:]
+            elif dataset_name == "demo":
+                self.ref_images = glob.glob(os.path.join(self.dataset_dir, '*.png'))
             else:
                 raise ValueError(f"This dataset {dataset_name} is not yet implemented !!")
         

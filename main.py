@@ -81,6 +81,7 @@ def main():
             log_model=False,
             dir=os.path.join(args.save_checkpoint_dir, 'wandb', date),
         )
+
     else:
         if args.task in ["deblur", "sr"]:
             physic_configs = {
@@ -180,6 +181,7 @@ def main():
             f"ckpts_RAM_ud2m_generalised_{args.task}", 
         )
         str_lora="lora"
+        
     else:
         pl_model = um.UnfoldedModel(
             physic,
