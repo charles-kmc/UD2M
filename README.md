@@ -1,6 +1,6 @@
 # [Learning few-step posterior samplers by unfolding and distillation of diffusion models](https://arxiv.org/abs/2305.08995)
 
-[Charlesquin Kemajou Mbakam](https://yuanzhi-zhu.github.io/about/), [Jonny Spence](), [Marcelo Pereyra]().
+[Charlesquin Kemajou Mbakam](https://charles-kmc.github.io/), [Jonny Spence](), [Marcelo Pereyra](https://www.macs.hw.ac.uk/~mp71/index.html).
 
 This repository contains the code and data associated with the paper "Learning few-step posterior samplers by unfolding and distillation of diffusion models".
 
@@ -33,6 +33,50 @@ cd UD2M
 pip install -r requirements.txt
 ```
 
+## Model Download
+Download the pretrained checkpoints used in this project from the following link:
+
+Access our fine-tuned checkpoint models here [Link]().
+
+## Training and Inference Code
+The parameters have to be configured in the bash script. The models were trained and evaluated on multiple restoration tasks, including `deblurring (deblur)`, `single image super resolution (sisr)`, `inpainting (inp_random_box)`, `JPEG artifact removal (jpeg)` and `general operator (general_operator)`.
+
+### Training scripts
+Run the training script for a specific task:
+```bash
+sbatch ./scripts/t<task_name>.sh
+```
+Example for deblurring:
+```bash
+sbatch ./scripts/tdeblur.sh
+```
+### Inference scripts
+Run the inference script:
+```bash
+sbatch ./scripts/sampling.sh
+sbatch ./scripts/sampling_jpeg.sh
+```
+
+## Algorithm 
+The overall unrolling dinoising diffusion models is summarised as follows.
+<p align="center">
+  <img src="images/algorithms.PNG" width="900px"/>
+</p>
+
+For more details, feel free to check the related [paper](https://arxiv.org/abs/2305.08995)
+
+## Results
+### ImageNet
+The table below presents the performance metrics for models evaluated on the ImageNet dataset.
+<p align="center">
+  <img src="images/results_imagenet_tab.PNG" width="900px"/>
+</p>
+
+### LSUN
+The table below presents the performance metrics for models evaluated on the LSUN dataset.
+<p align="center">
+  <img src="images/results_lsun_tab.PNG" width="900px"/>
+</p>
 
 ## Citation
 If you find this repo helpful, please cite:
