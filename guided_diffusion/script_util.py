@@ -60,6 +60,9 @@ def model_and_diffusion_defaults():
         resblock_updown=False,
         use_fp16=False,
         use_new_attention_order=False,
+        # Added for MNIST integration so grayscale flag is part of the defaults
+        # and propagates via args_to_dict when building the model.
+        grayscale=False,
     )
     res.update(diffusion_defaults())
     return res

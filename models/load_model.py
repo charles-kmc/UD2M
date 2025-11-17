@@ -6,7 +6,7 @@ import blobfile as bf
 from guided_diffusion import dist_util
 from utils import utils_model
 import utils as utils
-from guided_diffusion_mnist.script_util import (
+from guided_diffusion.script_util import (
     model_and_diffusion_defaults,
     create_model_and_diffusion,
     args_to_dict,
@@ -61,7 +61,7 @@ def load_frozen_model(model_name, model_checkpoint_path):
         )
     elif model_name == "MNIST_diffusion":
         print("Loading MNIST diffusion model...")
-        from guided_diffusion_mnist.script_util import (
+        from guided_diffusion.script_util import (
             NUM_CLASSES,
             model_and_diffusion_defaults,
             create_model_and_diffusion,
