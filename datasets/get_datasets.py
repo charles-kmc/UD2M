@@ -145,20 +145,26 @@ class ImageNetDataset(VisionDataset):
 class MNISTDataset(VisionDataset):
     def __init__(self, root_dataset: str="datasets/", im_size:int=32, subset_data:str = "train"):
         super().__init__(root_dataset)
-        
         self.transforms = v2.Compose([
             v2.ToTensor(), 
+            v2.Pad(2),
         ])
 
-        self.fpaths = sorted(glob(os.path.join(root_dataset, "MNIST_PNG", f"{subset_data}" + '/*.png'), recursive=True))
-        assert len(self.fpaths) > 0, "File list is empty. Check the root_dataset."
+        from torchvision.datasets import MNIST
+        sup_set = MNIST(root=root_dataset, train= subset_data in ["train", "val"], download=True)
+
+        if subset_data=="train":
+            self.data = sup_set.data[:59000]
+        elif subset_data=="val":
+            self.data = sup_set.data[59000:]
+        else:
+            self.data = sup_set.data
 
     def __len__(self):
-        return len(self.fpaths)
+        return len(self.data)
 
     def __getitem__(self, index: int):
-        fpath = self.fpaths[index]
-        img = Image.open(fpath).convert('L')
+        img = self.data[index].unsqueeze(0)
         
         if self.transforms is not None:
             img = self.transforms(img)
