@@ -1,21 +1,13 @@
 import os
-import copy
 import datetime
 import yaml
-import wandb
-import pandas as pd
 
 import torch
-from torch.utils.data import DataLoader, random_split, RandomSampler
-import torch.profiler as tp
-from models.load_model import load_frozen_model
-from datasets.datasets import GetDatasets
 from datasets.get_datasets import get_dataset, get_dataloader
 from configs.args_parse import configs
 import unfolded_models as um
 import physics as phy
 import utils as utils
-from lsun_diffusion.pytorch_diffusion.ckpt_util import get_ckpt_path
 
 import pytorch_lightning as pl
 from pytorch_lightning.profilers import PyTorchProfiler
@@ -44,7 +36,7 @@ def main():
     args.use_RAM = config.use_RAM
     args.task = config.task
     args.date = date
-
+    print("USING RAM:", args.use_RAM)
     # logger 
     log_dir = os.path.join(script_dir, f"Logs", date)
     os.makedirs(log_dir, exist_ok=True)
@@ -81,6 +73,7 @@ def main():
             log_model=False,
             dir=os.path.join(args.save_checkpoint_dir, 'wandb', date),
         )
+
     else:
         if args.task in ["deblur", "sr"]:
             physic_configs = {
@@ -88,6 +81,7 @@ def main():
             }
             if args.task == "sr":
                 physic_configs["sf"] = args.physic.sr.sf
+
         elif args.task == "inp":
             physic_configs = {
                 "mask_rate": args.physic.inp.mask_rate,
@@ -96,12 +90,14 @@ def main():
                 "index_ii": args.physic.inp.index_ii,
                 "index_jj": args.physic.inp.index_jj,
             }
+
         elif args.task == "jpeg":
             physic_configs = {
                 "qf": args.physic.jpeg.qf,
             }
         else:
             physic_configs = {}
+
         physic_configs.update({
             "im_size": args.data.im_size,
             "sigma_model": args.physic.sigma_model,
@@ -109,6 +105,7 @@ def main():
             "mode": args.mode,
             "device": device,
         })
+
         kernels_configs = {
             "operator_name": args.physic.operator_name,
             "kernel_size": args.physic.kernel_size, 
@@ -188,7 +185,7 @@ def main():
             args,
             device=device,
             wandb_logger=wandb_logger,
-            dphys=dinv_physic,
+            dphys=dinv_physic if args.use_RAM else None,
             PnP_Forward=False
         )
             
@@ -200,6 +197,10 @@ def main():
         root_ckpt = os.path.join(
             args.save_checkpoint_dir, 
             f"{root_ram}"
+        )
+        pth = os.path.join(
+            args.save_checkpoint_dir,
+            f"ckpts_ud2m_{args.task}",
         )
         str_lora=f"lora_{args.task}_{args.physic.operator_name}"
 

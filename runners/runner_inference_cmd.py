@@ -53,11 +53,12 @@ class Conditional_sampler:
             )
         
         # DPIR model
-        self.dpir_model = DPIR_deb(
-            device = self.device, 
-            model_name = self.args.dpir.model_name, 
-            pretrained_pth=self.args.dpir.pretrained_pth
-        )
+        if self.args.dpir.use_dpir:
+            self.dpir_model = DPIR_deb(
+                device = self.device, 
+                model_name = self.args.dpir.model_name, 
+                pretrained_pth=self.args.dpir.pretrained_pth
+            )
         
         # metric
         self.metrics = utils.Metrics(self.device)
@@ -108,8 +109,7 @@ class Conditional_sampler:
                     x_init = self.dpir_model.run(y_, self.physics.blur, iter_num = 1)
                     x_init = utils.image_transform(x_init)
                 else:
-                    x_init = self.physics.upsample(y_)
-                    x_init = utils.image_transform(x_init)
+                    x_init = self.physics.AT(self.physics.upsample(y))
             elif self.args.task=="inp":
                 x_init = y.clone()
             else:
@@ -126,6 +126,12 @@ class Conditional_sampler:
             N = len(seq)
             for ii in range(N):
                 t_i = seq[ii]
+                rt_alpha = self.diffusion.sqrt_alphas_cumprod[t_i].reshape(-1,1,1,1)
+                sigma_t = (1.0-rt_alpha**2).sqrt()
+                if self.args.task=="sr":
+                    x_init = (self.physics.AT(self.physics.upsample(y))*sigma_t + rt_alpha*x*self.physics.sigma_model)/(self.physics.sigma_model**2 + sigma_t**2).sqrt()
+                elif self.args.task in ["deblur","inp"]:
+                    x_init = (self.physics.AT(y)*sigma_t + rt_alpha*x*self.physics.sigma_model)/(self.physics.sigma_model**2 + sigma_t**2).sqrt()
                 if self.classic_sampling:
                     out_val = self.sampling_prior(x, torch.tensor(t_i).to(self.device))
                     x0 = out_val["xstart_pred"].mul(2).add(-1)

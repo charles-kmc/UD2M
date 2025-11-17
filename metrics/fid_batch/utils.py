@@ -22,7 +22,7 @@ def save_images(dir, image, name):
     cv2.imwrite(os.path.join(dir, name + '.png'), image_array)
 
 # create batches
-def create_batches(dir_images, num_patches):
+def create_batches(dir_images, num_patches, numpy=False):
     """
     Create batches of image patches from a directory of images.
 

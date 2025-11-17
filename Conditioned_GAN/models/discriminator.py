@@ -64,7 +64,7 @@ class FullDownBlock(nn.Module):
         return f'AvgPool(in_chans={self.in_channels}, out_chans={self.out_channels}\nResBlock(in_chans={self.out_channels}, out_chans={self.out_channels}'
 
 class DiscriminatorModel(nn.Module):
-    def __init__(self, im_size=256, in_channels=3, out_channels=1):
+    def __init__(self, im_size=256, in_channels=3, out_channels=1, num_layers=5):
         """
         Args:
             in_chans (int): Number of channels in the input to the U-Net model.
@@ -83,15 +83,18 @@ class DiscriminatorModel(nn.Module):
         )
 
         self.encoder_layers = nn.ModuleList()
-        self.encoder_layers += [FullDownBlock(32, 64)]      # im_size/2**1
-        self.encoder_layers += [FullDownBlock(64, 128)]     # im_size/2**2
-        self.encoder_layers += [FullDownBlock(128, 256)]    # im_size/2**3
-        self.encoder_layers += [FullDownBlock(256, 128)]    # im_size/2**4
-        self.encoder_layers += [FullDownBlock(128, 64)]    # im_size/2**5
+        ch = 32
+        for _ in range(num_layers//2+1 if num_layers%2==1 else num_layers//2):
+            self.encoder_layers += [FullDownBlock(ch, 2*ch)]
+            ch = 2*ch
+        
+        for _ in range(num_layers//2):
+            self.encoder_layers += [FullDownBlock(ch, ch//2)]
+            ch = ch//2
 
         self.dense_layer = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(64 * int(self.im_size/2**5)**2, self.out_channels),
+            nn.Linear(ch * int(self.im_size/2**num_layers)**2, self.out_channels),
             nn.Sigmoid(),
         )
 

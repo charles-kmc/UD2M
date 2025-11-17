@@ -6,7 +6,7 @@ import blobfile as bf
 from guided_diffusion import dist_util
 from utils import utils_model
 import utils as utils
-from guided_diffusion.script_util import (
+from guided_diffusion_mnist.script_util import (
     model_and_diffusion_defaults,
     create_model_and_diffusion,
     args_to_dict,
@@ -59,6 +59,47 @@ def load_frozen_model(model_name, model_checkpoint_path):
             use_new_attention_order = True,
             resblock_updown = True,
         )
+    elif model_name == "MNIST_diffusion":
+        print("Loading MNIST diffusion model...")
+        from guided_diffusion_mnist.script_util import (
+            NUM_CLASSES,
+            model_and_diffusion_defaults,
+            create_model_and_diffusion,
+            add_dict_to_argparser,
+            args_to_dict,
+        )
+        import argparse
+        def create_argparser():
+            defaults_t = dict(
+                clip_denoised=True,
+                num_samples=10000,
+                batch_size=64,
+                use_ddim=False,
+                model_path="",
+                image_size=32,
+                num_channels=64,
+                num_res_blocks=2,
+                grayscale=True,
+
+            )
+            defaults = model_and_diffusion_defaults()
+            defaults.update(defaults_t)
+            parser = argparse.ArgumentParser()
+            add_dict_to_argparser(parser, defaults)
+            return parser
+        args = create_argparser().parse_args([])
+        model, diffusion = create_model_and_diffusion(
+            **args_to_dict(args, model_and_diffusion_defaults().keys())
+        )
+        model.load_state_dict(
+            dist_util.load_state_dict(model_checkpoint_path, map_location="cpu")
+        )
+        model.train()
+        for _k, v in model.named_parameters():
+            v.requires_grad = False
+        return model, diffusion
+    
+
     else:
         model_config = dict(
                 model_checkpoint_path=model_checkpoint_path,
@@ -179,7 +220,12 @@ def adapter_lora_model(args):
             model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
         target_modules = ["qkv", "proj_out"]
     elif args.data.dataset_name=="Imagenet64":
-        frozen_model_name = 'diffusion64' 
+        frozen_model_name = 'diffusion64'
+        frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
+        model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
+        target_modules = ["qkv", "proj_out"]
+    elif args.data.dataset_name=="MNIST":
+        frozen_model_name = "MNIST_diffusion"
         frozen_model_path = os.path.join(args.model.frozen_model_dir, f'{frozen_model_name}.pt')
         model_frozen, _ = load_frozen_model(frozen_model_name, frozen_model_path)
         target_modules = ["qkv", "proj_out"]

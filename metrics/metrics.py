@@ -13,7 +13,7 @@ class Metrics():
     def __init__(self, device):
         self.device = device
         self.mse = torch.nn.MSELoss()
-        self.loss_fn_vgg = LearnedPerceptualImagePatchSimilarity(net_type='squeeze').to(device)
+        self.loss_fn_vgg = LearnedPerceptualImagePatchSimilarity(net_type='squeeze', ).to(device)
         self.ssim = StructuralSimilarityIndexMeasure(data_range=1.0).to(self.device)
         self.l1_loss = torch.nn.L1Loss().to(device)
     # --- mse
@@ -43,6 +43,9 @@ class Metrics():
         x = 2*x - 1
         y = 2*y - 1
         x,y = self.get_4d_tensor([x,y])
+        if x.shape[1] == 1:
+            x = x.repeat(1,3,1,1)
+            y = y.repeat(1,3,1,1)
         lpips_val = self.loss_fn_vgg(x,y)
         return lpips_val.cpu().squeeze().numpy()
     

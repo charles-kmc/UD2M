@@ -8,7 +8,7 @@ import torch.nn.functional as F
 from torch.optim.lr_scheduler import StepLR
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 from typing import Union
-
+from pyiqa import create_metric
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import Callback
 import torch.autograd as autograd
@@ -52,6 +52,8 @@ class UnfoldedModel(pl.LightningModule):
         self.physic = physic
         self.d_phys = dphys
         self.PnP_Forward = PnP_Forward
+        
+
 
         # ---> physics
         if self.args.task in ["sr" ,"deblur"]:
@@ -78,7 +80,8 @@ class UnfoldedModel(pl.LightningModule):
         self.metrics = Metrics(device)
         self.mseLoss = nn.MSELoss()
         self.adversarial_loss = nn.BCEWithLogitsLoss()
-        self.lpips = LearnedPerceptualImagePatchSimilarity(net_type='vgg')
+        self.lpips = create_metric('lpips', net='vgg', as_loss=True).to(device)#.train()
+        # self.lpips = LearnedPerceptualImagePatchSimilarity(net_type='vgg')
 
         self.diffusion_scheduler = DiffusionScheduler(
                 device=device,
@@ -89,7 +92,8 @@ class UnfoldedModel(pl.LightningModule):
         self.model = models.adapter_lora_model(self.args)
         self.discriminator = DiscriminatorModel(
             im_size=self.args.data.im_size, 
-            in_channels=self.args.data.in_channels
+            in_channels=self.args.data.in_channels,
+            num_layers=5 if self.args.data.im_size>=128 else 3,
         )
 
         print(f"The rank of LoRA is {self.args.model.rank}")
@@ -247,12 +251,13 @@ class UnfoldedModel(pl.LightningModule):
         self.model.train()
         self.discriminator.train()
         batch, y_label = self._proc_batch(batch)
+
         # Device
         # self._to_device()
         
         # image 
         B,C = batch.shape[:2]
-        
+        batch.requires_grad = True
         # ---> sample noisy x_t
         t = self.diffusion_scheduler.sample_times(B)
         noise_target = torch.randn_like(batch)
@@ -272,27 +277,28 @@ class UnfoldedModel(pl.LightningModule):
         if self.d_phys is not None:
             import time
             start_time = time.time()
-            with torch.no_grad() if batch_idx % 2 == 1 else torch.enable_grad():
-                x_init = self.RAM_Initialization(y, x_t, t)
+            x_init = self.RAM_Initialization(y, x_t, t)
         elif self.args.task == "deblur":
             if self.args.dpir.use_dpir: 
                 x_init = self.dpir_model.run(utils.inverse_image_transform(y), self.blur, iter_num=1)
                 x_init = utils.image_transform(x_init)
             else:
                 x_init = y.clone()
-                
+
         elif self.args.task=="sr":
-            with torch.no_grad():
-                if self.args.dpir.use_dpir :
-                    x_init = self.dpir_model.run(utils.inverse_image_transform(y), self.blur, iter_num=1) 
-                    x_init = utils.image_transform(x_init)
-                else:
-                    x_init = y.clone()
+            if self.args.dpir.use_dpir :
+                x_init = self.dpir_model.run(utils.inverse_image_transform(y), self.blur, iter_num=1) 
+                x_init = utils.image_transform(x_init)
+            else:
+                rt_alpha = self.diffusion_scheduler.sqrt_alphas_cumprod[t].reshape(-1,1,1,1)
+                sigma_t = (1.0-rt_alpha**2).sqrt()
+                x_init = (self.physic.AT(self.physic.upsample(y))*sigma_t + rt_alpha*x_t*self.physic.sigma_model)/(self.physic.sigma_model**2 + sigma_t**2).sqrt()
         elif self.args.task=="inp":
-            x_init = y.clone()
+            rt_alpha = self.diffusion_scheduler.sqrt_alphas_cumprod[t].reshape(-1,1,1,1)
+            sigma_t = (1.0-rt_alpha**2).sqrt()
+            x_init = (self.physic.AT(y)*sigma_t + rt_alpha*x_t*self.physic.sigma_model)/(self.physic.sigma_model**2 + sigma_t**2).sqrt()
         else:
             raise ValueError(f"This task ({self.args.task})is not implemented!!!")
-            
         # ---> unfolded model
         obs = {"x_t":x_t, "y":y, "b":batch, "y_label":y_label}
         if self.args.task not in ["inp", "ct"]:
@@ -305,8 +311,8 @@ class UnfoldedModel(pl.LightningModule):
         self.get_trainable_params()
         
         # ---> train generator
-        valid = torch.FloatTensor(B, 1).fill_(1.0).requires_grad_(False).to(self.device)
-        fake = torch.FloatTensor(B, 1).fill_(0.0).requires_grad_(False).to(self.device)
+        valid = torch.FloatTensor(B, 1).fill_(1.0).requires_grad_(True).to(self.device)
+        fake = torch.FloatTensor(B, 1).fill_(0.0).requires_grad_(True).to(self.device)
  
         out = self.forward(obs, x_init, t)
         xest = out["xstart_pred"].mul(2).add(-1)
@@ -315,13 +321,14 @@ class UnfoldedModel(pl.LightningModule):
         if self.args.task=="sr":
             y_up = self.physic.upsample(y)
         else:
-            y_up=y.clone()
+            y_up = y
+
         
         if batch_idx % 2 == 0:
             d_out = self.discriminator(input=xest, y=y_up)
             g_loss = self.adversarial_loss(d_out, valid)
             g_loss += self.mseLoss(out["eps_pred"], noise_target).mean()
-            g_loss += self.args.train.scale_lpips*self.lpips(xest.add(1).div(2), batch.add(1).div(2)).mean()
+            g_loss += self.args.train.scale_lpips*self.lpips(xest, batch).mean()
             self.log('g_loss', g_loss, prog_bar=True)
             for i in range(self.hqs_module.num_weights_hqs):
                 self.log(f"SP_param_{i}", self.hqs_module.SP_Param[i].exp(), prog_bar=False)
@@ -391,9 +398,14 @@ class UnfoldedModel(pl.LightningModule):
                 else:
                     x_init = y.clone()
             elif self.args.task=="sr":
-                x_init = utils.image_transform(y_)
+                rt_alpha = self.diffusion_scheduler.sqrt_alphas_cumprod[t].reshape(-1,1,1,1)
+                sigma_t = (1.0-rt_alpha**2).sqrt()
+                x_init = (self.physic.AT(self.physic.upsample(y))*sigma_t + rt_alpha*x_t*self.physic.sigma_model)/(self.physic.sigma_model**2 + sigma_t**2).sqrt()
+
             elif self.args.task=="inp":
-                x_init = y.clone()
+                rt_alpha = self.diffusion_scheduler.sqrt_alphas_cumprod[t].reshape(-1,1,1,1)
+                sigma_t = (1.0-rt_alpha**2).sqrt()
+                x_init = (self.physic.AT(y)*sigma_t + rt_alpha*x_t*self.physic.sigma_model)/(self.physic.sigma_model**2 + sigma_t**2).sqrt()
             else:
                 raise ValueError(f"This task ({self.args.task})is not implemented!!!")
         
@@ -439,7 +451,7 @@ class UnfoldedModel(pl.LightningModule):
     def configure_optimizers(self):
         # ---> leanable parameters
         self.model_params = list(filter(lambda p: p.requires_grad, self.model.parameters())) + list(filter(lambda p: p.requires_grad, self.hqs_module.parameters())) 
-        self.RAM_params = list(filter(lambda p: p.requires_grad, self.RAM.parameters())) if not self.PnP_Forward else []
+        self.RAM_params = list(filter(lambda p: p.requires_grad, self.RAM.parameters())) if not self.PnP_Forward and hasattr(self, "RAM") else []
         self.discriminator_params = list(filter(lambda p: p.requires_grad, self.discriminator.parameters()))
         
         # ---> optimizers        
@@ -461,10 +473,12 @@ class UnfoldedModel(pl.LightningModule):
         # Get trainable parameter names
         trainable_params = {k for k, v in self.model.named_parameters() if v.requires_grad}
         trainable_hqs_params = {k for k, v in self.hqs_module.named_parameters() if v.requires_grad}
-        trainable_ram_params = {k for k, v in self.RAM.named_parameters() if v.requires_grad}
+        if hasattr(self, "RAM"):
+            trainable_ram_params = {k for k, v in self.RAM.named_parameters() if v.requires_grad}
         checkpoint['state_dict'] = {k: v for k, v in self.model.state_dict().items() if k in trainable_params}
         checkpoint['HQS_state_dict'] = {k: v for k, v in self.hqs_module.state_dict().items() if k in trainable_hqs_params}
-        checkpoint['RAM_state_dict'] = {k: v for k, v in self.RAM.state_dict().items() if k in trainable_ram_params}
+        if hasattr(self, "RAM"):
+            checkpoint['RAM_state_dict'] = {k: v for k, v in self.RAM.state_dict().items() if k in trainable_ram_params}
         checkpoint['Discriminator_state_dict'] = self.discriminator.state_dict()
         checkpoint['opt_g_state_dict'] = self.optimizers()[0].state_dict()
         checkpoint['opt_d_state_dict'] = self.optimizers()[1].state_dict()
@@ -476,7 +490,8 @@ class UnfoldedModel(pl.LightningModule):
         self.is_good_model = checkpoint["is_valid"]
         self.model.load_state_dict(checkpoint['state_dict'], strict=False)
         self.hqs_module.load_state_dict(checkpoint['HQS_state_dict'], strict=False)
-        self.RAM.load_state_dict(checkpoint['RAM_state_dict'], strict=False)
+        if hasattr(self, "RAM") and 'RAM_state_dict' in checkpoint:
+            self.RAM.load_state_dict(checkpoint['RAM_state_dict'], strict=False)
         print("Loaded only trainable parameters!")
     
     # --- >> Get parameters  

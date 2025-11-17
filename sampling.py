@@ -10,6 +10,7 @@ import datetime
 import scipy.io as sio
 import torch
 from torch.utils.data import DataLoader
+from metrics.my_metrics import Coverage
 
 from datasets.datasets import GetDatasets
 import models as models
@@ -30,6 +31,7 @@ def main(
     solver_type:str, 
     eta:float=0.0,
     zeta:float=0.9,
+    ddpm_param:float=1.0,
     **kwargs,
 ):
     with torch.no_grad():
@@ -52,6 +54,7 @@ def main(
         MAX_UNFOLDED_ITER = [args.max_unfolded_iter,]
         num_timesteps = config.num_timesteps
         steps = num_timesteps 
+        max_iter = config.num_samples
         
         if config.task == "inp":
             args.dpir.use_dpir = config.use_dpir
@@ -107,9 +110,9 @@ def main(
                     name=args.data.dataset_name, 
                     root_dataset=args.data.root, 
                     im_size=args.data.im_size, 
-                    subset_data="val",
+                    subset_data="test",
                 )
-                loader = get_dataloader(dataset_val, args=args, subset_data="val")  
+                loader = get_dataloader(dataset_val, args=args, subset_data="test")  
             
             # -- model
             model = models.adapter_lora_model(args)  
@@ -172,6 +175,7 @@ def main(
             kernels = phy.Kernels(**kernels_configs)
             if args.task in ["deblur", "sr", "inp", "jpeg"]:
                 physic = phy.get_operator(name=args.task, **physic_configs)
+
             else:
                 raise ValueError(f"This task ({args.task}) is not implemented!!!")
 
@@ -185,6 +189,7 @@ def main(
                         sigma= args.physic.sigma_model,
                     ),
                 )
+
             elif args.task == "inp":
                 from deepinv.physics import Inpainting, GaussianNoise
                 dinv_physic = Inpainting(
@@ -195,6 +200,7 @@ def main(
                         sigma= args.physic.sigma_model,
                     ),
                 ).to(device)
+
             elif args.task == "sr":
                 from deepinv.physics import Downsampling, GaussianNoise
                 dinv_physic =   Downsampling(
@@ -206,11 +212,13 @@ def main(
                         sigma= args.physic.sigma_model,
                     ),
                 ).to(device)
+
             else:
                 raise ValueError(f"This task ({args.task})is not implemented!!!")
             
             # HQS module
             denoising_timestep = ums.GetDenoisingTimestep(diffusion_scheduler, device)
+            
             hqs_module = ums.HQS_models(
                 model,
                 physic, 
@@ -219,12 +227,15 @@ def main(
                 args,
                 device=device
             )
+
             try:
                 hqs_module.load_state_dict(trainable_state_dict["HQS_state_dict"], strict=False)
                 state_dict_ram = trainable_state_dict["RAM_state_dict"]
+
             except Exception as e:
                 hqs_module.load_state_dict(trainable_state_dict["state_dict"], strict=False)
                 state_dict_ram = None
+
             hqs_module = hqs_module.to(device)
 
             # sampler               
@@ -234,7 +245,7 @@ def main(
                 diffusion_scheduler, 
                 device, 
                 args,
-                dphys=dinv_physic,
+                dphys=dinv_physic if config.use_RAM else None,
                 max_unfolded_iter=max_unfolded_iter,
                 state_dict_RAM=state_dict_ram
             )
@@ -246,7 +257,8 @@ def main(
             root_dir_results= os.path.join(args.save_dir, 
                             args.data.dataset_name, 
                             f"{args.task}_operator_{args.physic.operator_name}", 
-                            solver_type
+                            solver_type, 
+                            f"K_{args.max_unfolded_iter}_N_{num_timesteps}_samples_{max_iter}" + ("eq" if config.equivariant else "")
             )
             
             if args.evaluation.metrics:
@@ -258,9 +270,10 @@ def main(
                 mmse_path = os.path.join(root_dir_results, "mmse")
                 metric_path = os.path.join(root_dir_results, "metrics")
                 var_path = os.path.join(root_dir_results, "var")
+                err_path = os.path.join(root_dir_results, "err")
                 y_path = os.path.join(root_dir_results, "y")
                 last_path = os.path.join(root_dir_results, "last")
-                for dir_ in [ref_path, mmse_path, y_path, last_path, var_path,metric_path]:
+                for dir_ in [ref_path, mmse_path, y_path, last_path, var_path, metric_path, err_path]:
                     os.makedirs(dir_, exist_ok=True)
             
             # Evaluations
@@ -270,7 +283,25 @@ def main(
             if args.task == "deblur" or args.task=="sr":    
                 blur = kernels.get_blur(seed=1234)
             
+            cov_met = Coverage(device=device)
+            
             # loop over loader 
+            last_imgs_np = []
+            mmse_imgs_np = []
+            ref_imgs_np = []
+            var_imgs_np = []
+            y_imgs_np = []
+            err_imgs_np = []
+            print("DATASET SIZE:", len(loader))
+
+            # Added equivariant sampling 
+            if config.equivariant:
+                from utils.equivariance import shelving_filters
+                equivariant_transform = shelving_filters(N=args.data.im_size, loc=3/4, mag=0.75, device=device)
+                print("EQUIVARIANT SAMPLING ACTIVATED!!!")
+            
+            config.min_images = 0
+
             for ii, im in enumerate(loader):
                 if isinstance(im, list):
                     if isinstance(im[1], dict) and "y_label" in im[1].keys():
@@ -278,8 +309,9 @@ def main(
                         y_label = y_label.to(device)
                 else:
                     y_label = None
+                if hasattr(config, "min_images") and ii*im.shape[0]<config.min_images: continue
                 if ii*im.shape[0]>max_images:continue
-                
+
                 # True image
                 im_name = f"{(ii):05d}"
                 im = im.to(device)
@@ -293,12 +325,16 @@ def main(
                     y = physic.y(im, blur, args.physic.sr.sf)
                 elif args.task in ["inp", "jpeg"]:
                     y = physic.y(im)
+                
+                x_eq = x.clone()
+                y_eq = y.clone()
                         
                 #  main loop  
+                samples = []
                 for it in range(max_iter):
                     start_time = time.time()
                     out = diffsampler.sampler(
-                        y, 
+                        y_eq, 
                         im_name, 
                         num_timesteps = num_timesteps, 
                         eta=eta, 
@@ -307,6 +343,18 @@ def main(
                         lambda_ = args.lambda_,
                         y_label = y_label,
                     )
+                    if config.equivariant:
+                        if it == 0:
+                            xhat = utils.image_transform(out["xstart_pred"])
+                        else:
+                            out["xstart_pred"] = utils.inverse_image_transform(equivariant_transform.T_g_inv(utils.image_transform(out["xstart_pred"])))
+                        x_eq = equivariant_transform.T_g(xhat)
+                        if args.task == "deblur":
+                            y_eq = physic.y(x_eq, blur)
+                        elif args.task=="sr":
+                            y_eq = physic.y(x_eq, blur, args.physic.sr.sf)
+                        elif args.task in ["inp", "jpeg"]:
+                            y_eq = physic.y(x_eq)
 
                     # collapsed time
                     collapsed_time = time.time() - start_time           
@@ -319,6 +367,7 @@ def main(
                         if args.use_wandb and ii%10==0 and args.evaluation.coverage:
                             psnr_val = metrics.psnr_function(out["xstart_pred"], x)
                             wandb.log({f"sample psnr": psnr_val})
+                    samples.append(out["xstart_pred"])
                 # posterior mean - mmse
                 if max_iter>1:
                     X_posterior_mean = posterior.get_mean()
@@ -327,20 +376,32 @@ def main(
                     X_posterior_mean = out["xstart_pred"]
                     X_posterior_var = out["xstart_pred"]
                 utils.delete([posterior])
-                    
-                last_sample = data[-1].to(device) if args.evaluation.coverage else out["xstart_pred"]
-                
+                cov_met.update(torch.stack(samples, dim=1), x)
+                # Final results
+                cov_met.compute(csv_path = os.path.join(save_metric_path, 'coverage.csv'))
+
+                last_sample = out["xstart_pred"]
+
                 # sliced wasserstein distance
                 if args.evaluation.save_images:   
                     for ll, (x_t, xp_t, y_t, v_t) in enumerate(zip(x, X_posterior_mean, y, X_posterior_var)):
                         im_name = f"{(ii*x.shape[0] + ll):05d}"
-                        utils.save_images(ref_path, x_t, im_name)
-                        utils.save_images(mmse_path, xp_t, im_name)
-                        std = v_t
-                        err = torch.abs(xp_t-x_t)
-                        norm = max(std.max(), err.max())
-                        utils.save_images(var_path, err /norm, im_name+"_residual")
-                        utils.save_images(y_path, utils.inverse_image_transform(y_t), im_name)                            
+                        last_imgs_np.append(last_sample[ll].cpu().numpy())
+                        mmse_imgs_np.append(xp_t.cpu().numpy())
+                        ref_imgs_np.append(x_t.cpu().numpy())
+                        var_imgs_np.append(v_t.cpu().numpy())
+                        y_imgs_np.append(utils.inverse_image_transform(y_t).cpu().numpy())
+                        err_imgs_np.append((xp_t - x_t).cpu().numpy())
+                        if ii*x.shape[0] + ll < 16+config.min_images:
+                            utils.save_images(last_path, last_sample[ll], im_name)
+                            utils.save_images(ref_path, x_t, im_name)
+                            utils.save_images(mmse_path, xp_t, im_name)
+                            std = v_t
+                            err = torch.abs(xp_t-x_t)
+                            norm = max(std.max(), err.max())
+                            utils.save_images(var_path, v_t /norm, im_name)
+                            utils.save_images(err_path, err /norm, im_name)
+                            utils.save_images(y_path, utils.inverse_image_transform(y_t), im_name)                            
                         # eval - mmse
                         psnr_temp = metrics.psnr_function(xp_t, x_t)
                         mse_temp = metrics.mse_function(xp_t, x_t)
@@ -364,19 +425,32 @@ def main(
                             "lpips last": [lpips_temp_last],
                         })
                         save_dir_metric = os.path.join(save_metric_path, 'metrics_results.csv')
-                        matrics_pd.to_csv(save_dir_metric, mode='a', header=not os.path.exists(save_dir_metric))
+                        matrics_pd.to_csv(save_dir_metric, mode='a' if ii + ll > config.min_images//im.shape[0] else 'w', header=ii+ll==0)
                         s_lpips += lpips_temp
                         s_psnr += psnr_temp
                         s_mse += mse_temp
                         s_ssim += ssim_temp
                         count += 1
+
+            # Save images as npy file
+            if args.evaluation.save_images:  
+                np.save(os.path.join(root_dir_results, "last", f"last_samples.npy"), np.array(last_imgs_np))
+                np.save(os.path.join(root_dir_results, "mmse", f"mmse_samples.npy"), np.array(mmse_imgs_np))
+                np.save(os.path.join(root_dir_results, "ref", f"ref_samples.npy"), np.array(ref_imgs_np))
+                np.save(os.path.join(root_dir_results, "var", f"var_samples.npy"), np.array(var_imgs_np))
+                np.save(os.path.join(root_dir_results, "y", f"y_samples.npy"), np.array(y_imgs_np))
+                np.save(os.path.join(root_dir_results, "err", f"err_samples.npy"), np.array(err_imgs_np))
+            # Final results
+            cov_met.compute(csv_path = os.path.join(save_metric_path, 'coverage.csv'))
+ 
+
             wandb.finish()   
 
 if __name__ == "__main__":
-    for solver in SOLVER_TYPES:
-            for eta in etas:
-                kwargs = {
-                    "solver_type": "ddim",
-                    "eta": 0.8,
-                }
-                main(**kwargs)
+#     for solver in SOLVER_TYPES:
+#             for eta in etas:
+    kwargs = {
+        "solver_type": "ddim",
+        "eta": 0.8,
+    }
+    main(**kwargs)

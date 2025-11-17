@@ -9,8 +9,8 @@ pertub: True
 mode: train
 
 save_checkpoint_range: 30
-save_checkpoint_dir: /users/js3006/conddiff/UD2M/Results
-save_dir: /users/js3006/conddiff/UD2M/Results
+save_checkpoint_dir: /users/js3006/conddiff/UD2M/Results/ablation_16
+save_dir: /users/js3006/conddiff/UD2M/Results/ablation_16
 
 in_channels: 1
 out_channels: 1
