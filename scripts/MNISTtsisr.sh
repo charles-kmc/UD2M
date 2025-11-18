@@ -2,7 +2,7 @@
 
 ################# Part-1 Slurm directives ####################
 ## Working dir
-#SBATCH -D "/users/js3006/conddiff/UD2M"
+#SBATCH -D working directory path
 ## Environment variables
 #SBATCH --export=ALL
 ## Output and Error Files
@@ -63,88 +63,33 @@ mkdir -p "$RESULTS_DIR1"
 #===============================
 #  Application launch commands
 #-------------------------------
-# python3 main.py \
-#                 --task $task \
-#                 --operator_name "gaussian" \
-#                 --lambda_ 0.1 \
-#                 --config_file "temp_$i.yaml" \
-#                 --dataset_name $dataset_name \
-#                 --sigma_model $sigma_model \
-#                 --max_unfolded_iter $i \
-#                 --kernel_size 3 \
-#                 --learned_lambda_sig True \
-#                 --sigma_model $sigma_model \
-#             > "$RESULTS_DIR"_out_train_dif.output \
-#             2> "$RESULTS_DIR"_err_train_dif.error
 
-
-# for num_timesteps in {1,} ; do
-#     learned_lambda_sig=True
-#     general=False
-
-#     ckpt_dir="/users/js3006/conddiff/UD2M/Results/ckpts_ud2m_sr"
-#     ckpt_name="mnist_lora_sr_gaussian_epoch=999-5.ckpt"
-#     op="gaussian"            # gaussian, uniform, motion
-
-
-
-#     config_file="fine_tuning_lmodel.yaml"
-
-
-
-#     # python3 sampling.py \
-#     #                 --task $task \
-#     #                 --operator_name $op \
-#     #                 --lambda_ 0.1 \
-#     #                 --sigma_model $sigma_model \
-#     #                 --config_file $config_file \
-#     #                 --dataset_name $dataset_name \
-#     #                 --ckpt_dir "$ckpt_dir" \
-#     #                 --ckpt_name "$ckpt_name" \
-#     #                 --num_timesteps $num_timesteps \
-#     #                 --max_images 10000 \
-#     #                 --kernel_size 3 \
-#     #                 --max_unfolded_iter 3 \
-#     #                 --learned_lambda_sig $learned_lambda_sig \
-#     #                 --num_samples 4 \
-#     #     > "$RESULTS_DIR"_out_sample_dif.output \
-#     #     2> "$RESULTS_DIR"_err_sample_dif.error
-        
-
-#     echo "Computing FID: lambda: $lamb and sigma $sigma on dataset_name $dataset_name"          
-#     python3 fid.py \
-#             -d Results/MNIST/sr_operator_gaussian/ddim/K_3_N_$num_timesteps \
-#         > "$RESULTS_DIR"_out_fid.output \
-#         2> "$RESULTS_DIR"_err_fid.error
-
-
-# done
-for i in {2,}; do
-sed 's|users/js3006/conddiff/UD2M/Results|users/js3006/conddiff/UD2M/Results/ablation_'"${i}"'|g' configs/fine_tuning_lmodel.yaml > configs/temp_$i.yaml
-# python3 main.py \
-#                 --task $task \
-#                 --operator_name "gaussian" \
-#                 --lambda_ 0.1 \
-#                 --config_file "temp_$i.yaml" \
-#                 --dataset_name $dataset_name \
-#                 --sigma_model $sigma_model \
-#                 --max_unfolded_iter $i \
-#                 --kernel_size 3 \
-#                 --learned_lambda_sig True \
-#                 --sigma_model $sigma_model \
-#             > "$RESULTS_DIR"_out_train_dif_$i.output \
-#             2> "$RESULTS_DIR"_err_train_dif_$i.error
+for i in {2,4,8,16}; do
+    sed 's|users/js3006/conddiff/UD2M/Results|users/js3006/conddiff/UD2M/Results/ablation_'"${i}"'|g' configs/fine_tuning_lmodel.yaml > configs/temp_$i.yaml
+    python3 main.py \
+                    --task $task \
+                    --operator_name "gaussian" \
+                    --lambda_ 0.1 \
+                    --config_file "temp_$i.yaml" \
+                    --dataset_name $dataset_name \
+                    --sigma_model $sigma_model \
+                    --max_unfolded_iter $i \
+                    --kernel_size 3 \
+                    --learned_lambda_sig True \
+                    --sigma_model $sigma_model \
+                > "$RESULTS_DIR"_out_train_dif_$i.output \
+                2> "$RESULTS_DIR"_err_train_dif_$i.error
 
 
     learned_lambda_sig=True
     general=False
 
-    ckpt_dir=/users/js3006/conddiff/UD2M/Results/ablation_${i}/ckpts_ud2m_sr
-    ckpt_name="mnist_lora_sr_gaussian_epoch=399-5.ckpt"
+    ckpt_dir= # directory-to-checkpoint
+    ckpt_name= # checkpoint-name
     op="gaussian"            # gaussian, uniform, motion
 
     # Use 16/i timesteps  for a total of 16 NFEs
-    for num_timesteps in {$((16/i)),}; do
+    for num_timesteps in {2,4,8,16}; do
         python3 sampling.py \
                         --task $task \
                         --operator_name $op \
@@ -173,23 +118,4 @@ sed 's|users/js3006/conddiff/UD2M/Results|users/js3006/conddiff/UD2M/Results/abl
 mv configs/temp_$i.yaml $RESULTS_DIR1
 done
 
-# Running python scripts
-# for i in {16,}; do
-# sed 's|users/js3006/conddiff/UD2M/Results|users/js3006/conddiff/UD2M/Results_'"${i}"'|g' configs/fine_tuning_lmodel.yaml > configs/temp_$i.yaml
-# python3 main.py \
-#                 --task $task \
-#                 --operator_name "gaussian" \
-#                 --lambda_ 0.1 \
-#                 --config_file "temp_$i.yaml" \
-#                 --dataset_name $dataset_name \
-#                 --sigma_model $sigma_model \
-#                 --max_unfolded_iter $i \
-#                 --kernel_size 3 \
-#                 --learned_lambda_sig True \
-#                 --sigma_model $sigma_model \
-#             > "$RESULTS_DIR"_out_train_dif.output \
-#             2> "$RESULTS_DIR"_err_train_dif.error
-# mv configs/temp_$i.yaml $RESULTS_DIR1
-# done
-# Final message
 echo "Finish!!"

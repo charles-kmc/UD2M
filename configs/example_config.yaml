@@ -9,8 +9,8 @@ pertub: True
 mode: train
 
 save_checkpoint_range: 30
-save_checkpoint_dir: /users/js3006/conddiff/UD2M/Results/ablation_16
-save_dir: /users/js3006/conddiff/UD2M/Results/ablation_16
+save_checkpoint_dir: # DIRECTORY_TO_SAVE_CHECKPOINTS
+save_dir: # DIRECTORY_TO_SAVE_RESULTS
 
 in_channels: 1
 out_channels: 1
@@ -28,18 +28,17 @@ data:
   train_batch_size: 32
   number_sample_per_epoch: 16000
   is_random_sampler: True
-  # root: /users/cmk2000/sharedscratch/Datasets 
-  root: /users/js3006/conddiff/UD2M/datasets
-  dataset_name: MNIST  # CT, ImageNet FFHQ, LSUN
+  root: DIRECTORY_TO_DATASETS
+  dataset_name: DATASET_NAME  # e.g. CT, ImageNet FFHQ, LSUN, MNIST
 
 model:
   use_lora: true
   rank: 5
   target_modules: ["qkv", "proj_out"]
   frozen_model_name: MNIST_diffusion
-  frozen_model_dir: /users/js3006/conddiff/UD2M/model_zoo
+  frozen_model_dir: # DIRECTORY_OF_FROZEN_MODEL
 
-train:
+train: # Training parameters
   adversarial: 1
   num_z_train: 1
   num_z_test: 1
@@ -57,7 +56,7 @@ train:
   gradient_scale_dist: 0.01
 
 dpir:
-  use_dpir: False
+  use_dpir: False # Initialize using DPIR opposed to RAM or A^\dagger y
 
 physic:
   kernel_size: 5
@@ -65,19 +64,19 @@ physic:
   random_blur: False
   sigma_model: 0.01
   transform_y: True
-    
+
   inp:
     mask_rate: 0.2
-    # operator_name: random
     box_proportion: 0.5
-    index_ii: None
+    # Coordinates of top-left corner of the inpainting mask
+    index_ii: None  
     index_jj: None
       
   deblur:
-    random_blur: False
+    random_blur: False # Randomly apply different blur kernel to each input image
       
   sr:
-    sf: 4
+    sf: 4 # Downsampling factor
 
   ct:
     angles: 78

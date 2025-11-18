@@ -103,7 +103,7 @@ for num_timesteps in 3 ; do
     if [ $fid_eval -eq 0 ]; then
         python3 sampling.py \
                         --task $task \
-                        --operator_name $op \
+                        --operator_name $op \ 
                         --lambda_ $lamb \
                         --sigma_model $sigma \
                         --config_file $config_file \

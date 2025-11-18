@@ -9,8 +9,8 @@ pertub: True
 mode: train
 
 save_checkpoint_range: 30
-save_checkpoint_dir: /users/js3006/conddiff/UD2M/Results
-save_dir: /users/js3006/conddiff/UD2M/Results
+save_checkpoint_dir: # DIRECTORY_TO_SAVE_CHECKPOINTS
+save_dir: # DIRECTORY_TO_SAVE_RESULTS
 
 in_channels: 1
 out_channels: 1
@@ -28,16 +28,15 @@ data:
   train_batch_size: 32
   number_sample_per_epoch: 16000
   is_random_sampler: True
-  # root: /users/cmk2000/sharedscratch/Datasets 
-  root: /users/js3006/conddiff/UD2M/datasets
-  dataset_name: MNIST  # CT, ImageNet FFHQ, LSUN
+  root: DIRECTORY_TO_DATASETS
+  dataset_name: DATASET_NAME  # e.g. CT, ImageNet FFHQ, LSUN, MNIST
 
 model:
   use_lora: true
   rank: 5
   target_modules: ["qkv", "proj_out"]
   frozen_model_name: MNIST_diffusion
-  frozen_model_dir: /users/js3006/conddiff/UD2M/model_zoo
+  frozen_model_dir: # DIRECTORY_OF_FROZEN_MODEL
 
 train:
   adversarial: 1
@@ -63,12 +62,10 @@ physic:
   kernel_size: 5
   operator_name: gaussian  #"gaussian", "uniform_motion", "random", "box"
   random_blur: False
-  sigma_model: 0.01
   transform_y: True
-    
+
   inp:
     mask_rate: 0.2
-    # operator_name: random
     box_proportion: 0.5
     index_ii: None
     index_jj: None
