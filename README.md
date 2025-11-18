@@ -60,6 +60,8 @@ python main.py \
 ```
 The `--config_file` argument specifies the path to the configuration file, which contains the model architecture; training parameters such as the rank of LoRA finetuning applied to the SBM; more detailed properties of the physics operator. The config file is also used to specify the location to load data directories and model checkpoints and to save models and results. An example config file is provided in `configs/example_config.yaml`.
 
+Code with `--use_RAM` require installing the [Reconstruct Anything Model](https://github.com/matthieutrs/ram) to the active python environment. 
+
 ### Python Inference Interface
 Inference is conducted through the python scripnt `sampling.py`. Command line arguments control the problem specification. A typical usage pattern is as follows:
 ```bash
