@@ -4,4 +4,4 @@ Results/*
 datasets/MNIST_png/*
 datasets/MNIST_png
 wandb/*
-**[.png]
+# **[.png]
