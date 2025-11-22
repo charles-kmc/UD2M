@@ -1,0 +1,32 @@
+\documentclass[varwidth, crop, margin=10pt]{standalone}
+\standaloneconfig{border=0cm 0cm 0.1cm 0.1cm} 
+\usepackage{bm}
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{booktabs}
+\usepackage{multirow}
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+
+\begin{document}
+\begin{table}[t]
+\centering \footnotesize\setlength{\tabcolsep}{5pt}
+\begin{tabular}{lccccc}
+ \toprule
+ & & \multicolumn{2}{c}{\textbf{Deblur (Gaussian)}} & \multicolumn{2}{c}{\textbf{SR$\times16$}} \\%\hline
+ \cmidrule(lr){3-4} \cmidrule(lr){5-6}
+  \textbf{Method} &  \textbf{NFE↓} & \textbf{FID↓} & \textbf{PSNR↑} & \textbf{FID↓} & \textbf{PSNR↑} \\    
+  \hline
+\textbf{LATINO-PRO } & \underline{68} & \textbf{18.37} & \textbf{26.82}  & \textbf{30.40} &  \textbf{21.52}     \\ %\hline
+\textbf{LATINO}  & \textbf{8} & \underline{20.03} &     \underline{26.25}   & 42.14 & \underline{20.05}   \\ \hline
+P2L (Chung 2023)   &     2000     & 85.80 & 20.96   & 121.7 & 19.99      \\ %\hline
+TReg (Kim 2023)   &     200     & 35.47 & 21.13   &   \underline{37.13}  &     19.60   \\%\hline
+LDPS   &     1000     & 64.88 & 22.60  & 101.13 & 17.34        \\ %\hline
+PSLD (Rout 2023)    &  1000  &    125.5     & 20.52   &    113.4   &  16.48 \\ %\\ \hline
+\bottomrule
+\end{tabular}
+% \caption{Results for Gaussian Deblurring with $\sigma = 5.0$, and $\times 16$ super-resolution, both with noise $\sigma_y = 0.01$ on the AFHQ-512 val dataset. Our LATINO and LATINO-PRO models are compared to recent state-of-the-art methods. Prompts: \texttt{a sharp photo of a dog} (resp.  \texttt{a cat}) %or"a sharp photo of a cat". 
+% \textbf{Bold}:  best, \underline{underline}: second best.
+% }
+\end{table}
+
+\end{document}

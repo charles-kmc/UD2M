@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+  <!-- Google tag (gtag.js) -->
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-7CZNMK541T"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-7CZNMK541T');
+  </script>
+
+
+  <meta charset="utf-8">
+  <!-- Meta tags for social media banners, these should be filled in appropriatly as they are your "business card" -->
+  <!-- Replace the content tag with appropriate information -->
+  <meta name="description" content="UD2M">
+  <meta property="og:title" content="UD2M"/>
+  <meta property="og:description" content="Learning few-step posterior samplers by unfolding and distillation of diffusion models"/>
+  <meta property="og:url" content="https://charles-kmc.github.io/UD2M"/>
+  <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X630-->
+  <meta property="og:image" content="static/image/your_banner_image.png" />
+  <meta property="og:image:width" content="1200"/>
+  <meta property="og:image:height" content="630"/>
+
+
+  <meta name="twitter:title" content="TWITTER BANNER TITLE META TAG">
+  <meta name="twitter:description" content="TWITTER BANNER DESCRIPTION META TAG">
+  <!-- Path to banner image, should be in the path listed below. Optimal dimenssions are 1200X600-->
+  <meta name="twitter:image" content="static/images/your_twitter_banner_image.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <!-- Keywords for your paper to be indexed by-->
+  <meta name="keywords" content="KEYWORDS SHOULD BE PLACED HERE">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+
+  <title>UD2M</title>
+  <link rel="icon" type="image/x-icon" href="static/images/my.ico">
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro"
+  rel="stylesheet">
+
+  <link rel="stylesheet" href="static/css/bulma.min.css">
+  <link rel="stylesheet" href="static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="static/css/fontawesome.all.min.css">
+  <link rel="stylesheet"
+  href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="static/css/index.css">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script src="https://documentcloud.adobe.com/view-sdk/main.js"></script>
+  <script defer src="static/js/fontawesome.all.min.js"></script>
+  <script src="static/js/bulma-carousel.min.js"></script>
+  <script src="static/js/bulma-slider.min.js"></script>
+  <script src="static/js/index.js"></script>
+
+  <script defer src="https://cdn.jsdelivr.net/npm/img-comparison-slider@8/dist/index.js"></script>
+
+  <!-- MathJax (put this in <head> before any LaTeX appears) -->
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']],
+        macros: {
+          vx: "\\mathbf{x}",
+          vy: "\\mathbf{y}",
+          vz: "\\mathbf{z}",
+          vu: "\\mathbf{u}",
+          encoder: "\\mathcal{E}",
+          decoder: "\\mathcal{D}",
+          prox:    "\\operatorname{prox}"
+        }
+      }
+    };
+  </script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+  <style>
+    /* one-liner utility for very wide banners (~6:1) */
+    .wide-banner {
+      width: 100%;            /* span the container */
+      height: auto;           /* keep intrinsic height */
+      display: block;         /* removes the inline-gap */
+    }
+  </style>
+
+  <!-- Algorithm-style list --------------------------------------------------->
+  <style>
+    /* container and line numbers */
+    .algo-code{
+      counter-reset: line;
+      border: 1px solid #e1e1e1;           /* subtle box */
+      border-radius: 6px;
+      background: #fafafa;
+      padding: 1rem 1.25rem;
+      font-family: "Courier New", monospace;
+      font-size: 0.92rem;
+    }
+    /* every list item */
+    .algo-code li{
+      list-style: none;
+      position: relative;
+      padding-left: 2.5em;                 /* room for the number */
+      margin: 0.25rem 0;
+    }
+    /* automatic line numbers on the left */
+    .algo-code li::before{
+      counter-increment: line;
+      content: counter(line);
+      position: absolute;
+      left: 0;
+      width: 2em;
+      text-align: right;
+      color: #606060;
+    }
+    /* indented lines inside the for-loop */
+    .algo-code .indent1{ padding-left: 3.5em; }
+    .algo-code .indent1::before{ left: 1em; }
+
+    /* second-level indent (inside the inner for-loop) */
+    .algo-code .indent2{ padding-left:4.5em; }
+    .algo-code .indent2::before{ left:2em; }
+  </style>
+
+  <style>
+    /* ─── responsive grid of sliders ─── */
+/* ───────────────── slider grid ───────────────── */
+.slider-grid{
+  --gap: 1.25rem;
+  display: grid;
+  grid-template-columns: 1fr;                 /* phones: 1 col  */
+  gap: var(--gap);
+  padding: var(--gap);
+  max-width: 1200px;
+  margin-inline: auto;
+  box-sizing: border-box;
+}
+
+/* tablets & small laptops → 2 columns */
+@media (min-width: 600px){
+  .slider-grid{ grid-template-columns: repeat(2, 1fr); }
+}
+
+/* ≥ 992 px (most desktops) → 3 columns  */
+@media (min-width: 992px){
+  .slider-grid{ grid-template-columns: repeat(3, 1fr); }
+}
+
+/* ───────────────── slider look ───────────────── */
+img-comparison-slider{
+  width: 100%;
+  aspect-ratio: 1 / 1;          /* square cell */
+  --divider-width: 4px;
+  --divider-color: #ffffffaa;
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,.15);
+  overflow: hidden;
+}
+
+img-comparison-slider img{
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+  </style>
+
+  <style>
+    /* lightweight, reusable tooltip */
+    .coming-tooltip{
+      position: fixed;               /* stays anchored to viewport */
+      pointer-events: none;          /* ignore cursor */
+      background: #222;
+      color: #fff;
+      font-size: 0.8rem;
+      padding: 0.3em 0.55em;
+      border-radius: 4px;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+      z-index: 10000;
+    }
+  </style>
+
+  <style>
+    @media (min-width: 600px) {
+      figure.has-text-centered img, figure.has-text-centered figcaption, ol.algo-code {
+      width: 80%;
+      height: auto;
+      margin: 0 auto; /* center the image */
+      }
+    }
+
+    @media (min-width: 992px) {
+      figure.has-text-centered img, figure.has-text-centered figcaption, ol.algo-code {
+      width: 60%;
+      height: auto;
+      margin: 0 auto; /* center the image */
+      }
+    }
+  </style>
+
+  <style>
+  @media (max-width: 600px) {
+    /* phones: shrink the publication-title */
+    .publication-title {
+      font-size: 1.75rem !important;  /* or whatever you prefer */
+      line-height: 1.2;    /* optional: tighten line spacing */
+    }
+  }
+  </style>
+</head>
+<body>
+
+
+  <section class="hero">
+    <div class="hero-body">
+      <div class="container is-max-desktop">
+        <div class="columns is-centered">
+          <div class="column has-text-centered">
+            <h1 class="title is-1 publication-title">Learning few-step posterior samplers by unfolding and distillation of diffusion models</h1>
+              <div class="is-size-5 publication-authors">
+                <!-- Paper authors -->
+                <span class="author-block">
+                  <a href="https://scholar.google.com/citations?user=Xmr-06oAAAAJ&hl=en" target="_blank">Charlesquin Kemajou Mbakam</a><sup>1</sup>,
+                </span>
+                <span class="author-block">
+                  <a href="https://scholar.google.com/citations?user=l8V9zvAAAAAJ&hl=en" target="_blank">Jonny Spence</a><sup>1,2</sup>,
+                </span>
+                <span class="author-block">
+                  <a href="https://scholar.google.com/citations?user=e1pFlV0AAAAJ&hl=en" target="_blank">Marcelo Pereyra</a><sup>1,3</sup>,
+                </span>
+              </div>
+
+              <div class="is-size-5 publication-authors">
+
+                <span class="author-block"><sup>1</sup> School of Mathematical and Computer Sciences (MACS) Heriot-Watt University, Edinburgh, UK</span><br>
+                <span class="author-block"><sup>2</sup> Edinburgh University, Edinburgh, UK</span><br>
+                <span class="author-block"><sup>3</sup> Maxwell Institute for Mathematical Sciences, Edinburgh, UK</span><br>
+               
+                <span class="conf-block">TMLR 2025</span>
+                <!-- <span class="eql-cntrb"><small><br><sup>*</sup>Indicates Equal Contribution</small></span> -->
+              </div>
+              <div class="column has-text-centered">
+              <div class="publication-links">
+              <!-- Arxiv PDF link -->
+              <span class="link-block">
+                <a href="https://arxiv.org/abs/2507.02686" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Paper</span>
+                </a>
+              </span>
+
+              <!-- Supplementary PDF link 
+              <span class="link-block">
+                <a href="static/pdfs/supplementary_material.pdf" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fas fa-file-pdf"></i>
+                  </span>
+                  <span>Supplementary</span>
+                </a>
+              </span>
+              -->
+              <!-- Github link -->
+              <span class="link-block">
+                <a id="github-btn"
+                  href="https://github.com/charles-kmc/UD2M" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="fab fa-github"></i>
+                  </span>
+                  <span>Code</span>
+                </a>
+              </span>
+              <!--
+              <script>
+                (function () {
+                  // Create one tooltip element that we'll reuse
+                  const tip = Object.assign(document.createElement('div'), {
+                    className: 'coming-tooltip',
+                    textContent: 'Coming soon!'
+                  });
+                  document.body.appendChild(tip);
+
+                  // Click handler
+                  document.getElementById('github-btn').addEventListener('click', (e) => {
+                    e.preventDefault();                 // stop navigation
+
+                    // Position 12 px right & 12 px above the cursor
+                    tip.style.left = (e.clientX + 12) + 'px';
+                    tip.style.top  = (e.clientY - 12) + 'px';
+
+                    tip.style.opacity = '1';            // fade in
+                    clearTimeout(tip._hideTimer);       // reset if user double-clicks
+                    tip._hideTimer = setTimeout(() => tip.style.opacity = '0', 1200);
+                  });
+                })();
+              </script>
+              -->
+              <!-- ArXiv abstract Link -->
+              <span class="link-block">
+                <a href="https://arxiv.org/abs/2507.02686" target="_blank"
+                  class="external-link button is-normal is-rounded is-dark">
+                  <span class="icon">
+                    <i class="ai ai-arxiv"></i>
+                  </span>
+                  <span>arXiv</span>
+                </a>
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- Image slider --> 
+<section class="hero is-small">
+  <div class="slider-grid">
+    <!-- Slider 1 Gaussian deblurring -->
+    <img-comparison-slider value="50">
+      <img slot="first"  src="static/images/ud2m/ddegrad1.png"        alt="Before 1">
+      <img slot="second" src="static/images/ud2m/drecon1.png" alt="After 1">
+    </img-comparison-slider>
+
+    <!-- Slider 2 Inpainting --> 
+    <img-comparison-slider value="50">
+      <img slot="first"  src="static/images/ud2m/idegrad1.png"        alt="Before 2">
+      <img slot="second" src="static/images/ud2m/irecon1.png" alt="After 2">
+    </img-comparison-slider>
+
+    <!-- Slider 3 sr -->
+    <img-comparison-slider value="50">
+      <img slot="first"  src="static/images/ud2m/srdegrad1.png"        alt="Before 3">
+      <img slot="second" src="static/images/ud2m/srrecon1.png" alt="After 3">
+    </img-comparison-slider>
+
+    <!-- Slider 4 Gaussian deblurring -->
+    <img-comparison-slider value="50">
+      <img slot="first"  src="static/images/ud2m/ddegrad3.png"        alt="Before 4">
+      <img slot="second" src="static/images/ud2m/drecon3.png" alt="After 4">
+    </img-comparison-slider>
+
+    <!-- Slider 5 Inpainting -->
+    <img-comparison-slider value="50">
+      <img slot="first"  src="static/images/ud2m/idegrad2.png"        alt="Before 5">
+      <img slot="second" src="static/images/ud2m/irecon2.png" alt="After 5">
+    </img-comparison-slider>
+
+    <!-- Slider 6 sr -->
+    <img-comparison-slider value="50">
+      <img slot="first"  src="static/images/ud2m/srdegrad2.png"        alt="Before 4">
+      <img slot="second" src="static/images/ud2m/srrecon2.png" alt="After 4">
+    </img-comparison-slider>
+  </div>
+</section>
+<!-- End image slider -->
+
+<!-- Paper abstract -->
+<section class="section hero is-light">
+  <div class="container is-max-desktop">
+    <div class="columns is-centered has-text-centered">
+      <div class="column is-four-fifths">
+        <h2 class="title is-3">Abstract</h2>
+        <div class="content has-text-justified">
+          <p>
+            Diffusion models (DMs) have emerged as powerful image priors in Bayesian computational imaging. 
+            Two primary strategies have been proposed for leveraging DMs in this context: Plug-and-Play methods, 
+            which are zero-shot and highly flexible but rely on approximations; and specialized conditional DMs, 
+            which achieve higher accuracy and faster inference for specific tasks through supervised training. 
+            In this work, we introduce a novel framework that integrates deep unfolding and model distillation 
+            to transform a DM image prior into a few-step conditional model for posterior sampling. 
+            A central innovation of our approach is the unfolding of a Markov chain Monte Carlo (MCMC) algorithm—specifically, 
+            the recently proposed LATINO Langevin sampler—representing the first known instance of deep unfolding 
+            applied to a Monte Carlo sampling scheme. We demonstrate our proposed unfolded and distilled samplers 
+            through extensive experiments and comparisons with the state of the art, where they achieve excellent 
+            accuracy and computational efficiency, while retaining the flexibility to adapt to variations 
+            in the forward model at inference time.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+<!-- End paper abstract -->
+
+<!-- UD2M model -->
+ <div class="container is-max-desktop">
+      <div class="column is-four-fifths">
+          <h4 class="title is-3">
+            UD<sup>2</sup>M Model
+          </h4>
+    </div>
+  </div>
+
+ <!-- Algorithm -->
+<div class="my-5">
+  <figure class="has-text-centered">
+    <img
+      src="static/images/model.png"
+      alt="UD2M solver step"
+      class="wide-banner"
+    >
+    <figcaption class="has-text-grey is-size-6 mt-2">
+      Diagram of the proposed conditional sampling architecture, $L_{\vartheta}(\vy,\vx_t,t)$ derived by deep unfolding $K$ LATINO 
+      iterations (Spagnoletti et al. 2025). The prior is introduced via a pre-trained unconditional diffusion model $G_{\theta}$ 
+      with LoRA adaptation $\Delta_{\theta}$, while the observation model, measurement $\vy$ and noisy state $\vx_t$ are involved 
+      via $-\log p(\vy,\vx_t\mid x=\vx_0)$. The first module is initialized by an estimator $f_{\psi}$ such as RAM (Terris et al., 2025), 
+      or by setting $f_{\psi}(\vx_t,\vy)=A^\dagger \vy$. The unfolded network is finetuned and distilled to sample from $p(\vx_0\mid\vy,\vx_t)$.
+      </figcaption>
+  </figure>
+</div>
+
+<!-- UD2M algorithm ------------------------------------------------------->
+<figure class="my-5">
+  <figcaption class="has-text-weight-bold has-text-centered mb-2">
+    Algorithm:&nbsp;UD<sup>2</sup>M
+  </figcaption>
+
+  <ol class="algo-code">
+    <li><strong>Given</strong>  the observation $y$, the time-grid $0=t_0 < t_1 < \cdots < t_N=T$
+     </li>
+
+    <li>
+        Sample $\vx_{t_N} \sim \mathcal{N}(0, \mathbb{I})$
+        <span style="display:inline-block; float:right; color:#85508a;">
+          <i>
+            ▷ Initialize reversed diffusion
+          </i>
+        </span>
+    </li>
+
+    <li><strong>For</strong> $n = N,\ldots,1$</li>
+    <li class="indent1">
+        Set $\hat{\vx}_{0} \;\gets\;
+        \tilde{x}^{\Delta_{\theta}}_{t_n}$ using $\boldsymbol{L}_{\vartheta}$ (see Figure ...)
+        <span style="display:inline-block; float:right; color:#85508a;">
+          <i>▷ Unfolded sample targeting $p_0(\vx_0\mid\vx_t, \vy)$</i>
+        </span>
+    </li>
+
+    <li class="indent1">
+        Sample $\vx_{t_n}\sim p_{t_{n-1}}(\vx_{t_{n-1}}\mid\hat{\vx}_0, \vx_{t_n})$ 
+        <span style="display:inline-block; float:right; color:#85508a;">
+          <i>▷ Reverse DDIM step</i>
+        </span>
+    <em><!-- Encode step --></em>
+    </li>
+
+    <li><strong>Return</strong> $\vx_{t_0}$</li>
+  </ol>
+</figure>
+
+<!-- Training objectives -->
+ <div class="container is-max-desktop">
+      <div class="column is-four-fifths">
+          <h4 class="title is-3">
+            Training Objective
+          </h4>
+          <!-- <p>
+            To train our network to sample from the condititional distribution $p(\vx_0\mid \vy, \vx_t)$, we combine reconstruction and adversarial losses, which has been shown to greatly improve for sample generation quality as opposed to using a reconstruction loss alone. 
+            more precisely, the objective function is defined as follows:
+            $$\mathcal{L}^G(\Delta_{\theta}, \psi) = \mathcal{L}_{Adv}(\Delta_{\theta}, \psi,\phi) + \omega_{\ell_2}\mathcal{L}(\Delta_{\theta}, \psi) + \omega_{PS}\mathcal{L}(\Delta_{\theta}, \psi).$$
+            $$\mathcal{L}^D(\phi) = \mathcal{L}_{Adv}(\Delta_{\theta}, \psi,\phi) + \omega_{GS}\mathcal{L}(\phi).$$
+            where $\omega_{\ell_2}, \omega_{PS}, \omega_{GP}>0$ are regularization parameters. $\mathcal{L}^G$ is used for optimizing the conditional diffusion model, while $\mathcal{L}^G$ optimizes the discriminator (for more details, refer the reader to the original paper).
+          </p> -->
+
+          <p>
+            To train our network to sample from the conditional distribution 
+            \( p(\mathbf{x}_0 \mid \mathbf{y}, \mathbf{x}_t) \), we use a combination of 
+            reconstruction and adversarial losses. This hybrid objective has been shown 
+            to significantly improve sample quality compared to relying on reconstruction 
+            loss alone.
+          </p>
+
+          <p>
+            More precisely, the generator objective is defined as:
+          </p>
+
+          <p>
+            \[
+            \mathcal{L}^G(\Delta_{\theta}, \psi)
+            = \mathcal{L}_{Adv}(\Delta_{\theta}, \psi, \phi)
+            + \omega_{\ell_2}\,\mathcal{L}_{\ell_2}(\Delta_{\theta}, \psi)
+            + \omega_{PS}\,\mathcal{L}_{PS}(\Delta_{\theta}, \psi).
+            \]
+          </p>
+
+          <p>
+            The discriminator objective is given by:
+          </p>
+
+          <p>
+            \[
+            \mathcal{L}^D(\phi)
+            = \mathcal{L}_{Adv}(\Delta_{\theta}, \psi, \phi)
+            + \omega_{GP}\,\mathcal{L}_{GP}(\phi),
+            \]
+          </p>
+
+          <p>
+            where, \(\omega_{\ell_2}\), \(\omega_{PS}\), and \(\omega_{GP} > 0\) are 
+            regularization coefficients. The loss \(\mathcal{L}^G\) is used to optimize 
+            the conditional diffusion model, while \(\mathcal{L}^D\) is used to train the 
+            discriminator. For additional details, we refer the reader to the original 
+            paper.
+          </p>
+    </div>
+  </div>
+
+ <!-- Results -->
+ <div class="container is-max-desktop">
+      <div class="column is-four-fifths">
+          <h4 class="title is-3">
+            Results
+          </h4>
+    </div>
+  </div>
+
+<!-- image imagenet -->
+<div class="my-5">
+  <figure class="has-text-centered">
+    <img
+      src="static/images/ud2m/figure_gauss_imagenet.png"
+      alt="Gaussian deblurring and super-resolution results on ImageNet"
+    >
+    <figcaption class="has-text-grey is-size-6 mt-2">
+      Comparison of posterior samples for the task Gaussian deblurring with noise level $\sigma = 0.01$ on
+      ImageNet 256.
+    </figcaption>
+  </figure>
+</div>
+
+<!-- table imagenet -->
+<div class="my-5">
+  <figure class="has-text-centered">
+    <img
+      src="static/tables/imagenet_results.png"
+      alt="Gaussian deblurring and super-resolution results on ImageNet"
+    >
+    <figcaption class="has-text-grey is-size-6 mt-2">
+      Results for Gaussian deblurring and super-resolution tasks on ImageNet dataset with noise level $0.01$. The table summarises the average PSNR [dB] (↑), LPIPS (↓) and
+      FID (↓) scores for each methods. Our UD<sup>2</sup>M model is compared to recent state-of-the-art methods.
+    </figcaption>
+  </figure>
+</div>
+
+<!-- image Lsun bedroom -->
+<div class="my-5">
+  <figure class="has-text-centered">
+    <img
+      src="static/images/ud2m/figure_lsun_bedroom.png"
+      alt="Gaussian deblurring and super-resolution results on LSUN Bedroom"
+    >
+    <figcaption class="has-text-grey is-size-6 mt-2">
+      Comparison of posterior samples for the task Gaussian deblurring with noise level $\sigma = 0.025$ on
+      LSUN Bedroom.
+    </figcaption>
+  </figure>
+</div>
+
+<!-- table Lsun Bedroom -->
+<div class="my-5">
+  <figure class="has-text-centered">
+    <img
+      src="static/tables/lsun_bedroom_results.png"
+      alt="Inpainting, Gaussian deblurring and super-resolution results on LSUN Bedroom"
+    >
+    <figcaption class="has-text-grey is-size-6 mt-2">
+      Results for inpainting, Gaussian deblurring and super-resolution tasks on LSUN Bedroom dataset with noise level $0.025$. The table summarises the average PSNR [dB] (↑), LPIPS (↓) and
+      FID (↓) scores for each methods. Our UD<sup>2</sup>M model is compared to recent state-of-the-art methods.
+    </figcaption>
+  </figure>
+</div>
+
+
+
+<!--BibTex citation -->
+  <section class="section" id="BibTeX">
+    <div class="container is-max-desktop content">
+      <h2 class="title">BibTeX</h2>
+      <pre>
+        <code>
+          @misc{mbakam2025learning,
+          title={Learning few-step posterior samplers by unfolding and distillation of diffusion models},
+          author={Charlesquin Kemajou Mbakam and Marcelo Pereyra and Jonathan Spence},
+          journal={Transactions on Machine Learning Research},
+          issn={2835-8856},
+          year={2025},
+          url={https://arxiv.org/abs/2507.02686},
+          note={}
+        }
+        </code>
+      </pre>
+    </div>
+  </section>
+<!--End BibTex citation -->
+
+
+  <footer class="footer">
+  <div class="container">
+    <div class="columns is-centered">
+      <div class="column is-8">
+        <div class="content">
+
+          <p>
+            This page was built using the <a href="https://github.com/eliahuhorwitz/Academic-project-page-template" target="_blank">Academic Project Page Template</a> which was adopted from the <a href="https://nerfies.github.io" target="_blank">Nerfies</a> project page.
+            You are free to borrow the source code of this website, we just ask that you link back to this page in the footer. <br> This website is licensed under a <a rel="license"  href="http://creativecommons.org/licenses/by-sa/4.0/" target="_blank">Creative
+            Commons Attribution-ShareAlike 4.0 International License</a>.
+          </p>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</footer>
+
+
+
+</body>
+</html>
+

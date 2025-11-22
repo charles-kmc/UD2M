@@ -1,0 +1,34 @@
+
+\documentclass[varwidth, crop, margin=10pt]{standalone}
+\standaloneconfig{border=0cm 0cm 5.9cm 0.1cm} 
+\usepackage{bm}
+\usepackage{array}
+\usepackage{makecell}
+\usepackage{booktabs}
+\usepackage{multirow}
+\newcolumntype{P}[1]{>{\centering\arraybackslash}p{#1}}
+
+\begin{document}
+\begin{table*}[h]
+\centering \setlength{\tabcolsep}{4pt}
+
+\begin{tabular}{lcccccccccc}
+ \toprule
+ &  & \multicolumn{3}{c}{\textbf{Deblur (Gaussian)}} & \multicolumn{3}{c}{\textbf{Deblur (Motion)}} & \multicolumn{3}{c}{\textbf{SR$\times8$}} \\ %\hline
+  \cmidrule(lr){3-5} \cmidrule(lr){6-8} \cmidrule(lr){9-11}
+\textbf{Method} & \textbf{NFE↓} & \textbf{FID↓} & \textbf{PSNR↑} & \textbf{LPIPS↓} & \textbf{FID↓} & \textbf{PSNR↑} & \textbf{LPIPS↓} & \textbf{FID↓} & \textbf{PSNR↑} & \textbf{LPIPS↓}\\ \hline
+\textbf{LATINO-PRO} &  \underline{68}  &    \underline{31.98}    &    \textbf{29.11}    & \textbf{0.292}  & \underline{27.80}     &   \underline{27.14}       & \textbf{0.301}        & 40.95     &   26.58        & 0.355           \\ %\hline
+\textbf{LATINO}       &  \textbf{8}   & 33.94 &    \underline{28.95}                  & \underline{0.296} &  29.17 &   26.88  & 0.318   & 37.13     &   26.22      &    0.356     \\ \hline
+P2L (Chung 2023) &  2000    &  \textbf{30.62}  &   26.97              & 0.299  &  28.34  & \textbf{27.23}            & \underline{0.302}   & \textbf{31.23}     &   \underline{28.55}       &    \textbf{0.290}    \\ %\hline
+LDPS & 1000 &  45.89  &  27.82   & 0.334  &   58.66   &   26.19      & 0.382   & 36.81     &   \textbf{28.78}       &   \underline{0.292}     \\ %\hline
+PSLD (Rout 2023)       &  1000   &   41.04  & 28.47   & 0.320    &   47.71   & 27.05   & 0.348   & 36.93   & 26.62   &   0.335     \\ %\hline
+%PSLD (500 steps) \cite{Rout2023}       &  500 & -- & 27.61  & 0.390       & --            & --     & --   & --     &   --       & --     \\ \hline
+LDIR (He 2024)   &  1000   &   35.61   &      25.75                  & 0.341    &    \textbf{24.40}     & 24.40        & 0.376     & \underline{36.04}   & 25.79      & 0.345     \\ %\hline
+%DPS \cite{Chung2022}       & 17.03             & --               & 0.932           & 14.68         & --            & 1.014          \\ \hline
+%DiffPIR \cite{Zhu2023DenoisingDM} & 22.27      & --               & 0.751           & 21.03         & --            & 0.664          \\ \hline
+\bottomrule
+\end{tabular}
+% \caption{Results for Gaussian deblurring with $\sigma = 3.0$, motion deblurring, and $\times 8$ super-resolution, all with noise $\sigma_y = 0.01$ on the FFHQ-512 val dataset. Our LATINO and LATINO-PRO models are compared to recent state-of-the-art methods. Prompt: \texttt{a sharp photo of a face}. \textbf{Bold}:  best, \underline{underline}: second best.}
+% \label{tab:512_comparison_FFHQ}
+\end{table*}
+\end{document}
