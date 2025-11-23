@@ -408,9 +408,14 @@ img-comparison-slider img{
 
  <!-- Algorithm -->
 <div class="my-5">
-  <h4 class="has-text-centered">
-    UD<sup>2</sup>M Model
-  </h4>
+  <figure style="height: 100%; text-align: center;">
+            <img src="static/images/model.png" alt="Model diagram" style="max-width: 100%; height: auto;">
+            <figcaption>
+              Diagram of the proposed conditional sampling architecture, $L_{\vartheta}(\vy,\vx_t,t)$ derived by deep unfolding $K$ LATINO 
+              iterations (Spagnoletti et al. 2025). The prior is introduced via a pre-trained unconditional diffusion model $G_{\theta}$ 
+              with LoRA adaptation $\Delta_{\theta}$, while the observation model, measurement $\vy$ and noisy state $\vx_t$ are involved
+            </figcaption>
+  </figure>
   <figure class="has-text-centered">
     <img
       src="static/images/model.png"
