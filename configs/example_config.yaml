@@ -35,7 +35,7 @@ model:
   use_lora: true
   rank: 5
   target_modules: ["qkv", "proj_out"]
-  frozen_model_name: MNIST_diffusion
+  frozen_model_name: # NAME_OF_FROZEN_MODEL [LSUN, diffusion_ffhq_10m, 256x256_diffusion_uncond (for ImageNet), diffusion64, MNIST_diffusion]
   frozen_model_dir: # DIRECTORY_OF_FROZEN_MODEL
 
 train: # Training parameters
