@@ -1,4 +1,4 @@
-# [Learning few-step posterior samplers by unfolding and distillation of diffusion models](https://arxiv.org/abs/2305.08995)
+# [Learning few-step posterior samplers by unfolding and distillation of diffusion models](https://arxiv.org/abs/2507.02686)
 
 [Charlesquin Kemajou Mbakam](https://charles-kmc.github.io/), [Jonny Spence](), [Marcelo Pereyra](https://www.macs.hw.ac.uk/~mp71/index.html).
 
