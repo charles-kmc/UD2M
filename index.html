@@ -319,6 +319,13 @@ img-comparison-slider img{
     }
   }
   </style>
+
+  <style>
+    #big-image {
+      width: 300px;   /* or any size you want */
+      height: auto;   /* keeps proportions */
+    }
+  </style>
 </head>
 <body>
 
@@ -418,25 +425,25 @@ img-comparison-slider img{
 <section class="hero is-small">
   <div class="slider-grid">
     <!-- Slider 1 Gaussian deblurring -->
-    <img-comparison-slider value="50">
+    <img-comparison-slider value="50" id="big-image">
       <img slot="first"  src="static/images/ud2ms/00213_deb_gauss_y.png"        alt="Before 1">
       <img slot="second" src="static/images/ud2ms/00213_deb_mmse.png" alt="After 1">
     </img-comparison-slider>
 
     <!-- Slider 2 Inpainting --> 
-    <img-comparison-slider value="50">
+    <img-comparison-slider value="50" id="big-image">
       <img slot="first"  src="static/images/ud2ms/01337_inp_y.png"        alt="Before 2">
       <img slot="second" src="static/images/ud2ms/01337_inp_mmse.png" alt="After 2">
     </img-comparison-slider>
 
     <!-- Slider 3 sr -->
-    <img-comparison-slider value="50">
+    <img-comparison-slider value="50" id="big-image">
       <img slot="first"  src="static/images/ud2ms/00270_sr_y.png"        alt="Before 3">
       <img slot="second" src="static/images/ud2ms/00270_sr_mmse.png" alt="After 3">
     </img-comparison-slider>
 
     <!-- Slider 4 JPEG -->
-    <img-comparison-slider value="50">
+    <img-comparison-slider value="50" id="big-image">
       <img slot="first"  src="static/images/ud2ms/00884_jpeg_y.png"        alt="Before 4">
       <img slot="second" src="static/images/ud2ms/00884_jpeg_mmse.png" alt="After 4">
     </img-comparison-slider>
