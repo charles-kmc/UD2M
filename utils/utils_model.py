@@ -384,6 +384,7 @@ def create_argparser(model_config):
         num_res_blocks=1,
         attention_resolutions="16",
         dropout=0.1,
+        grayscale=False,
     )
     defaults.update(model_config)
     parser = argparse.ArgumentParser()

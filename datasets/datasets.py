@@ -45,7 +45,7 @@ class GetDatasets:
             raise ValueError(f"The dataset directory {self.dataset_dir} is empty!!")
         else:
             if dataset_name == "ImageNet":
-                self.ref_images = glob.glob(os.path.join(self.dataset_dir ,self.type, self.type, '*.JPEG')) + glob.glob(os.path.join(self.dataset_dir ,self.type, self.type, '*.png'))
+                self.ref_images = glob.glob(os.path.join(self.dataset_dir ,self.type,  '*.JPEG')) + glob.glob(os.path.join(self.dataset_dir ,self.type, self.type, '*.png'))
                 # self.ref_images = sorted(glob.glob('/users/cmk2000/sharedscratch/Datasets/Test/ImageNet/val/val' + '/*.png', recursive=True)) 
             elif dataset_name == "FFHQ":
                 self.ref_images = glob.glob(os.path.join(self.dataset_dir ,self.type, self.type, '*.png')) + glob.glob(os.path.join(self.dataset_dir ,self.type, self.type, '*.jpg'))

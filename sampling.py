@@ -10,7 +10,7 @@ import datetime
 import scipy.io as sio
 import torch
 from torch.utils.data import DataLoader
-from metrics.my_metrics import Coverage
+from metrics.MNIST_metrics import Coverage
 
 from datasets.datasets import GetDatasets
 import models as models
@@ -103,7 +103,7 @@ def main(
             if args.data.dataset_name=="ImageNet":
                 # -- validation dataset
                 args.data.dataset_path =  f"{args.data.root}/{args.data.dataset_name}"
-                datasets = GetDatasets(args.data.dataset_path, im_size=args.im_size, type_="val", dataset_name=args.data.dataset_name)
+                datasets = GetDatasets(args.data.dataset_path, im_size=args.im_size, type_="test", dataset_name=args.data.dataset_name)
                 loader = DataLoader(datasets, batch_size=1, shuffle=False)
             else:                   
                 dataset_val = get_dataset(
@@ -283,7 +283,7 @@ def main(
             if args.task == "deblur" or args.task=="sr":    
                 blur = kernels.get_blur(seed=1234)
             
-            cov_met = Coverage(device=device)
+            cov_met = Coverage(device=device, embedding = None if args.data.dataset_name == "MNIST" else lambda x: x)
             
             # loop over loader 
             last_imgs_np = []

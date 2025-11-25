@@ -26,17 +26,19 @@ This code is based on the [OpenAI Guided Diffusion](https://github.com/openai/gu
 Diffusion models (DMs) have emerged as powerful image priors in Bayesian computational imaging. Two primary strategies have been proposed for leveraging DMs in this context: Plug-and-Play methods, which are zero-shot and highly flexible but rely on approximations; and specialized conditional DMs, which achieve higher accuracy and faster inference for specific tasks through supervised training. In this work, we introduce a novel framework that integrates deep unfolding and model distillation to transform a DM image prior into a few-step conditional model for posterior sampling. A central innovation of our approach is the unfolding of a Markov chain Monte Carlo (MCMC) algorithm—specifically, the recently proposed LATINO Langevin sampler—representing the first known instance of deep unfolding applied to a Monte Carlo sampling scheme. We demonstrate our proposed unfolded and distilled samplers through extensive experiments and comparisons with the state of the art, where they achieve excellent accuracy and computational efficiency, while retaining the flexibility to adapt to variations in the forward model at inference time.
 
 ## Setting UP
-### Clone and Install
+### Conda Environment Setup
 ```bash
 git clone https://github.com/charles-kmc/UD2M.git
 cd UD2M
+conda create -n ud2m python=3.10 mpi4py
+conda activate ud2m
 pip install -r requirements.txt
 ```
 
 ## Model Download
 Download the pretrained checkpoints used in this project from the following link:
 
-Access our fine-tuned checkpoint models here [Link]().
+Access our fine-tuned checkpoint models here [To Appear]().
 
 ## Training and Inference Code
 The parameters have to be configured in the bash script. The models were trained and evaluated on multiple restoration tasks, including `deblurring (deblur)`, `single image super resolution (sisr)`, `inpainting (inp_random_box)`, `JPEG artifact removal (jpeg)` and `general operator (general_operator)`.

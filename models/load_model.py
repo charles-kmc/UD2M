@@ -10,6 +10,7 @@ from guided_diffusion.script_util import (
     model_and_diffusion_defaults,
     create_model_and_diffusion,
     args_to_dict,
+    add_dict_to_argparser,
     create_classifier,
 )
 
@@ -61,13 +62,6 @@ def load_frozen_model(model_name, model_checkpoint_path):
         )
     elif model_name == "MNIST_diffusion":
         print("Loading MNIST diffusion model...")
-        from guided_diffusion.script_util import (
-            NUM_CLASSES,
-            model_and_diffusion_defaults,
-            create_model_and_diffusion,
-            add_dict_to_argparser,
-            args_to_dict,
-        )
         import argparse
         def create_argparser():
             defaults_t = dict(
