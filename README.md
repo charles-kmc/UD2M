@@ -4,6 +4,8 @@
 
 This repository contains the code and data associated with the paper "Learning few-step posterior samplers by unfolding and distillation of diffusion models".
 
+Links to download checkpoints for the trained models can be found in the [model_checkpoints](model_checkpoints/README.md) directory.
+
 This code is based on the [OpenAI Guided Diffusion](https://github.com/openai/guided-diffusion).
 
 
