@@ -2,7 +2,12 @@
 
 This directory contains trained checkpoints for UD2M models used in the numerical experiments presented in the paper.
 
-
+## Pre-trained SBM weights
+| Dataset      | Link                 |
+|--------------|-----------------------|
+|MNIST         | [Download](https://drive.google.com/file/d/1xXAN4W1sadeEpDwaJCeDESYdiNkj8FV8/view?usp=drive_link)|
+|ImageNet      | [Download](https://drive.google.com/drive/folders/1jElnRoFv7b31fG0v6pTSQkelbSX3xGZh)   |
+|LSUN Bedroom  | [Download](https://heibox.uni-heidelberg.de/d/01207c3f6b8441779abf/)                                                                                        |
 
 ## Available Checkpoints
 
