@@ -29,13 +29,13 @@ data:
   number_sample_per_epoch: 16000
   is_random_sampler: True
   root: /users/js3006/ud2m_test/UD2M/data
-  dataset_name: ImageNet  # e.g. CT, ImageNet FFHQ, LSUN, MNIST
+  dataset_name: MNIST  # e.g. CT, ImageNet FFHQ, LSUN, MNIST
 
 model:
   use_lora: true
   rank: 5
   target_modules: ["qkv", "proj_out"]
-  frozen_model_name: 256x256_diffusion_uncond # NAME_OF_FROZEN_MODEL [LSUN, diffusion_ffhq_10m, 256x256_diffusion_uncond (for ImageNet), diffusion64, MNIST_diffusion]
+  frozen_model_name: MNIST_diffusion # NAME_OF_FROZEN_MODEL [LSUN, diffusion_ffhq_10m, 256x256_diffusion_uncond (for ImageNet), diffusion64, MNIST_diffusion]
   frozen_model_dir: /users/js3006/ud2m_test/UD2M/model_zoo
 
 train: # Training parameters
@@ -76,7 +76,7 @@ physic:
     random_blur: False # Randomly apply different blur kernel to each input image
       
   sr:
-    sf: 8 # Downsampling factor
+    sf: 4 # Downsampling factor
 
   ct:
     angles: 78

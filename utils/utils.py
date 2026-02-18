@@ -84,7 +84,7 @@ def sigma_eval(x, A, snr):
     return sigma_val
 
 def image_transform(x):
-    return 2*x - 1 
+    return 2.*x - 1. 
 
 def inverse_image_transform(x):
     return torch.clamp(0.5*x +0.5, 0, 1)

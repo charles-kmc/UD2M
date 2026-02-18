@@ -20,12 +20,12 @@ class shelving_filters(torch.nn.Module):
 
         if high_pass:
             self.high_loc = self.rng.normal(loc=self.loc*self.N//2, scale=4, size=2).clip(0, self.N//2-1)
-            print("High loc:", self.high_loc)
+            # print("High loc:", self.high_loc)
             self.filter[int(self.high_loc[0]):-int(self.high_loc[0]), int(self.high_loc[1]):] = 1/self.mag
 
         if low_pass:
             self.low_loc = self.rng.normal(loc=(1-self.loc)*self.N//2, scale=4, size=2).clip(1, self.N//2-1)
-            print("Low loc:", self.low_loc)
+            # print("Low loc:", self.low_loc)
             self.filter[:int(self.low_loc[0]), :int(self.low_loc[1])] = self.mag
             self.filter[-int(self.low_loc[0]):, :int(self.low_loc[1])] = self.mag
         

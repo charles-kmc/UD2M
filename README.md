@@ -4,6 +4,8 @@
 
 This repository contains the code and data associated with the paper "Learning few-step posterior samplers by unfolding and distillation of diffusion models".
 
+
+
 This code is based on the [OpenAI Guided Diffusion](https://github.com/openai/guided-diffusion).
 
 
@@ -36,9 +38,13 @@ pip install -r requirements.txt
 ```
 
 ## Model Download
+<<<<<<< HEAD
 Download the pretrained checkpoints used in this project from the following link:
 
 Access our fine-tuned checkpoint models here [To Appear]().
+=======
+Links to download checkpoints for the trained models can be found in the [model_checkpoints](model_checkpoints/README.md) directory.
+>>>>>>> 5ddaecfc7b398dc7d6a3ba3296aa8a93ffdd3687
 
 ## Training and Inference Code
 The parameters have to be configured in the bash script. The models were trained and evaluated on multiple restoration tasks, including `deblurring (deblur)`, `single image super resolution (sisr)`, `inpainting (inp_random_box)`, `JPEG artifact removal (jpeg)` and `general operator (general_operator)`.
