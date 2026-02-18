@@ -29,7 +29,7 @@ def Fid_evatuation_numpy(dir_results, device, mmse_sample = True, last_sample = 
         x_t = transforms(x)
         return vae.encoder(x_t)
     
-    from metrics.my_metrics import CFID_metric_test
+    from metrics.MNIST_metrics import CFID_metric_test
     fid = CFID_metric_test(embedding, 12, device)
     print(dir_results)
     dir_ref = os.path.join(dir_results, "ref", "ref_samples.npy")  

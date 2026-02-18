@@ -10,7 +10,7 @@ import datetime
 import scipy.io as sio
 import torch
 from torch.utils.data import DataLoader
-from metrics.my_metrics import Coverage
+from metrics.MNIST_metrics import Coverage
 
 from datasets.datasets import GetDatasets
 import models as models
@@ -103,7 +103,7 @@ def main(
             if args.data.dataset_name=="ImageNet":
                 # -- validation dataset
                 args.data.dataset_path =  f"{args.data.root}/{args.data.dataset_name}"
-                datasets = GetDatasets(args.data.dataset_path, im_size=args.im_size, type_="val", dataset_name=args.data.dataset_name)
+                datasets = GetDatasets(args.data.dataset_path, im_size=args.im_size, type_="test", dataset_name=args.data.dataset_name)
                 loader = DataLoader(datasets, batch_size=1, shuffle=False)
             else:                   
                 dataset_val = get_dataset(
@@ -182,7 +182,7 @@ def main(
             if args.task == "deblur":
                 from deepinv.physics import BlurFFT, GaussianNoise
                 dinv_physic = BlurFFT(
-                    (3,256,256),
+                    (args.data.out_channels, args.data.im_size, args.data.im_size),
                     filter = kernels.get_blur().unsqueeze(0).unsqueeze(0),
                     device = device,
                     noise_model = GaussianNoise(
@@ -193,7 +193,7 @@ def main(
             elif args.task == "inp":
                 from deepinv.physics import Inpainting, GaussianNoise
                 dinv_physic = Inpainting(
-                    (3,256, 256),
+                    (args.data.out_channels, args.data.im_size, args.data.im_size),
                     mask = physic.Mask,
                     device = device,
                     noise_model = GaussianNoise(
@@ -205,7 +205,7 @@ def main(
                 from deepinv.physics import Downsampling, GaussianNoise
                 dinv_physic =   Downsampling(
                     filter = "bicubic",
-                    img_size = (3, 256, 256),
+                    img_size = (args.data.out_channels, args.data.im_size, args.data.im_size),
                     factor = args.physic.sr.sf,
                     device = device,
                     noise_model = GaussianNoise(
@@ -283,7 +283,7 @@ def main(
             if args.task == "deblur" or args.task=="sr":    
                 blur = kernels.get_blur(seed=1234)
             
-            cov_met = Coverage(device=device)
+            cov_met = Coverage(device=device, embedding = None if args.data.dataset_name == "MNIST" else lambda x: x)
             
             # loop over loader 
             last_imgs_np = []
@@ -317,7 +317,7 @@ def main(
                 im = im.to(device)
                 x = utils.inverse_image_transform(im)
                 x_true = None
-                
+
                 # observation y 
                 if args.task == "deblur":
                     y = physic.y(im, blur)
@@ -401,7 +401,8 @@ def main(
                             norm = max(std.max(), err.max())
                             utils.save_images(var_path, v_t /norm, im_name)
                             utils.save_images(err_path, err /norm, im_name)
-                            utils.save_images(y_path, utils.inverse_image_transform(y_t), im_name)                            
+                            utils.save_images(y_path, utils.inverse_image_transform(y_t), im_name)     
+                     
                         # eval - mmse
                         psnr_temp = metrics.psnr_function(xp_t, x_t)
                         mse_temp = metrics.mse_function(xp_t, x_t)

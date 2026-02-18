@@ -125,7 +125,7 @@ class ImageNetDataset(VisionDataset):
             v2.ToTensor(), 
             v2.Resize((im_size, im_size)),
         ])
-        self.fpaths = glob(os.path.join(root_dataset,"ImageNet", f"{subset_data}", f"{subset_data}" + '/*.JPEG')) + glob(os.path.join(root_dataset,"ImageNet", f"{subset_data}", f"{subset_data}" + '/*.png'))
+        self.fpaths = glob(os.path.join(root_dataset,"ImageNet",  f"{subset_data}" + '/*.JPEG')) + glob(os.path.join(root_dataset,"ImageNet", f"{subset_data}", f"{subset_data}" + '/*.png'))
         assert len(self.fpaths) > 0, f"File list is empty. Check the root_dataset. {os.path.join(root_dataset,'ImageNet', f'{subset_data}', f'{subset_data}' + '/*.JPEG')}"
 
     def __len__(self):
@@ -164,11 +164,11 @@ class MNISTDataset(VisionDataset):
         return len(self.data)
 
     def __getitem__(self, index: int):
-        img = self.data[index].unsqueeze(0)
+        img = self.data[index].unsqueeze(0)/255.
         
         if self.transforms is not None:
             img = self.transforms(img)
-        
-        img = utils.image_transform(img)
+
+        img = 2.*img - 1.
         return img
 

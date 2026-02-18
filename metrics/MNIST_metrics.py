@@ -58,6 +58,8 @@ class Coverage:
         """
             Compute coverage metric
         """
+        if self.samples == 0:
+            return self.sums
         cov =  self.sums / self.samples
         cov_meanemb = self.sums_meanemb / self.samples
         if csv_path:
