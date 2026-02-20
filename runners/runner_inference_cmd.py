@@ -51,7 +51,7 @@ class Conditional_sampler:
             self.stacked_physic = StackedJointPhysics(
                 self.d_phys, self.diffusion
             )
-        
+
         # DPIR model
         if self.args.dpir.use_dpir:
             self.dpir_model = DPIR_deb(
@@ -59,10 +59,10 @@ class Conditional_sampler:
                 model_name = self.args.dpir.model_name, 
                 pretrained_pth=self.args.dpir.pretrained_pth
             )
-        
+
         # metric
         self.metrics = utils.Metrics(self.device)
-    
+
     def RAM_Initialization(self, y, xt, t):
         if isinstance(t, torch.Tensor) and t.numel()>1:
             t = int(t[0].item())
@@ -73,7 +73,7 @@ class Conditional_sampler:
         y_ram = dinv.utils.TensorList([utils.inverse_image_transform(y)*min/self.d_phys.noise_model.sigma, xt_init*min/self.stacked_physic.physics_list[1].noise_model.sigma])
         x_init = self.RAM(y_ram, self.stacked_physic)
         return utils.image_transform(x_init)
-    
+
     def sampler(
         self, 
         y:torch.tensor, 
@@ -93,30 +93,30 @@ class Conditional_sampler:
             
             # initilisation
             y_ = utils.inverse_image_transform(y)
-            if self.d_phys is not None:
-                x_init = self.RAM_Initialization(y, torch.randn(self.img_shape).to(self.device), torch.tensor(self.diffusion.num_timesteps-1).to(self.device))
-                
-            elif self.args.task=="deblur":
-                if  self.args.dpir.use_dpir:
-                    x_init = self.dpir_model.run(y_, self.physics.blur, iter_num = 1)
-                    x_init = utils.image_transform(x_init)
-                else:
+
+            
+            if self.args.initialization == "DPIR":
+                if self.args.task=="deblur":
+                    if  self.args.dpir.use_dpir:
+                        x_init = self.dpir_model.run(y_, self.physics.blur, iter_num = 1)
+                        x_init = utils.image_transform(x_init)
+                    else:
+                        x_init = y.clone()
+                        
+                elif self.args.task=="sr":
+                    if self.args.dpir.use_dpir:
+                        y_ = self.physics.upsample(y_)
+                        x_init = self.dpir_model.run(y_, self.physics.blur, iter_num = 1)
+                        x_init = utils.image_transform(x_init)
+                    else:
+                        x_init = self.physics.AT(self.physics.upsample(y))
+                elif self.args.task=="inp":
                     x_init = y.clone()
-                    
-            elif self.args.task=="sr":
-                if self.args.dpir.use_dpir:
-                    y_ = self.physics.upsample(y_)
-                    x_init = self.dpir_model.run(y_, self.physics.blur, iter_num = 1)
-                    x_init = utils.image_transform(x_init)
                 else:
-                    x_init = self.physics.AT(self.physics.upsample(y))
-            elif self.args.task=="inp":
-                x_init = y.clone()
-            else:
-                raise ValueError(f"This task ({self.args.task})is not implemented!!!")
+                    raise ValueError(f"This task ({self.args.task})is not implemented!!!")
             
             # initilisation
-            x = torch.randn_like(x_init)  
+            x = torch.randn(y.shape[0], *self.img_shape).to(self.device) 
             progress_img = []
             progress_zero = []
             
@@ -126,12 +126,15 @@ class Conditional_sampler:
             N = len(seq)
             for ii in range(N):
                 t_i = seq[ii]
-                rt_alpha = self.diffusion.sqrt_alphas_cumprod[t_i].reshape(-1,1,1,1)
-                sigma_t = (1.0-rt_alpha**2).sqrt()
-                if self.args.task=="sr":
-                    x_init = (self.physics.AT(self.physics.upsample(y))*sigma_t + rt_alpha*x*self.physics.sigma_model)/(self.physics.sigma_model**2 + sigma_t**2).sqrt()
-                elif self.args.task in ["deblur","inp"]:
-                    x_init = (self.physics.AT(y)*sigma_t + rt_alpha*x*self.physics.sigma_model)/(self.physics.sigma_model**2 + sigma_t**2).sqrt()
+                if self.d_phys is not None and self.args.initialization == "RAM":
+                    x_init = self.RAM_Initialization(y, torch.randn(self.img_shape).to(self.device), torch.tensor(self.diffusion.num_timesteps-1).to(self.device))
+                elif self.args.initialization == "Adjoint":
+                    rt_alpha = self.diffusion.sqrt_alphas_cumprod[t_i].reshape(-1,1,1,1)
+                    sigma_t = (1.0-rt_alpha**2).sqrt()
+                    if self.args.task=="sr":
+                        x_init = (self.physics.AT(self.physics.upsample(y))*sigma_t + rt_alpha*x*self.physics.sigma_model)/(self.physics.sigma_model**2 + sigma_t**2).sqrt()
+                    elif self.args.task in ["deblur","inp"]:
+                        x_init = (self.physics.AT(y)*sigma_t + rt_alpha*x*self.physics.sigma_model)/(self.physics.sigma_model**2 + sigma_t**2).sqrt()
                 if self.classic_sampling:
                     out_val = self.sampling_prior(x, torch.tensor(t_i).to(self.device))
                     x0 = out_val["xstart_pred"].mul(2).add(-1)
@@ -168,12 +171,7 @@ class Conditional_sampler:
                         raise ValueError(f"This solver {self.solver_type} is not implemented. Please verify your solver.")
                 else:
                     x = x0
-    
-                if self.d_phys is not None:
-                    x_init = self.RAM_Initialization(y, x, torch.tensor(t_i).to(self.device))
-                else:
-                    x_init=x0.clone()  # save x_init for the next iteration
-                    
+
                 # save the process
                 if self.args.save_progressive and (seq[ii] in progress_seq):
                     x_show = utils.get_rgb_from_tensor(utils.inverse_image_transform(x[0].unsqueeze(0)))      #[0,1]

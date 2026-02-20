@@ -7,7 +7,7 @@ save_progressive: True
 init_xt_y: False
 pertub: True
 mode: train
-
+initialization: Adjoint # "RAM", "Adjoint", "DPIR"
 save_checkpoint_range: 30
 save_checkpoint_dir: /users/js3006/ud2m_test/UD2M/model_zoo
 save_dir: /users/js3006/ud2m_test/UD2M/results

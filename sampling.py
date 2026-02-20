@@ -247,7 +247,8 @@ def main(
                 args,
                 dphys=dinv_physic if config.use_RAM else None,
                 max_unfolded_iter=max_unfolded_iter,
-                state_dict_RAM=state_dict_ram
+                state_dict_RAM=state_dict_ram,
+                img_shape = (args.data.out_channels, args.data.im_size, args.data.im_size),
             )
 
             # Metrics
